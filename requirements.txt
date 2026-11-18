@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+aiohttp>=3.9
+anthropic>=0.40
+keyring>=24
+platformdirs>=4
+pillow>=10
+mss>=9
