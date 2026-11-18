@@ -22,8 +22,10 @@ VARSAYILAN: dict[str, Any] = {
     "kaynak_dil": "otomatik",
     "motor": "gemini",
     "yedek_motor": "yerel",
-    "modeller": {"claude": "claude-opus-5-5", "gemini": "gemini-2.5-flash",
-                 "deepseek": "deepseek-chat"},
+    "modeller": {},          # boş = `kalite` modeli seçer; yazılan model kaliteyi ezer
+    "kalite": "en_iyi",      # en_iyi | dengeli | hizli
+    "hafiza_izni": None,     # None (sorulmadı) | True | False
+
     "kaynak": "ekran:1",
     "bolge_altyazi": {"x": 0.1, "y": 0.72, "g": 0.8, "y2": 0.25},
     "ekrani_cevir": True,

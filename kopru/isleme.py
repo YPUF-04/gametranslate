@@ -16,6 +16,7 @@ from .okuma import Satir
 log = logging.getLogger("kopru.isleme")
 
 ARALIK_SN = 0.25
+SPEK_BEKLEME_SN = 0.05  # önden çeviri kısa bir an bekler: hemen değişen metne boşuna istek atılmaz
 SILME_GECIKME_SN = 0.6
 DEGISIM_ESIGI = 3.0  # küçültülmüş gri karelerde ortalama mutlak fark (0-255)
 _KONUSAN = re.compile(r"^([A-ZÇĞİÖŞÜ][\w'. -]{0,24}):\s+(\S.*)$", re.UNICODE)
@@ -23,6 +24,17 @@ _KONUSAN = re.compile(r"^([A-ZÇĞİÖŞÜ][\w'. -]{0,24}):\s+(\S.*)$", re.UNICO
 
 def sure_ms(metin: str) -> int:
     return max(1500, min(9000, 800 + len(metin) * 55))
+
+
+def konusan_ayir(metin: str) -> tuple[str | None, str]:
+    m = _KONUSAN.match(metin)
+    return (m.group(1), m.group(2)) if m else (None, metin)
+
+
+def _sessiz(gorev: "asyncio.Task") -> None:
+    """Atılan önden çevirinin hatası "hiç okunmadı" uyarısı vermesin."""
+    if not gorev.cancelled():
+        gorev.exception()
 
 
 def parmak_izi(resim: Any) -> bytes:
@@ -107,6 +119,32 @@ class Isleme:
         self._yazi_konusan: str | None = None
         self._yazi_tur = "altyazi"
         self.durum_hatasi: str | None = None
+        self._spek: asyncio.Task | None = None   # önden başlatılmış çeviri (6.4)
+        self._spek_aday = ""
+
+    # -- önden (speculative) çeviri --
+    def _spek_iptal(self) -> None:
+        if self._spek is not None:
+            self._spek.cancel()
+            self._spek = None
+        self._spek_aday = ""
+
+    def _spek_basla(self, govde: str, aday: str, ayar: dict[str, Any]) -> None:
+        self._spek_iptal()
+        self._spek_aday = aday
+        self._spek = asyncio.get_running_loop().create_task(
+            self._spek_cevir(govde, ayar["kaynak_dil"], ayar["hedef_dil"]))
+        self._spek.add_done_callback(_sessiz)
+
+    async def _spek_cevir(self, govde: str, kaynak: str, hedef: str) -> Any:
+        await asyncio.sleep(SPEK_BEKLEME_SN)
+        (c,) = await self.yonetici.cevir([govde], kaynak, hedef)
+        return c
+
+    def duzeltildi(self, asil: str, ceviri: str) -> None:
+        """Kullanıcı ekrandaki satırı düzeltti: canlı tutma yenilemesi de yeni metni yollasın."""
+        if self._yazi_asil and normallestir(self._yazi_asil) == normallestir(asil):
+            self._yazi_metin = ceviri
 
     # -- yardımcılar --
     def _yeni_id(self, on: str) -> str:
@@ -146,7 +184,9 @@ class Isleme:
         aday = normallestir(metin)
         if aday:
             a.bos_since = None
-            if aday == a.onceki and aday != a.gosterilen:
+            if aday != a.onceki and aday != a.gosterilen:
+                await self._ilk_gorulme(metin, aday, ayar, simdi)
+            elif aday == a.onceki and aday != a.gosterilen:
                 await self._altyazi_yayinla(metin, aday, ayar, simdi)
             elif aday == a.gosterilen and simdi > a.bitis - 0.8:
                 # kaynak hâlâ ekranda: yazıyı canlı tut
@@ -154,32 +194,56 @@ class Isleme:
                 self.yayin.yayinla("yazi", {
                     "id": self._yazi_id, "metin": self._yazi_metin, "asil": self._yazi_asil,
                     "tur": self._yazi_tur, "konusan": self._yazi_konusan, "sure_ms": 2000})
-        elif a.gosterilen:
-            if a.bos_since is None:
-                a.bos_since = simdi
-            elif simdi - a.bos_since >= SILME_GECIKME_SN:
-                a.gosterilen = ""
-                self.yayin.yayinla("yazi-sil", {})
+        else:
+            self._spek_iptal()
+            if a.gosterilen:
+                if a.bos_since is None:
+                    a.bos_since = simdi
+                elif simdi - a.bos_since >= SILME_GECIKME_SN:
+                    a.gosterilen = ""
+                    self.yayin.yayinla("yazi-sil", {})
         a.onceki = aday
 
+    async def _ilk_gorulme(self, metin: str, aday: str, ayar: dict[str, Any], simdi: float) -> None:
+        """Yeni metin ilk karede: hafızada varsa hemen göster, yoksa önden çeviriyi başlat."""
+        onceki = self._yazi.onceki
+        if onceki and (aday.startswith(onceki) or onceki.startswith(aday)):
+            self._spek_iptal()  # daktilo gibi yazılıyor: kararlı olunca çevrilecek
+            return
+        konusan, govde = konusan_ayir(metin)
+        vur = self.yonetici.ara(govde, ayar["kaynak_dil"], ayar["hedef_dil"])
+        if vur:
+            self._spek_iptal()
+            self._goster(govde, konusan, aday, vur, simdi)
+        else:
+            self._spek_basla(govde, aday, ayar)
+
     async def _altyazi_yayinla(self, metin: str, aday: str, ayar: dict[str, Any], simdi: float) -> None:
-        konusan = None
-        m = _KONUSAN.match(metin)
-        if m:
-            konusan, metin = m.group(1), m.group(2)
+        konusan, govde = konusan_ayir(metin)
+        gorev = self._spek if self._spek_aday == aday else None
         try:
-            (c,) = await self.yonetici.cevir([metin], ayar["kaynak_dil"], ayar["hedef_dil"])
+            if gorev is not None:
+                c = await gorev           # önden başlamıştı: yalnız kalanı bekler
+            else:
+                (c,) = await self.yonetici.cevir([govde], ayar["kaynak_dil"], ayar["hedef_dil"])
         except (AgHatasi, AnahtarHatasi, MotorHatasi) as e:
+            self._spek_iptal()
             self._hata(e)
             return
+        self._spek = None
+        self._spek_aday = ""
         self.durum_hatasi = None
+        self._goster(govde, konusan, aday, c, simdi)
+
+    def _goster(self, govde: str, konusan: str | None, aday: str, c: Any, simdi: float) -> None:
         s = sure_ms(c.metin)
         self._yazi_id = self._yeni_id("a")
-        self._yazi_asil, self._yazi_metin, self._yazi_konusan = metin, c.metin, konusan
+        self._yazi_asil, self._yazi_metin, self._yazi_konusan = govde, c.metin, konusan
         self._yazi_tur = "altyazi"
         self._yazi.gosterilen = aday
         self._yazi.bitis = simdi + s / 1000
-        self.yayin.yayinla("yazi", {"id": self._yazi_id, "metin": c.metin, "asil": metin,
+        self.yonetici.satir_kaydet(self._yazi_id, govde, c.metin, getattr(c, "kaynak", "motor"))
+        self.yayin.yayinla("yazi", {"id": self._yazi_id, "metin": c.metin, "asil": govde,
                                     "tur": "altyazi", "konusan": konusan, "sure_ms": s})
 
     async def _ekran_adimi(self, satirlar: list[Satir], ayar: dict[str, Any]) -> None:

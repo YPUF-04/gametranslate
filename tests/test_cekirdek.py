@@ -153,7 +153,7 @@ async def test_claude_istek_sekli():
     assert kw["max_tokens"] == 2000
     assert not {"thinking", "temperature"} & kw.keys()
     assert kw["messages"][-1]["role"] == "user"  # prefill yok
-    assert "Ellie" in kw["system"]
+    assert "Ellie" in kw["system"][0]["text"]
     assert json.loads(kw["messages"][0]["content"]) == ["Hello", "World"]
 
 

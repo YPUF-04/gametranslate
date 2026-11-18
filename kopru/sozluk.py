@@ -6,15 +6,12 @@ import json
 import re
 from pathlib import Path
 
-from . import ayarlar
-
-
-def _guvenli_ad(oyun: str) -> str:
-    return re.sub(r"[^\w\-]", "_", oyun, flags=re.UNICODE)[:60] or "varsayilan"
+from . import oyunlar
 
 
 def yol(oyun: str) -> Path:
-    return ayarlar.ayar_dizini() / "sozlukler" / f"{_guvenli_ad(oyun)}.json"
+    """oyunlar/<kod>/sozluk.json (oyun adı da verilebilir; koda çevrilir)."""
+    return oyunlar.sozluk_yolu(oyunlar.kod_coz(oyun))
 
 
 def yukle(oyun: str) -> list[dict[str, str]]:
@@ -32,7 +29,7 @@ def kaydet(oyun: str, terimler: list[dict[str, str]]) -> None:
     temiz = [{"asil": str(t["asil"]).strip(), "ceviri": str(t.get("ceviri", t["asil"])).strip()}
              for t in terimler if str(t.get("asil", "")).strip()]
     gecici = p.with_suffix(".tmp")
-    gecici.write_text(json.dumps({"oyun": oyun, "terimler": temiz}, ensure_ascii=False, indent=2),
+    gecici.write_text(json.dumps({"oyun": oyunlar.kod_coz(oyun), "terimler": temiz}, ensure_ascii=False, indent=2),
                       encoding="utf-8")
     gecici.replace(p)
 
