@@ -12,6 +12,8 @@
 | Reklam | Sona doğru. Model: ilk 30 dk ücretsiz çeviri, sonra reklam izle → süre kazan. Oyunun üstünde asla reklam yok. Takip/yorum karşılığı ödül YOK (Instagram kuralları) | Bekliyor |
 | Maliyet | Geliştiriciye sıfır maliyet: çeviri kullanıcının bilgisayarında (yerel motor) ya da kullanıcının kendi anahtarıyla | Kural |
 | Kurulum | Tek tuşla: Windows kurucu (.exe), panelden "TV'ye kur", tek tuşla güncelleme | Sırada |
+| Kod açık mı | AÇIK kalacak (AGPL). Güven + GitHub görünürlüğü | Karar |
+| Cihaz sırası | Önce bilgisayarlar (Windows + Mac): bilgisayar çevirir, TV'de oyunun üstüne yansır. Telefon/tablet/iPhone sonra (beklemede) | Karar |
 | Görünürlük | GitHub'da bulunabilirlik: README anahtar kelimeleri, konular (topics), sürümler, İngilizce tanıtım | Sırada |
 
 ## Reklam modeli için notlar (karar anında tekrar bakılacak)
