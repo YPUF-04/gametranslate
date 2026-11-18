@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // webOS'a özgü işler. Samsung (Tizen) için ileride platform-tizen.js aynı arayüzü sağlayacak:
-//   backKey, showHdmi(port, host, onStatus), localAddress(cb), exit()
+//   geriTusu, hdmiAc(girisNo, kutu, bildir), yerelAdres(cb), exit()
 // Yalnızca GENEL Luna API'leri kullanılır (com.palm.connectionmanager/getStatus -> requiredACG: network.query).
 (function () {
   'use strict';
@@ -19,10 +19,10 @@
 
   window.AKPlatform = {
     ad: 'webos',
-    backKey: 461,
+    geriTusu: 461,
 
     // TV'nin kendi yerel adresi (alt ağı taramak için). Alınamazsa cb(null).
-    localAddress: function (cb) {
+    yerelAdres: function (cb) {
       var bitti = false;
       function don(ip) { if (!bitti) { bitti = true; cb(ip); } }
       var var_ = typeof window.PalmServiceBridge !== 'undefined';
@@ -38,26 +38,26 @@
       if (!tamam) { don(null); } else { window.setTimeout(function () { don(null); }, 4000); }
     },
 
-    // HDMI girişini tam ekran gösterir. host: video'nun konacağı kutu. onStatus('tamam' | 'hata').
+    // HDMI girişini tam ekran gösterir. kutu: video'nun konacağı kutu. bildir('tamam' | 'hata').
     // Ekran koruyucu: dışarıdan görüntü oynarken TV genellikle devreye sokmaz; ayrıca bir şey yapılmaz.
-    showHdmi: function (port, host, onStatus) {
-      host.innerHTML = '';
+    hdmiAc: function (girisNo, kutu, bildir) {
+      kutu.innerHTML = '';
       var v = document.createElement('video');
       v.setAttribute('autoplay', 'autoplay');
       v.className = 'hdmi-video';
       var s = document.createElement('source');
       s.setAttribute('type', 'service/webos-external');
-      s.setAttribute('src', 'ext://hdmi:' + port);
+      s.setAttribute('src', 'ext://hdmi:' + girisNo);
       v.appendChild(s);
-      v.addEventListener('error', function () { onStatus('hata'); }, false);
-      s.addEventListener('error', function () { onStatus('hata'); }, false);
-      v.addEventListener('playing', function () { onStatus('tamam'); }, false);
-      host.appendChild(v);
+      v.addEventListener('error', function () { bildir('hata'); }, false);
+      s.addEventListener('error', function () { bildir('hata'); }, false);
+      v.addEventListener('playing', function () { bildir('tamam'); }, false);
+      kutu.appendChild(v);
       try { v.play(); } catch (e) { /* autoplay yeter */ }
-      return function kapat() { try { v.pause(); } catch (e) { /* yok say */ } host.innerHTML = ''; };
+      return function kapat() { try { v.pause(); } catch (e) { /* yok say */ } kutu.innerHTML = ''; };
     },
 
-    exit: function () {
+    cik: function () {
       try { if (window.webOS && window.webOS.platformBack) { window.webOS.platformBack(); return; } } catch (e) { /* devam */ }
       try { window.close(); } catch (e2) { /* devam */ }
     }
