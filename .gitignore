@@ -2,3 +2,8 @@
 # AltYaziKoprusu derleme ciktilari
 dist/
 .araclar/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+node_modules/
