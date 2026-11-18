@@ -60,6 +60,15 @@ jobs:
           --collect-submodules kopru
           --hidden-import paramiko
           paketleme/baslat.py
+      - name: Paketlenmiş program açılıyor mu (duman testi)
+        shell: bash
+        run: |
+          ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --tarayici-acma > sunucu.log 2>&1 &
+          ok=0
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8642/kopru/merhaba && ok=1 && break; sleep 1; done
+          cat sunucu.log || true
+          taskkill //IM AltYaziKoprusu.exe //F || true
+          test "$ok" = 1
       - name: Lisans dosyalarını ekle
         shell: pwsh
         run: Copy-Item LICENSE,NOTICE,README.md,GIZLILIK.md dist/AltYaziKoprusu/ -ErrorAction SilentlyContinue
