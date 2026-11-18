@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* AltYazıKöprüsü - ortak bindirme stili. Tüm ölçüler JS tarafından 1920 genişliğe göre ölçeklenir. */
+.ak-kok { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; pointer-events: none;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+.ak-kok .ak-ekran { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.ak-kok .ak-oge { position: absolute; box-sizing: border-box; padding: 0.3em 0.55em; border-radius: 0.3em;
+  background: rgba(14, 26, 43, 0.82); color: #FFFFFF; border-left: 0.2em solid #2EC4B6; line-height: 1.2;
+  word-wrap: break-word; }
+.ak-kok .ak-oge.ak-gorev { border-left-color: #FFD166; }
+.ak-kok .ak-oge.ak-bilgi { border-left-color: #8FA3BF; }
+.ak-kok .ak-oge-metin { font-weight: 600; }
+.ak-kok .ak-oge-aciklama { font-size: 0.62em; opacity: 0.8; margin-top: 0.2em; color: #CFE9E6; }
+.ak-kok .ak-yazi { position: absolute; left: 50%; width: 84%; margin-left: -42%; text-align: center; display: none; }
+.ak-kok .ak-yazi-kutu { display: inline-block; box-sizing: border-box; max-width: 100%; padding: 0.35em 0.8em 0.4em;
+  border-radius: 0.35em; line-height: 1.28; font-weight: 600; text-shadow: 0 0.05em 0.12em rgba(0, 0, 0, 0.9); }
+.ak-kok .ak-konusan { font-weight: 700; margin-right: 0.45em; }
+.ak-kok .ak-asil { display: block; font-size: 0.55em; font-weight: 400; opacity: 0.75; margin-top: 0.3em; }
+.ak-kok .ak-durum { position: absolute; right: 1.5%; top: 2%; padding: 0.35em 0.8em; border-radius: 2em; 
+  background: rgba(14, 26, 43, 0.88); color: #FFD166; display: none; }
