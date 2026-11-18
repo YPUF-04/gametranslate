@@ -271,5 +271,16 @@
 "bolge.ad.altyazi": "Altyazı",
 "bolge.ad.ust_yazi": "Üst yazılar",
 "bolge.ad.diger": "Diğer",
-"bolge.sihirbaz_not": "İsteğe bağlı: bu adımı atlarsan ekrandaki yazıları kendim bulurum. Sonradan ana ekrandan da seçebilirsin."
+"bolge.sihirbaz_not": "İsteğe bağlı: bu adımı atlarsan ekrandaki yazıları kendim bulurum. Sonradan ana ekrandan da seçebilirsin.",
+"erisim.baslik": "Erişim",
+"erisim.kalan": "Bugün kalan ücretsiz süre: {n} dk",
+"erisim.sinirsiz": "Sınırsız erişim açık ✓",
+"erisim.gun": "Erişim kodu açık ✓ ({tarih} tarihine kadar)",
+"erisim.kodum_var": "Kodum var",
+"erisim.kod_etiket": "Erişim kodu",
+"erisim.kaydet": "Kaydet",
+"erisim.vazgec": "Vazgeç",
+"erisim.bos": "Önce kodu yazın.",
+"erisim.tamam": "Erişim kodu kabul edildi.",
+"erisim.sinir": "Bugünkü ücretsiz süre doldu. Erişim kodunu gir ya da yarın devam et. Daha önce çevrilmiş cümleler gösterilmeye devam eder."
 }

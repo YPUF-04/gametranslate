@@ -60,7 +60,7 @@
     adim: 1, cihaz: ls('cihaz'), tv: ls('tv'), kaynak: null, motor: null, testTamam: false,
     kurulumBitti: ls('kurulum') === '1', kapali: false,
     oyunlar: [], sonCeviriler: [], oneriler: [], duzeltAcik: false, oyunDegis: false,
-    guncelleme: null
+    guncelleme: null, erisim: null, erisimAcik: false
   };
   var ana = $('#ana');
   var afis = $('#afis');
@@ -530,14 +530,15 @@
       h('h2', { text: t('son.baslik') }), ne('son.ne', 'isi'), ekran.sonKutu
     ]);
 
-    ana.appendChild(h('section', { class: 'dar' }, [h('div', { id: 'guncelleme-alani' }), oyunKart, hero, bolgeKarti(), sonKart, ekran.onerKutu, gelismisAlani(), 
+    ekran.erisim = h('div', { class: 'kart erisim-kart', id: 'erisim-kart' });
+    ana.appendChild(h('section', { class: 'dar' }, [h('div', { id: 'guncelleme-alani' }), oyunKart, hero, ekran.erisim, bolgeKarti(), sonKart, ekran.onerKutu, gelismisAlani(), 
       h('div', { class: 'satir', style: 'margin-top:8px' }, [h('button', { type: 'button', class: 'baglanti', id: 'yeniden-kur', text: t('kurulum.yeniden'), onclick: function () {
         S.kurulumBitti = false; S.adim = 1; S.testTamam = false; ls('kurulum', '0'); ciz();
       } })])
     ]));
     oyunYukle().then(function () { oyunCiz(); });
     guncellemeCiz();
-    oyunCiz(); sonCiz(); oneriCiz(); durumCiz(); listeYenile();
+    oyunCiz(); sonCiz(); oneriCiz(); durumCiz(); erisimCiz(); listeYenile();
   }
 
   function oyunCiz() {
@@ -951,10 +952,53 @@
     ekran.yazi.style.opacity = d.son_yazi ? 1 : .5;
   }
 
+  // ---------- erişim (günlük ücretsiz süre / erişim kodu, PROTOKOL 7.3) ----------
+  function erisimYukle() {
+    return api('GET', '/api/erisim').then(function (e) { S.erisim = e; erisimCiz(); }).catch(function () {});
+  }
+  function erisimCiz() {
+    if (!ekran.erisim || !document.body.contains(ekran.erisim)) return;
+    var e = S.erisim; if (!e) return;
+    var kutu = ekran.erisim;
+    var sinir = !!(S.durum && S.durum.sinir) && !e.kod;
+    var imza = [sinir, e.kod, e.kalan_dakika, e.bitis, S.erisimAcik, dil].join('|');
+    if (kutu.dataset.imza === imza) return;   // değişmediyse yeniden çizme (yazı/hata silinmesin)
+    kutu.dataset.imza = imza;
+    kutu.textContent = '';
+    var metin = e.kod === 'sinirsiz' ? t('erisim.sinirsiz')
+      : (e.kod === 'gun' ? t('erisim.gun', { tarih: e.bitis || '' }) : t('erisim.kalan', { n: e.kalan_dakika }));
+    var satir = h('div', { class: 'satir erisim-satir' }, [
+      h('span', { class: 'etiket-kucuk', text: t('erisim.baslik') }),
+      h('span', { id: 'erisim-metin', text: metin, 'aria-live': 'polite' }),
+      e.kod ? null : h('button', { type: 'button', class: 'baglanti', id: 'kodum-var', text: t('erisim.kodum_var'), onclick: function () {
+        S.erisimAcik = !S.erisimAcik; erisimCiz(); var g = $('#erisim-kod'); if (g) g.focus();
+      } })
+    ]);
+    kutu.appendChild(satir);
+    if (sinir) kutu.appendChild(h('p', { class: 'not', id: 'erisim-sinir', role: 'status', text: t('erisim.sinir') }));
+    if (S.erisimAcik && !e.kod) {
+      var hata = h('p', { class: 'sessiz erisim-hata', id: 'erisim-hata', role: 'alert' });
+      var girdi = h('input', { type: 'text', id: 'erisim-kod', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('erisim.kod_etiket'), placeholder: 'AK1-XXXXX-XXXXX-…', onkeydown: function (ev) { if (ev.key === 'Enter') kaydet(); } });
+      var kaydet = function () {
+        var v = girdi.value.trim();
+        if (!v) { hata.textContent = t('erisim.bos'); return; }
+        api('POST', '/api/erisim', { kod: v }).then(function () {
+          S.erisimAcik = false; toast(t('erisim.tamam'));
+          return Promise.all([erisimYukle(), durumYukle()]);
+        }).catch(function (er) { hata.textContent = (er && er.mesaj) || t('hata.genel'); });
+      };
+      kutu.appendChild(h('div', { class: 'satir erisim-form' }, [girdi,
+        h('button', { type: 'button', class: 'dugme kucuk', id: 'erisim-kaydet', text: t('erisim.kaydet'), onclick: kaydet }),
+        h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'erisim-vazgec', text: t('erisim.vazgec'), onclick: function () { S.erisimAcik = false; erisimCiz(); } })]));
+      kutu.appendChild(hata);
+    }
+  }
+
   function durumYukle() {
     return api('GET', '/api/durum').then(function (d) {
       var oncekiKapali = S.kapali;
       S.durum = d; S.kapali = false;
+      erisimYukle();
       if (oncekiKapali) banner('', '');
       if (!S.ayarlar || !S.motorlar.length) {
         return Promise.all([ayarYukle(), api('GET', '/api/motorlar').then(function (m) { S.motorlar = m; }), kaynakYukle()]).then(ciz).catch(function () {});

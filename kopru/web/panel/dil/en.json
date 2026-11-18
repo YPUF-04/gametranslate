@@ -271,5 +271,16 @@
 "bolge.ad.altyazi": "Subtitles",
 "bolge.ad.ust_yazi": "Top text",
 "bolge.ad.diger": "Other",
-"bolge.sihirbaz_not": "Optional: if you skip this I find the text on screen myself. You can also choose later on the main screen."
+"bolge.sihirbaz_not": "Optional: if you skip this I find the text on screen myself. You can also choose later on the main screen.",
+"erisim.baslik": "Access",
+"erisim.kalan": "Free time left today: {n} min",
+"erisim.sinirsiz": "Unlimited access is on ✓",
+"erisim.gun": "Access code is on ✓ (until {tarih})",
+"erisim.kodum_var": "I have a code",
+"erisim.kod_etiket": "Access code",
+"erisim.kaydet": "Save",
+"erisim.vazgec": "Cancel",
+"erisim.bos": "Please type the code first.",
+"erisim.tamam": "Access code accepted.",
+"erisim.sinir": "Today's free time is used up. Enter an access code or continue tomorrow. Sentences translated before keep showing."
 }
