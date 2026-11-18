@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+    # Geliştirme dalında da kurucu üretilsin ki gerçekten derlendiği görülsün (yayın yapılmaz).
+    branches: ["claude/**"]
+    paths: ["paketleme/**", "kopru/**", "pyproject.toml", "requirements*.txt", ".github/workflows/windows-paket.yml"]
 
 permissions:
   contents: read
