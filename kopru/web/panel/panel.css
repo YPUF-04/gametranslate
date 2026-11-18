@@ -159,3 +159,11 @@ pre.ayrinti{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--zemin2)
 .bolge-satir.secili{border-color:var(--c)}
 .bolge-satir select{width:auto;flex:1 1 220px;padding:8px 12px}
 .bolge-no{font-weight:700;min-width:5em}
+
+/* erişim satırı: küçük ve sakin */
+.erisim-kart{padding:16px 22px;margin-bottom:20px}
+.erisim-satir{gap:14px}.erisim-satir .etiket-kucuk{margin:0}
+.erisim-form{margin-top:10px}
+.erisim-form input{flex:1 1 220px;min-height:46px;padding:10px 14px;border-radius:12px;border:2px solid var(--cizgi);background:var(--zemin2);color:var(--yazi);font:inherit}
+.erisim-hata{margin:8px 0 0;min-height:1.2em;color:var(--vurgu)}
+#erisim-sinir{margin:12px 0 0}

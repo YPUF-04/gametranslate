@@ -187,7 +187,7 @@ class Erisim:
     def say(self, calisiyor: bool) -> None:
         """Düzenli çağrılır; yalnız çeviri çalışırken geçen süreyi bugüne ekler."""
         simdi = self.simdi()
-        if calisiyor and self._son is not None:
+        if calisiyor and self._son is not None and self._son.date() == simdi.date():   # gece yarısı aralığı atlanır
             fark = (simdi - self._son).total_seconds()
             if fark > 0:
                 bugun = simdi.date().isoformat()

@@ -33,6 +33,7 @@ function sahteSunucu() {
     ceviriler: [{ id: 'a1', asil: 'Where were you last night?', ceviri: 'Dün gece neredeydin?', kaynak: 'motor' }, { id: 'a2', asil: 'Head back to the safehouse.', ceviri: 'Güvenli eve dön.', kaynak: 'motor' }],
     oneriler: [{ asil: 'Vice City', ceviri: 'Vice City' }],
     guncelleme: { ilerleme: 0, asama: 'bosta' }, tvIstekleri: [], tvKuyruk: [], tvSon: { asama: 'bosta', mesaj: '', ayrinti: '' },
+    erisim: { kalan_dakika: 12, kod: null, bitis: null, ucretsiz_dakika: 30 }, sinir: false, kodlar: [],
     bolgePostlari: [], kareIstekleri: 0, kareHata: false, calisiyor: false, anahtarlar: {}, istekler: [], govdeler: {}, sozluk: { oyun: 'varsayilan', terimler: [{ asil: 'Ellie', ceviri: 'Ellie' }] }
   };
   const motorlar = () => [
@@ -61,10 +62,15 @@ function sahteSunucu() {
       switch (q.method + ' ' + url.pathname) {
         case 'GET /api/durum':
           return j({ calisiyor: st.calisiyor, motor: st.ayarlar.motor, yedekte: false, tv_sayisi: st.calisiyor ? 1 : 0,
-            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642 });
+            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir });
         case 'GET /api/ayarlar': return j(Object.assign({ claude: false, gemini: !!st.anahtarlar.gemini }, st.ayarlar));
         case 'POST /api/ayarlar': if (b.bolgeler) st.bolgePostlari.push(b.bolgeler); Object.assign(st.ayarlar, b); return j({ tamam: true });
         case 'GET /api/kare': st.kareIstekleri++; if (st.kareHata) return j({ hata: 'yakalama_yok', mesaj: 'Ekran görüntüsü alınamadı, ekran kaynağını ve izinleri kontrol edin.' }, 400); s.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); return s.end(ornekPng(320, 180));
+        case 'GET /api/erisim': return j(st.erisim);
+        case 'POST /api/erisim':
+          st.kodlar.push(b.kod);
+          if (b.kod === 'AK1-IYI') { st.erisim = { kalan_dakika: 0, kod: 'sinirsiz', bitis: null, ucretsiz_dakika: 30 }; st.sinir = false; return j({ tamam: true, tur: 'sinirsiz' }); }
+          return j({ hata: 'gecersiz_kod', mesaj: 'Bu kod geçerli değil. Harfleri kontrol edip tekrar deneyin.' }, 400);
         case 'GET /api/motorlar': return j(motorlar());
         case 'POST /api/anahtar': st.anahtarlar[b.motor] = b.anahtar; return j({ tamam: true });
         case 'POST /api/dene':
@@ -321,6 +327,33 @@ function dilKontrol() {
     assert.strictEqual(st.ayarlar.aktif_oyun, 'rdr3');
     assert.match(await sayfa.textContent('#aktif-oyun-ad'), /RDR 3/);
     adim('izin penceresi: Evet → hafiza_izni=true kaydedildi');
+    // erişim satırı: kalan süre, kötü kod, iyi kod, sınır uyarısı
+    await sayfa.waitForSelector('#erisim-metin');
+    assert.match(await sayfa.textContent('#erisim-metin'), /Bugün kalan ücretsiz süre: 12 dk/);
+    assert.ok(!(await sayfa.locator('#erisim-sinir').count()), 'sınır yokken uyarı görünmez');
+    await sayfa.click('#kodum-var');
+    await sayfa.fill('#erisim-kod', 'AK1-KOTU');
+    await sayfa.click('#erisim-kaydet');
+    await sayfa.waitForFunction(() => /Bu kod geçerli değil/.test((document.querySelector('#erisim-hata') || {}).textContent || ''));
+    assert.strictEqual(await sayfa.inputValue('#erisim-kod'), 'AK1-KOTU', 'hatada yazı silinmez');
+    await sayfa.waitForTimeout(2300);   // yoklama yazıyı bozmaz
+    assert.strictEqual(await sayfa.inputValue('#erisim-kod'), 'AK1-KOTU');
+    await gor('v4-erisim-hata.png');
+    st.erisim = { kalan_dakika: 0, kod: null, bitis: null, ucretsiz_dakika: 30 }; st.sinir = true;
+    await sayfa.waitForSelector('#erisim-sinir', { timeout: 6000 });
+    assert.match(await sayfa.textContent('#erisim-sinir'), /Bugünkü ücretsiz süre doldu\. Erişim kodunu gir ya da yarın devam et\. Daha önce çevrilmiş cümleler gösterilmeye devam eder\./);
+    assert.match(await sayfa.textContent('#erisim-metin'), /0 dk/);
+    await gor('v4-erisim-sinir.png');
+    await sayfa.fill('#erisim-kod', 'ak1-iyi');
+    assert.strictEqual(await sayfa.inputValue('#erisim-kod'), 'ak1-iyi');
+    await sayfa.fill('#erisim-kod', 'AK1-IYI');
+    await sayfa.click('#erisim-kaydet');
+    await sayfa.waitForFunction(() => /Sınırsız erişim açık ✓/.test(document.querySelector('#erisim-metin').textContent));
+    assert.ok(!(await sayfa.locator('#erisim-sinir').count()), 'kod girilince uyarı kalkar');
+    assert.ok(!(await sayfa.locator('#kodum-var').count()), 'kod açıkken "Kodum var" gizlenir');
+    assert.deepStrictEqual(st.kodlar, ['AK1-KOTU', 'AK1-IYI']);
+    await gor('v4-erisim-acik.png');
+    adim('erişim: kalan dakika, yanlış kod dostça hata, süre dolunca sakin uyarı, doğru kod → "Sınırsız erişim açık ✓"');
     // son çeviriler + düzelt
     await sayfa.waitForSelector('.ceviri-satir[data-id=a1]', { timeout: 6000 });
     await sayfa.waitForSelector('#oneri-kart:not([hidden])');
@@ -394,6 +427,7 @@ function dilKontrol() {
     await sayfa.waitForTimeout(200);
     assert.strictEqual(st.ayarlar.arayuz_dili, 'en');
     assert.match(await sayfa.textContent('body'), /Also translate other on-screen text/);
+    assert.match(await sayfa.textContent('#erisim-metin'), /Unlimited access is on ✓/);
     assert.match(await sayfa.textContent('#guncelleme-metin'), /The program will restart by itself\./);
     assert.match(await sayfa.textContent('#tv-kart h2'), /Install on the TV in one click/);
     await gor('5-ana-en.png');
