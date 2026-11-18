@@ -94,6 +94,9 @@ kasasındadır (Windows Kimlik Bilgisi Yöneticisi / macOS Anahtar Zinciri / Lin
   "ses_cevir": false,
   "kapi": 8642,
   "aktif_oyun": "varsayilan",
+  "kurulum_tamam": false,
+  "cihaz": "ps5",
+  "tv": "lg",
   "gorunum": { "...": "bkz. 2. bölüm" }
 }
 ```
