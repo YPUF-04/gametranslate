@@ -11,13 +11,14 @@ from typing import Any, Awaitable, Callable
 
 from aiohttp import web
 
-from . import PROTOKOL, SURUM, ayarlar, anahtarlar, metinler, sozluk as sozluk_mod
+from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, hafiza as hafiza_mod, metinler, oyunlar,
+               paket as paket_mod, sozluk as sozluk_mod)
 from .ceviri import BILGI, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .ceviri.yonetici import CeviriYoneticisi
 from .isleme import Isleme
 from .okuma import OkumaHatasi
-from .onbellek import Onbellek
+from .onbellek import Onbellek, normallestir
 from .yakalama import YakalamaHatasi
 from .yayin import Yayin, sse_bicim
 
@@ -64,7 +65,14 @@ class Durum:
         self.motor_fabrika = motor_fabrika
         self.kare_fabrika = kare_fabrika
         self.okuyucu_fabrika = okuyucu_fabrika
-        self.onbellek = Onbellek(ayarlar.ayar_dizini() / "onbellek.sqlite3")
+        oyunlar.goc_et()  # eski sozlukler/ klasörünü oyunlar/<kod>/ altına taşır
+        self.onbellek: Onbellek | None = None
+        self._onbellek_kalici = False
+        self.hafiza: hafiza_mod.Hafiza | None = None
+        self.oneriler: hafiza_mod.OneriDeposu | None = None
+        self.gecmis: Any = None
+        self.isleme: Isleme | None = None
+        self._onbellek_kur()
         self.yonetici = self._yonetici_kur()
         self.gorev: asyncio.Task | None = None
         self.yayin.yayinla("gorunum", ayar["gorunum"])
@@ -73,20 +81,69 @@ class Durum:
     def dil(self) -> str:
         return self.ayar.get("arayuz_dili", "tr")
 
+    def izin(self) -> bool:
+        """Hafıza izni açıkça verildi mi (null/false iken diske oyun verisi yazılmaz)."""
+        return self.ayar.get("hafiza_izni") is True
+
+    @property
+    def oyun_kodu(self) -> str:
+        return oyunlar.kod_coz(str(self.ayar.get("aktif_oyun") or oyunlar.VARSAYILAN_KOD))
+
+    def _onbellek_kur(self) -> None:
+        """İzin yoksa önbellek yalnız RAM'de (":memory:") durur."""
+        kalici = self.izin()
+        if self.onbellek is not None and kalici == self._onbellek_kalici:
+            return
+        if self.onbellek is not None:
+            self.onbellek.kapat()
+        self._onbellek_kalici = kalici
+        self.onbellek = Onbellek(ayarlar.ayar_dizini() / "onbellek.sqlite3" if kalici else ":memory:")
+
+    def bilgi_yenile(self) -> None:
+        kod = self.oyun_kodu
+        self.yonetici.oyun_bilgisi = oyunlar.oku(kod) or {}
+        self.yonetici.terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(kod))
+
     def _yonetici_kur(self) -> CeviriYoneticisi:
         a = self.ayar
+        kod = self.oyun_kodu
+        if self.hafiza is None or self.hafiza.kod != kod:   # aynı oyunsa RAM kayıtları korunur
+            if self.hafiza:
+                self.hafiza.kapat()
+            if self.oneriler:
+                self.oneriler.bitir()
+            self.hafiza = hafiza_mod.Hafiza(kod, self.izin)
+            self.oneriler = hafiza_mod.OneriDeposu(kod, self.izin)
         yedek_kod = a.get("yedek_motor") or None
         y = CeviriYoneticisi(self.motor_fabrika(a["motor"], a),
                              self.motor_fabrika(yedek_kod, a) if yedek_kod and yedek_kod != a["motor"] else None,
-                             self.onbellek, self.yayin.yayinla, a["aktif_oyun"])
-        y.terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(a["aktif_oyun"]))
+                             self.onbellek, self.yayin.yayinla, kod, self.hafiza, self.oneriler)
+        if self.gecmis is not None:
+            y.gecmis = self.gecmis
+        self.gecmis = y.gecmis
+        y.oyun_bilgisi = oyunlar.oku(kod) or {}
+        y.terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(kod))
         return y
 
     def yeniden_kur(self) -> None:
+        self._onbellek_kur()
         self.yonetici = self._yonetici_kur()
         if self.gorev and not self.gorev.done():
             self.durdur()
             self.baslat()
+
+    def duzelt(self, asil: str, ceviri: str) -> bool:
+        """Kullanıcı düzeltmesi: hafızaya (kaynak=kullanici); ekrandaysa TV'de hemen güncellenir."""
+        self.hafiza.kaydet(asil, ceviri, "kullanici")
+        self.yonetici.duzeltildi(asil, ceviri)
+        if self.isleme:
+            self.isleme.duzeltildi(asil, ceviri)
+        y = self.yayin.son_yazi
+        kalan = self.yayin.kalan_ms()
+        if y and kalan > 0 and normallestir(y.get("asil", "")) == normallestir(asil):
+            self.yayin.yayinla("yazi", {**y, "metin": ceviri, "sure_ms": max(kalan, 1500)})
+            return True
+        return False
 
     def durum_olayi(self) -> dict[str, Any]:
         motor = self.yonetici.yedek if self.yonetici.yedekte and self.yonetici.yedek else self.yonetici.birincil
@@ -110,6 +167,7 @@ class Durum:
         else:
             okuyucu = self.okuyucu_fabrika()
         isleme = Isleme(kare, okuyucu, self.yonetici, self.yayin, lambda: self.ayar)
+        self.isleme = isleme
         self.gorev = asyncio.get_running_loop().create_task(isleme.calis())
         self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
                                      "yedek": False})
@@ -278,6 +336,15 @@ def _dogrula(k: dict[str, Any]) -> bool:
             return False
         if "tv" in k and k["tv"] not in (None, "lg", "samsung", "androidtv", "yok"):
             return False
+        if "hafiza_izni" in k and k["hafiza_izni"] not in (None, True, False):
+            return False
+        if "hafiza_izni" in k and k["hafiza_izni"] is not None and not isinstance(k["hafiza_izni"], bool):
+            return False
+        if "kalite" in k and k["kalite"] not in ("en_iyi", "dengeli", "hizli"):
+            return False
+        if "aktif_oyun" in k and not (isinstance(k["aktif_oyun"], str) and
+                                      0 < len(k["aktif_oyun"].strip()) <= 100):
+            return False
         for alan in ("ekrani_cevir", "kisa_aciklama", "ses_cevir", "kurulum_tamam"):
             if alan in k and not isinstance(k[alan], bool):
                 return False
@@ -311,7 +378,7 @@ async def api_ayarlar_yaz(request: web.Request) -> web.Response:
     d.ayar = ayarlar.guncelle(d.ayar, kismi)
     if "gorunum" in kismi:
         d.yayin.yayinla("gorunum", d.ayar["gorunum"])
-    if {"motor", "yedek_motor", "modeller", "aktif_oyun"} & kismi.keys():
+    if {"motor", "yedek_motor", "modeller", "aktif_oyun", "kalite", "hafiza_izni"} & kismi.keys():
         d.yeniden_kur()
     return web.json_response({"tamam": True})
 
@@ -397,7 +464,7 @@ async def api_kaynaklar(request: web.Request) -> web.Response:
 
 async def api_sozluk_al(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
-    oyun = request.query.get("oyun") or d.ayar["aktif_oyun"]
+    oyun = request.query.get("oyun") or d.oyun_kodu
     return web.json_response({"oyun": oyun, "terimler": sozluk_mod.yukle(oyun)})
 
 
@@ -405,14 +472,181 @@ async def api_sozluk_yaz(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     v = await _json(request)
     terimler = v.get("terimler")
-    oyun = v.get("oyun") or d.ayar["aktif_oyun"]
+    oyun = v.get("oyun") or d.oyun_kodu
     if not isinstance(oyun, str) or not isinstance(terimler, list) or \
             not all(isinstance(t, dict) and isinstance(t.get("asil"), str) for t in terimler):
         return hata("gecersiz_istek", 400, request)
     sozluk_mod.kaydet(oyun, terimler)
-    if oyun == d.ayar["aktif_oyun"]:
-        d.yonetici.terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(oyun))
+    if oyunlar.kod_coz(oyun) == d.oyun_kodu:
+        d.bilgi_yenile()
     return web.json_response({"oyun": oyun, "terimler": sozluk_mod.yukle(oyun)})
+
+
+# ---------- oyun hafızası (sürüm 0.2) ----------
+
+def _kayit_sayisi(d: Durum, kod: str) -> int:
+    return d.hafiza.say() if kod == d.oyun_kodu else hafiza_mod.dosyada_say(kod)
+
+
+async def api_oyunlar_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    liste = []
+    for kod in oyunlar.kodlari_listele():
+        b = oyunlar.oku(kod) or {}
+        liste.append({"kod": kod, "ad": b.get("ad", kod), "kayit_sayisi": _kayit_sayisi(d, kod),
+                      "terim_sayisi": len(sozluk_mod.yukle(kod)),
+                      "son_oynama": b.get("son_oynama"), "aktif": kod == d.oyun_kodu})
+    return web.json_response(liste)
+
+
+def _oyun_alanlari(v: dict[str, Any]) -> bool:
+    return (isinstance(v.get("aciklama", ""), str) and len(v.get("aciklama", "")) <= 2000
+            and v.get("hitap", "sen") in ("sen", "siz")
+            and isinstance(v.get("karakterler", []), list))
+
+
+async def api_oyunlar_yaz(request: web.Request) -> web.Response:
+    v = await _json(request)
+    ad = v.get("ad")
+    if not isinstance(ad, str) or not (0 < len(ad.strip()) <= 100):
+        return hata("oyun_gecersiz", 400, request)
+    if not _oyun_alanlari(v):
+        return hata("gecersiz_istek", 400, request)
+    kod = oyunlar.olustur(ad, v.get("aciklama", ""), v.get("hitap", "sen"), v.get("karakterler"))
+    return web.json_response({"kod": kod})
+
+
+async def api_oyun_sec(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    kod = (await _json(request)).get("kod")
+    if not isinstance(kod, str) or not oyunlar.gecerli_kod(kod) or not oyunlar.var_mi(kod):
+        return hata("oyun_yok", 404, request)
+    d.ayar = ayarlar.guncelle(d.ayar, {"aktif_oyun": kod})
+    if d.izin():
+        oyunlar.oynandi_isaretle(kod)  # yalnız izinle (oyun verisi diske yazılır)
+    d.yeniden_kur()
+    return web.json_response({"kod": kod})
+
+
+def _kod_al(request: web.Request) -> str | None:
+    kod = request.match_info["kod"]
+    return kod if oyunlar.gecerli_kod(kod) and oyunlar.var_mi(kod) else None
+
+
+async def api_oyun_al(request: web.Request) -> web.Response:
+    kod = _kod_al(request)
+    if kod is None:
+        return hata("oyun_yok", 404, request)
+    return web.json_response(oyunlar.oku(kod))
+
+
+async def api_oyun_yaz(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    kod = _kod_al(request)
+    if kod is None:
+        return hata("oyun_yok", 404, request)
+    v = await _json(request)
+    if not _oyun_alanlari(v) or ("ad" in v and not (isinstance(v["ad"], str) and len(v["ad"]) <= 100)):
+        return hata("gecersiz_istek", 400, request)
+    bilgi = oyunlar.guncelle(kod, v)
+    if kod == d.oyun_kodu:
+        d.bilgi_yenile()
+    return web.json_response(bilgi)
+
+
+async def api_hafiza_sil(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    kod = _kod_al(request)
+    if kod is None:
+        return hata("oyun_yok", 404, request)
+    if kod == d.oyun_kodu:
+        d.hafiza.temizle()
+    else:
+        hafiza_mod.Hafiza(kod).temizle()
+    return web.json_response({"tamam": True})
+
+
+async def api_son_ceviriler(request: web.Request) -> web.Response:
+    return web.json_response(list(reversed(request.app[DURUM].yonetici.gecmis)))  # en yeni başta
+
+
+async def api_duzelt(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    asil, ceviri = v.get("asil"), v.get("ceviri")
+    if not (isinstance(asil, str) and isinstance(ceviri, str) and asil.strip() and ceviri.strip()
+            and len(asil) <= 1000 and len(ceviri) <= 1000):
+        return hata("gecersiz_istek", 400, request)
+    ekranda = d.duzelt(asil, ceviri)
+    return web.json_response({"tamam": True, "ekranda": ekranda})
+
+
+async def api_paket_indir(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    kod = _kod_al(request)
+    if kod is None:
+        return hata("oyun_yok", 404, request)
+    satirlar = d.hafiza.hepsi() if kod == d.oyun_kodu else hafiza_mod.dosyadan_oku(kod)
+    veri = paket_mod.olustur(oyunlar.oku(kod) or {}, sozluk_mod.yukle(kod), satirlar)
+    return web.Response(body=veri, content_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="{kod}.akpaket"'})
+
+
+async def api_paket_yukle(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    try:
+        okuyucu = await request.multipart()
+        veri = None
+        while (parca := await okuyucu.next()) is not None:
+            if parca.name == "dosya":
+                tampon = bytearray()
+                while True:
+                    blok = await parca.read_chunk(1 << 20)
+                    if not blok:
+                        break
+                    tampon += blok
+                    if len(tampon) > paket_mod.AZAMI_BAYT:
+                        return hata("paket_buyuk", 413, request)
+                veri = bytes(tampon)
+                break
+    except (AssertionError, ValueError, KeyError):
+        return hata("paket_gecersiz", 400, request)
+    if veri is None:
+        return hata("paket_gecersiz", 400, request)
+    try:
+        p = await asyncio.to_thread(paket_mod.oku, veri)
+        kod, eklenen, atlanan, kalici = await asyncio.to_thread(
+            paket_mod.uygula, p, d.hafiza, d.izin)
+    except paket_mod.PaketHatasi as e:
+        return hata(e.kod, 413 if e.kod == "paket_buyuk" else 400, request)
+    if kod == d.oyun_kodu:
+        d.bilgi_yenile()
+    return web.json_response({"tamam": True, "kod": kod, "eklenen": eklenen,
+                              "atlanan": atlanan, "kalici": kalici})
+
+
+async def api_oneriler_al(request: web.Request) -> web.Response:
+    return web.json_response(request.app[DURUM].oneriler.liste())
+
+
+async def api_oneriler_yaz(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    asil, kabul = v.get("asil"), v.get("kabul")
+    if not isinstance(asil, str) or not isinstance(kabul, bool):
+        return hata("gecersiz_istek", 400, request)
+    oneri = d.oneriler.al(asil)
+    if oneri is None:
+        return hata("oneri_yok", 404, request)
+    if kabul:
+        ceviri = v.get("ceviri") if isinstance(v.get("ceviri"), str) and v["ceviri"].strip() else oneri
+        mevcut = sozluk_mod.yukle(d.oyun_kodu)
+        if not any(t["asil"].casefold() == asil.strip().casefold() for t in mevcut):
+            sozluk_mod.kaydet(d.oyun_kodu, mevcut + [{"asil": asil.strip(), "ceviri": ceviri.strip()}])
+        d.bilgi_yenile()
+    else:
+        d.oneriler.reddet(asil)
+    return web.json_response({"tamam": True})
 
 
 def uygulama_olustur(ayar: dict[str, Any] | None = None, **fabrikalar: Any) -> web.Application:
@@ -439,6 +673,18 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, **fabrikalar: Any) -> w
     r.add_get("/api/kaynaklar", api_kaynaklar)
     r.add_get("/api/sozluk", api_sozluk_al)
     r.add_post("/api/sozluk", api_sozluk_yaz)
+    r.add_get("/api/oyunlar", api_oyunlar_al)
+    r.add_post("/api/oyunlar", api_oyunlar_yaz)
+    r.add_post("/api/oyun-sec", api_oyun_sec)
+    r.add_get("/api/oyun/{kod}", api_oyun_al)
+    r.add_post("/api/oyun/{kod}", api_oyun_yaz)
+    r.add_delete("/api/oyun/{kod}/hafiza", api_hafiza_sil)
+    r.add_get("/api/son-ceviriler", api_son_ceviriler)
+    r.add_post("/api/duzelt", api_duzelt)
+    r.add_get("/api/paket/{kod}", api_paket_indir)
+    r.add_post("/api/paket", api_paket_yukle)
+    r.add_get("/api/oneriler", api_oneriler_al)
+    r.add_post("/api/oneriler", api_oneriler_yaz)
 
     async def durum_dongusu() -> None:
         while True:
@@ -452,6 +698,8 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, **fabrikalar: Any) -> w
         app["durum_gorevi"].cancel()
         durum.durdur()
         durum.onbellek.kapat()
+        durum.hafiza.kapat()
+        durum.oneriler.bitir()
     app.on_startup.append(ac)
     app.on_cleanup.append(kapat)
     return app
