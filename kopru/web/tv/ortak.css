@@ -25,7 +25,7 @@
   border-radius: 0.45em; text-align: center; font-weight: 600; line-height: 1.38; letter-spacing: 0.005em;
   text-shadow: 0 0.04em 0.16em rgba(0, 0, 0, 0.7); box-shadow: 0 0.18em 0.7em rgba(0, 0, 0, 0.3); opacity: 0; }
 .ak-kok .ak-metin { display: block; margin: 0 auto; text-wrap: balance; overflow-wrap: normal; word-break: normal; max-width: 100%; }
-.ak-kok .ak-konusan { display: block; font-size: 0.6em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+.ak-kok .ak-konusan { display: block; font-size: 0.6em; font-weight: 700; letter-spacing: 0.04em;
   margin-bottom: 0.15em; opacity: 0.95; }
 .ak-kok .ak-asil { display: block; font-size: 0.55em; font-weight: 400; opacity: 0.75; margin-top: 0.3em; }
 .ak-kok .ak-onceki { display: none; max-width: 100%; margin-bottom: 0.35em; text-align: center; font-size: 0.6em; font-weight: 500;

@@ -5,11 +5,24 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
+const zlib = require('zlib');
 const { chromium } = require('playwright');
 
 const PANEL = path.join(__dirname, '..');
 const SHOTS = process.env.SHOTS_DIR || '';
 const TURLER = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' };
+
+
+// küçük, örnek bir oyun karesi (PNG): gradyan + altyazı şeridi — sahte /api/kare yanıtı
+function ornekPng(w, h) {
+  const satir = (y) => { const b = Buffer.alloc(1 + w * 3); for (let x = 0; x < w; x++) { const alt = y > h * 0.72 && y < h * 0.9 && x > w * 0.12 && x < w * 0.88; b[1 + x * 3] = alt ? 240 : 30 + (x * 60) / w; b[2 + x * 3] = alt ? 240 : 60 + (y * 80) / h; b[3 + x * 3] = alt ? 240 : 110; } return b; };
+  const ham = Buffer.concat(Array.from({ length: h }, (_, y) => satir(y)));
+  const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (buf) => { let c = 0xffffffff; for (const x of buf) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const parca = (ad, veri) => { const u = Buffer.alloc(4); u.writeUInt32BE(veri.length); const t = Buffer.concat([Buffer.from(ad), veri]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(t)); return Buffer.concat([u, t, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), parca('IHDR', ihdr), parca('IDAT', zlib.deflateSync(ham)), parca('IEND', Buffer.alloc(0))]);
+}
 
 function sahteSunucu() {
   const st = {
@@ -20,7 +33,7 @@ function sahteSunucu() {
     ceviriler: [{ id: 'a1', asil: 'Where were you last night?', ceviri: 'Dün gece neredeydin?', kaynak: 'motor' }, { id: 'a2', asil: 'Head back to the safehouse.', ceviri: 'Güvenli eve dön.', kaynak: 'motor' }],
     oneriler: [{ asil: 'Vice City', ceviri: 'Vice City' }],
     guncelleme: { ilerleme: 0, asama: 'bosta' }, tvIstekleri: [], tvKuyruk: [], tvSon: { asama: 'bosta', mesaj: '', ayrinti: '' },
-    calisiyor: false, anahtarlar: {}, istekler: [], govdeler: {}, sozluk: { oyun: 'varsayilan', terimler: [{ asil: 'Ellie', ceviri: 'Ellie' }] }
+    bolgePostlari: [], kareIstekleri: 0, kareHata: false, calisiyor: false, anahtarlar: {}, istekler: [], govdeler: {}, sozluk: { oyun: 'varsayilan', terimler: [{ asil: 'Ellie', ceviri: 'Ellie' }] }
   };
   const motorlar = () => [
     { kod: 'gemini', ad: 'Gemini', anahtar_gerekli: true, anahtar_kayitli: !!st.anahtarlar.gemini, cevrimdisi: false, ucretsiz: true },
@@ -50,7 +63,8 @@ function sahteSunucu() {
           return j({ calisiyor: st.calisiyor, motor: st.ayarlar.motor, yedekte: false, tv_sayisi: st.calisiyor ? 1 : 0,
             son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642 });
         case 'GET /api/ayarlar': return j(Object.assign({ claude: false, gemini: !!st.anahtarlar.gemini }, st.ayarlar));
-        case 'POST /api/ayarlar': Object.assign(st.ayarlar, b); return j({ tamam: true });
+        case 'POST /api/ayarlar': if (b.bolgeler) st.bolgePostlari.push(b.bolgeler); Object.assign(st.ayarlar, b); return j({ tamam: true });
+        case 'GET /api/kare': st.kareIstekleri++; if (st.kareHata) return j({ hata: 'yakalama_yok', mesaj: 'Ekran görüntüsü alınamadı, ekran kaynağını ve izinleri kontrol edin.' }, 400); s.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); return s.end(ornekPng(320, 180));
         case 'GET /api/motorlar': return j(motorlar());
         case 'POST /api/anahtar': st.anahtarlar[b.motor] = b.anahtar; return j({ tamam: true });
         case 'POST /api/dene':
@@ -132,6 +146,80 @@ function dilKontrol() {
     await sayfa.click('[data-kaynak="pencere:123"]');
     await sayfa.click('[data-tv=lg]');
     await gor('1-adim1.png');
+
+    // bölge editörü (sihirbaz): kare çiz, tür seç, klavye ile taşı, kaydet
+    await sayfa.waitForSelector('#bolge-kart:not([hidden])');
+    await sayfa.click('#bolge-ac');
+    await sayfa.waitForSelector('#bolge-sahne:not([hidden])');
+    assert.match(await sayfa.textContent('#bolge-ne'), /Çevirmemi istediğin yerleri kare içine al\. En fazla 3 kare\. Sadece bu kareleri okurum, ekranın geri kalanına dokunmam\./);
+    assert.ok(st.kareIstekleri >= 1);
+    await sayfa.evaluate(() => document.querySelector('#bolge-sahne').scrollIntoView({ block: 'start', behavior: 'instant' }));
+    await sayfa.waitForTimeout(100);
+    let kb = await sayfa.locator('#bolge-katman').boundingBox();
+    const fare = async (ax, ay, bx, by) => {
+      kb = await sayfa.locator('#bolge-katman').boundingBox();
+      await sayfa.mouse.move(kb.x + kb.width * ax, kb.y + kb.height * ay);
+      await sayfa.mouse.down();
+      await sayfa.mouse.move(kb.x + kb.width * ((ax + bx) / 2), kb.y + kb.height * ((ay + by) / 2), { steps: 3 });
+      await sayfa.mouse.move(kb.x + kb.width * bx, kb.y + kb.height * by, { steps: 3 });
+      await sayfa.mouse.up();
+    };
+    await fare(0.1, 0.7, 0.9, 0.9);          // altyazı kutusu
+    await fare(0.02, 0.03, 0.4, 0.15);       // üstteki yazılar
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 2);
+    await sayfa.selectOption('#bolge-tur-1', 'ust_yazi');
+    assert.strictEqual(await sayfa.inputValue('#bolge-tur-0'), 'altyazi');
+    assert.match(await sayfa.getAttribute('.bolge[data-bolge="0"]', 'aria-label'), /Kare 1: Altyazı/);
+    assert.match(await sayfa.textContent('#bolge-satirlar'), /Üstteki yazılar \(görev, bilgi\)/);
+    // üçüncü ve dördüncü kare: en çok 3
+    await fare(0.5, 0.2, 0.7, 0.3);
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 3);
+    await fare(0.5, 0.4, 0.7, 0.5);
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 3, '4. kare çizilemez');
+    assert.ok(await sayfa.isVisible('#bolge-dolu'));
+    await sayfa.click('[data-sil="2"]');      // × ile sil
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 2);
+    // köşeden boyutlandır: 2. kutunun sağ-alt köşesini sürükle
+    kb = await sayfa.locator('#bolge-katman').boundingBox();
+    const k2 = await sayfa.locator('.bolge[data-bolge="1"] .tutamac.se').boundingBox();
+    await sayfa.mouse.move(k2.x + k2.width / 2, k2.y + k2.height / 2); await sayfa.mouse.down();
+    await sayfa.mouse.move(kb.x + kb.width * 0.5, kb.y + kb.height * 0.2, { steps: 4 }); await sayfa.mouse.up();
+    // klavye: 1. kutuyu 3 adım sağa taşı, 1 adım yukarı, Shift+Aşağı ile 1 adım yüksel
+    await sayfa.focus('.bolge[data-bolge="0"]');
+    for (let i = 0; i < 3; i++) await sayfa.keyboard.press('ArrowRight');
+    await sayfa.keyboard.press('ArrowUp');
+    await sayfa.keyboard.press('Shift+ArrowDown');
+    await gor('v3-bolge-kaydirma.png');
+    await sayfa.click('#bolge-kaydet');
+    await sayfa.waitForFunction(() => document.querySelector('.tost'));
+    const kayit = st.bolgePostlari[st.bolgePostlari.length - 1];
+    assert.strictEqual(kayit.length, 2);
+    const yakin = (a, b, ne) => assert.ok(Math.abs(a - b) < 0.006, ne + ': ' + a + ' ≠ ' + b);
+    // 1. kutu: çizilen (0.1, 0.7, 0.8, 0.2) → x +0.03, y -0.01, y2 +0.01
+    yakin(kayit[0].x, 0.13, 'x'); yakin(kayit[0].y, 0.69, 'y'); yakin(kayit[0].g, 0.8, 'g'); yakin(kayit[0].y2, 0.21, 'y2');
+    assert.strictEqual(kayit[0].tur, 'altyazi'); assert.strictEqual(kayit[0].ad, 'Altyazı');
+    // 2. kutu: sol-üst (0.02,0.03) sabit, sağ-alt (0.5,0.2)
+    yakin(kayit[1].x, 0.02, 'x2'); yakin(kayit[1].y, 0.03, 'y2'); yakin(kayit[1].g, 0.48, 'g2'); yakin(kayit[1].y2, 0.17, 'y22');
+    assert.strictEqual(kayit[1].tur, 'ust_yazi'); assert.strictEqual(kayit[1].ad, 'Üst yazılar');
+    for (const b of kayit) { assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.g <= 1.0001 && b.y + b.y2 <= 1.0001); assert.deepStrictEqual(Object.keys(b).sort(), ['ad', 'g', 'tur', 'x', 'y', 'y2']); }
+    adim('bölge editörü (sihirbaz): 2 kare çizildi, tür seçildi, en çok 3 sınırı, köşeden boyutlandı, klavye ile taşındı, normalize JSON gönderildi');
+    // Delete tuşu ile silme + geri alınamaz değil: yeniden çiz
+    await sayfa.focus('.bolge[data-bolge="1"]'); await sayfa.keyboard.press('Delete');
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 1);
+    await fare(0.02, 0.03, 0.4, 0.15); await sayfa.selectOption('#bolge-tur-1', 'ust_yazi');
+    await sayfa.click('#bolge-kaydet');
+    await sayfa.waitForFunction(() => document.querySelectorAll('.tost').length >= 2);
+    assert.strictEqual(st.bolgePostlari[st.bolgePostlari.length - 1].length, 2);
+    adim('Delete tuşu kareyi sildi, yeniden çizilip kaydedildi');
+    // kare alınamazsa dostça mesaj
+    st.kareHata = true; await sayfa.click('#bolge-yenile');
+    await sayfa.waitForSelector('#bolge-mesaj.kotu');
+    assert.match(await sayfa.textContent('#bolge-mesaj'), /Ekran görüntüsü alınamadı/);
+    st.kareHata = false; await sayfa.click('#bolge-yenile'); await sayfa.waitForSelector('#bolge-sahne:not([hidden])');
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 2, 'yenileyince kareler kaybolmaz');
+    await sayfa.evaluate(() => document.querySelector('#bolge-sahne').scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await gor('v3-bolge.png');
+    adim('görüntü yenilenince kareler korunur, hata dostça gösterilir');
     await sayfa.click('#ileri1');
     adim('PS5 + kaynak + LG seçildi');
 
@@ -246,12 +334,22 @@ function dilKontrol() {
     assert.strictEqual(await sayfa.getAttribute('#guncelleme-bar [role=progressbar]', 'aria-valuenow'), '100');
     assert.ok(st.istekler.includes('POST /api/guncelleme/kur'));
     adim('güncelleme çubuğu: Yeni sürüm hazır → Güncelle → ilerleme → "Program kendini yeniden başlatacak."');
+
+    // bölge kartı (ana ekran): özet, düzenle, otomatiğe dön
+    assert.match(await sayfa.textContent('#bolge-ozet'), /2 kare seçili/);
+    await sayfa.click('#bolge-ac');
+    await sayfa.waitForSelector('#bolge-sahne:not([hidden])');
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 2);
+    await sayfa.click('#bolge-otomatik');
+    await sayfa.waitForFunction(() => /Şimdi otomatik/.test(document.querySelector('#bolge-ozet').textContent));
+    assert.deepStrictEqual(st.bolgePostlari[st.bolgePostlari.length - 1], []);
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 0);
+    adim('ana ekran: "Neyi çevireceğimi seç" kartı kareleri gösterdi, "Otomatik bulsun" bölgeleri temizledi');
     await gor('v2-ana.png');
     await sayfa.click('[data-id=a1] .duzelt');
     await sayfa.fill('[data-id=a1] .duzelt-girdi', 'Dün gece neredeydin sen?');
     await sayfa.click('[data-id=a1] .duzelt-kaydet');
-    await sayfa.waitForSelector('.tost');
-    assert.match(await sayfa.textContent('.tost'), /bundan sonra hep böyle çevireceğim/);
+    await sayfa.waitForSelector('.tost:has-text("bundan sonra hep böyle")');
     assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/duzelt']), { asil: 'Where were you last night?', ceviri: 'Dün gece neredeydin sen?' });
     assert.match(await sayfa.textContent('[data-id=a1]'), /neredeydin sen/);
     adim('son çeviriler görünür, Düzelt doğru gövdeyi gönderdi');

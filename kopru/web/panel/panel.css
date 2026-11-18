@@ -138,3 +138,24 @@ table.sozluk td{padding:4px}table.sozluk input{padding:8px 10px}
 .tv-asamalar li.simdi{border-color:var(--vurgu);color:var(--vurgu);font-weight:600}
 .tv-asamalar li.bitti{border-color:var(--ana);color:#8ff1e7}
 pre.ayrinti{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--zemin2);border:1px solid var(--cizgi);border-radius:12px;padding:12px 14px;font-size:.85rem;max-height:240px;overflow:auto;user-select:all}
+
+/* bölge editörü: görüntü üstünde kare çizme */
+.bolge-edit{margin-top:6px}
+.bolge-sahne{position:relative;display:block;width:100%;border-radius:16px;overflow:hidden;background:#000;border:1px solid var(--cizgi);line-height:0;user-select:none;-webkit-user-select:none}
+.bolge-resim{display:block;width:100%;height:auto;pointer-events:none}
+.bolge-katman{position:absolute;inset:0;touch-action:none;cursor:crosshair}
+.bolge{--c:#2EC4B6;--f:rgba(46,196,182,.16);position:absolute;box-sizing:border-box;border:3px solid var(--c);background:var(--f);cursor:move;border-radius:6px;line-height:1.2}
+.bolge.t-ust_yazi,.bolge-satir.t-ust_yazi{--c:#FFD166;--f:rgba(255,209,102,.16)}
+.bolge.t-diger,.bolge-satir.t-diger{--c:#8FA3BF;--f:rgba(143,163,191,.18)}
+.bolge.secili{box-shadow:0 0 0 2px rgba(255,255,255,.7)}
+.bolge:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.bolge-rozet{position:absolute;left:0;top:0;background:var(--c);color:#04231f;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:0 0 6px 0;white-space:nowrap;pointer-events:none;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.tutamac{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;display:block;touch-action:none}
+.tutamac::after{content:"";position:absolute;left:6px;top:6px;width:14px;height:14px;background:#fff;border:3px solid var(--c);border-radius:4px;box-sizing:border-box}
+.tutamac.nw{left:0;top:0;cursor:nwse-resize}.tutamac.ne{left:100%;top:0;cursor:nesw-resize}
+.tutamac.sw{left:0;top:100%;cursor:nesw-resize}.tutamac.se{left:100%;top:100%;cursor:nwse-resize}
+.bolge-satirlar{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.bolge-satir{--c:#2EC4B6;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--cizgi);border-left:6px solid var(--c);border-radius:14px;background:var(--zemin2)}
+.bolge-satir.secili{border-color:var(--c)}
+.bolge-satir select{width:auto;flex:1 1 220px;padding:8px 12px}
+.bolge-no{font-weight:700;min-width:5em}
