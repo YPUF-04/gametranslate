@@ -10,7 +10,7 @@ import webbrowser
 from aiohttp import web
 
 from . import ayarlar, metinler
-from .sunucu import DURUM, lan_adresleri, uygulama_olustur
+from .sunucu import DURUM, GUNCELLEME, lan_adresleri, uygulama_olustur
 
 ORNEKLER = [
     ("Hello! This is a test subtitle.", "Merhaba! Bu bir deneme altyazısıdır.", None),
@@ -50,6 +50,10 @@ def main() -> None:
         app.on_startup.append(baslat)
         app.on_cleanup.append(durdur)
         print(metinler.mesaj("demo_acik", dil))
+
+    async def guncelleme_bak(app: web.Application) -> None:
+        app[GUNCELLEME].arka_planda_denetle()   # günde en çok bir kez; ayar kapalıysa hiç
+    app.on_startup.append(guncelleme_bak)
 
     for ip in lan_adresleri():
         print(metinler.mesaj("tv_adres", dil).format(adres=f"http://{ip}:{kapi}/tv"))

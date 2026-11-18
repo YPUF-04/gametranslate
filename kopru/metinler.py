@@ -103,10 +103,10 @@ HATALAR: dict[str, dict[str, str]] = {
         "tr": "Kod yanlış görünüyor. TV'deki Developer Mode uygulamasındaki 6 haneli kodu tekrar yazın.",
         "en": "The code looks wrong. Please type the 6-character code from the TV's Developer Mode app again."},
     "tv_oturum_bitti": {
-        "tr": "TV'nin geliştirici modu kapanmış olabilir (50 saatte kapanır). TV'de Developer Mode uygulamasını açıp "
-              "Dev Mode Status'u açın ve Extend ile süreyi uzatın, sonra tekrar deneyin.",
-        "en": "The TV's developer mode may have expired (it closes after 50 hours). Open the Developer Mode app on the TV, "
-              "turn Dev Mode Status on and press Extend, then try again."},
+        "tr": "TV'nin geliştirici modu kapalı ya da süresi dolmuş olabilir (50 saatte kapanır); TV'de Developer Mode "
+              "uygulamasını açın, Dev Mode Status ve Key Server açık olsun, süre dolduysa Extend ile uzatıp tekrar deneyin.",
+        "en": "The TV's developer mode may be off or expired (it closes after 50 hours); open the Developer Mode app on "
+              "the TV, make sure Dev Mode Status and Key Server are on, press Extend if time ran out, then try again."},
     "tv_paket_yok": {
         "tr": "Kurulacak TV paketi programın içinde bulunamadı, programı yeniden kurun.",
         "en": "The TV package was not found inside the program, please reinstall the program."},
