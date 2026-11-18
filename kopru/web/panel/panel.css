@@ -126,3 +126,15 @@ table.sozluk td{padding:4px}table.sozluk input{padding:8px 10px}
 .pencere-dugme{display:flex;flex-direction:column;gap:12px}
 @keyframes gir{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* güncelleme çubuğu ve TV kurulum kartı (sakin, mevcut renklerle) */
+.guncelleme-bar{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px;padding:12px 18px;border-radius:16px;background:#16344a;border:1px solid var(--ana);color:#d5fbf6}
+.guncelleme-bar .metin{font-weight:600}
+.ilerleme{flex:1 1 220px;height:10px;border-radius:999px;background:var(--zemin2);overflow:hidden;min-width:140px}
+.ilerleme>i{display:block;height:100%;width:0;background:var(--ana);transition:width .3s}
+.tv-adimlar{margin:8px 0 14px;padding-left:24px}.tv-adimlar li{margin:8px 0}
+.tv-asamalar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 6px;padding:0;list-style:none}
+.tv-asamalar li{padding:5px 14px;border-radius:999px;border:1px solid var(--cizgi);color:var(--soluk);font-size:.88rem}
+.tv-asamalar li.simdi{border-color:var(--vurgu);color:var(--vurgu);font-weight:600}
+.tv-asamalar li.bitti{border-color:var(--ana);color:#8ff1e7}
+pre.ayrinti{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--zemin2);border:1px solid var(--cizgi);border-radius:12px;padding:12px 14px;font-size:.85rem;max-height:240px;overflow:auto;user-select:all}
