@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "altyazikoprusu"
+version = "0.1.0"
+description = "Oyun ekranındaki yazıyı canlı çevirip TV uygulamalarına yayınlar."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "AGPL-3.0-only"
+dependencies = [
+  "aiohttp>=3.9",
+  "anthropic>=0.40",
+  "keyring>=24",
+  "platformdirs>=4",
+  "pillow>=10",
+  "mss>=9",
+]
+
+[project.optional-dependencies]
+ocr-windows = ["winocr"]
+ocr-mac = ["ocrmac"]
+ocr = ["rapidocr_onnxruntime"]
+yerel = ["argostranslate"]
+ses = ["faster-whisper", "soundcard", "numpy"]
+test = ["pytest", "pytest-aiohttp", "pytest-asyncio"]
+
+[project.scripts]
+altyazikoprusu = "kopru.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["kopru*"]
+
+[tool.setuptools.package-data]
+kopru = ["web/**/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
