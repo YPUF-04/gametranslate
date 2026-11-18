@@ -37,6 +37,9 @@ HATALAR: dict[str, dict[str, str]] = {
     "yakalama_yok": {
         "tr": "Ekran görüntüsü alınamadı, ekran kaynağını ve izinleri kontrol edin.",
         "en": "The screen could not be captured, please check the source and permissions."},
+    "kaynak_yok": {
+        "tr": "Yakalanacak ekran seçilmemiş, lütfen listeden oyunun göründüğü ekranı seçin.",
+        "en": "No screen is selected, please pick the screen that shows the game."},
     "okuma_yok": {
         "tr": "Ekrandaki yazıyı okuyacak bileşen kurulu değil, kurulum kılavuzuna bakın.",
         "en": "No text recognition component is installed, please see the setup guide."},

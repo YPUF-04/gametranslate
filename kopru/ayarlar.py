@@ -31,6 +31,9 @@ VARSAYILAN: dict[str, Any] = {
     "ses_cevir": False,
     "kapi": 8642,
     "aktif_oyun": "varsayilan",
+    "kurulum_tamam": False,
+    "cihaz": None,   # ps5 | xbox | pc | kart
+    "tv": None,      # lg | samsung | androidtv | yok
     "gorunum": VARSAYILAN_GORUNUM,
 }
 

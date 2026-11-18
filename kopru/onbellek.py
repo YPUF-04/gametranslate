@@ -22,6 +22,7 @@ def normallestir(metin: str) -> str:
 class Onbellek:
     def __init__(self, yol: Path | str, azami: int = 5000) -> None:
         self.azami = azami
+        Path(yol).parent.mkdir(parents=True, exist_ok=True)
         self._kilit = threading.Lock()
         self._db = sqlite3.connect(str(yol), check_same_thread=False)
         self._db.execute(
