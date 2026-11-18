@@ -15,7 +15,7 @@ from difflib import SequenceMatcher
 from typing import Any, Callable
 
 from .ayarlar import bolgeleri_temizle
-from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
+from .ceviri.temel import AgHatasi, AnahtarHatasi, ErisimSiniri, MotorHatasi
 from .onbellek import normallestir
 from .okuma import Satir
 
@@ -245,6 +245,12 @@ class Isleme:
         return f"{on}{self._sayac[on]}"
 
     def _hata(self, e: Exception) -> None:
+        if isinstance(e, ErisimSiniri):   # hata değil: sakin bir "ücretsiz süre doldu" bilgisi
+            if self.durum_hatasi != "sinir":
+                self.durum_hatasi = "sinir"
+                self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
+                                             "yedek": bool(self.yonetici.yedekte), "sinir": True})
+            return
         kod = {AnahtarHatasi: "anahtar", AgHatasi: "ag", MotorHatasi: "motor"}.get(type(e), "genel")
         if kod != self.durum_hatasi:
             self.durum_hatasi = kod
@@ -367,7 +373,7 @@ class Isleme:
                 c = await gorev           # önden başlamıştı: yalnız kalanı bekler
             else:
                 (c,) = await self.yonetici.cevir([govde], ayar["kaynak_dil"], ayar["hedef_dil"])
-        except (AgHatasi, AnahtarHatasi, MotorHatasi) as e:
+        except (AgHatasi, AnahtarHatasi, ErisimSiniri, MotorHatasi) as e:
             self._spek_iptal()
             self._hata(e)
             return
@@ -418,7 +424,7 @@ class Isleme:
         if kesin:
             try:
                 sonuc = await self._ekran_cevir(kesin, ayar)
-            except (AgHatasi, AnahtarHatasi, MotorHatasi) as e:
+            except (AgHatasi, AnahtarHatasi, ErisimSiniri, MotorHatasi) as e:
                 self._hata(e)
                 self._oge_adaylari = [(n, o) for _, o, n in yeniler]
                 return

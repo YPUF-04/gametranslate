@@ -12,7 +12,7 @@ from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import Onbellek
 from .istem import SON_SATIR_ADEDI
-from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru
+from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri
 
 log = logging.getLogger("kopru.ceviri")
 YENIDEN_DENEME_SN = 60.0
@@ -30,6 +30,7 @@ class CeviriYoneticisi:
         self.oneriler = oneriler
         self._yayinla = yayinla or (lambda o, v: None)
         self.oyun = oyun
+        self.erisim_izni: Callable[[], bool] = lambda: True   # Durum, erişim sayacına bağlar
         self.oyun_bilgisi: dict[str, Any] = {}      # ad, aciklama, hitap, karakterler
         self.yedekte = False
         self._yedek_zamani = 0.0
@@ -142,6 +143,8 @@ class CeviriYoneticisi:
             else:
                 eksik.append(i)
         if eksik:
+            if not self.erisim_izni():   # hafıza/önbellek yukarıda gösterildi; motor çağrılmaz
+                raise ErisimSiniri()
             ayri = list(dict.fromkeys(metinler[i] for i in eksik))
             gelen = await self._ucustaki(ayri, kaynak, hedef, aciklama)
             for i in eksik:

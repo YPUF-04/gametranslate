@@ -135,6 +135,15 @@ HATALAR: dict[str, dict[str, str]] = {
     "tv_bitti_acilmadi": {
         "tr": "Kuruldu. Uygulamayı TV'nin uygulamalar listesinden açın.",
         "en": "Installed. Open the app from the TV's app list."},
+    "gecersiz_kod": {
+        "tr": "Bu kod geçerli değil. Harfleri kontrol edip tekrar deneyin.",
+        "en": "This code is not valid. Please check the letters and try again."},
+    "suresi_dolmus_kod": {
+        "tr": "Bu kodun süresi dolmuş. Yeni bir kod isteyin ya da yarın ücretsiz süreyle devam edin.",
+        "en": "This code has expired. Ask for a new one, or continue tomorrow with the free time."},
+    "ucretsiz_bitti": {
+        "tr": "Bugünkü ücretsiz süre doldu. Erişim kodunu girin ya da yarın devam edin.",
+        "en": "Today's free time is used up. Enter an access code or continue tomorrow."},
     "sunucu_hatasi": {
         "tr": "Beklenmeyen bir sorun oluştu, programı yeniden başlatmayı deneyin.",
         "en": "Something unexpected went wrong, please try restarting the program."},
