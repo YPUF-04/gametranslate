@@ -47,13 +47,7 @@ def lan_adresleri() -> list[str]:
         s.close()
     except OSError:
         pass
-    try:
-        for a in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = a[4][0]
-            if not ip.startswith("127.") and ip not in bulunan:
-                bulunan.append(ip)
-    except OSError:
-        pass
+    # Not: gethostname() üzerinden ad çözme macOS'ta 30 sn'ye kadar takılabiliyor; kullanılmaz.
     return [ip for ip in bulunan if not ip.startswith("127.") and ip != "0.0.0.0"]
 
 
@@ -144,13 +138,20 @@ class Durum:
         y = self.yayin.son_yazi
         kalan = self.yayin.kalan_ms()
         if y and kalan > 0 and normallestir(y.get("asil", "")) == normallestir(asil):
-            self.yayin.yayinla("yazi", {**y, "metin": ceviri, "sure_ms": max(kalan, 1500)})
+            self.yayin.yayinla("yazi", {**y, "metin": ceviri, "sure_ms": max(kalan, 1500), "devam": True})
             return True
         return False
 
     def durum_olayi(self) -> dict[str, Any]:
         motor = self.yonetici.yedek if self.yonetici.yedekte and self.yonetici.yedek else self.yonetici.birincil
         return {"calisiyor": self.calisiyor(), "motor": motor.ad, "yedek": bool(self.yonetici.yedekte)}
+
+    def kare_al(self) -> Any:
+        """Seçili kaynaktan şu anki kare (PIL.Image). Diske yazılmaz."""
+        if self.kare_fabrika is None:
+            from . import yakalama
+            return yakalama.kare_al(self.ayar["kaynak"])
+        return self.kare_fabrika(self.ayar["kaynak"])()
 
     def calisiyor(self) -> bool:
         return bool(self.gorev and not self.gorev.done())
@@ -355,6 +356,8 @@ def _dogrula(k: dict[str, Any]) -> bool:
         if g is not None:
             if not isinstance(g, dict) or g.get("konum", "alt") not in ("alt", "ust"):
                 return False
+        if "bolgeler" in k and not ayarlar.bolgeler_gecerli(k["bolgeler"]):
+            return False
         b = k.get("bolge_altyazi")
         if b is not None and not (isinstance(b, dict) and
                                   all(isinstance(b.get(f), (int, float)) and 0 <= b[f] <= 1
@@ -371,6 +374,8 @@ def _dogrula(k: dict[str, Any]) -> bool:
 async def api_ayarlar_yaz(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     kismi = await _json(request)
+    if "bolgeler" in kismi and ayarlar.bolgeler_gecerli(kismi["bolgeler"]):
+        kismi["bolgeler"] = ayarlar.bolgeleri_temizle(kismi["bolgeler"])
     # üst düzey ekrani_cevir ile gorunum.ekran_cevir birlikte tutulur
     if "ekrani_cevir" in kismi:
         kismi.setdefault("gorunum", {})["ekran_cevir"] = kismi["ekrani_cevir"]
@@ -463,6 +468,34 @@ async def api_kaynaklar(request: web.Request) -> web.Response:
         return web.json_response(await asyncio.to_thread(yakalama.kaynaklar))
     except YakalamaHatasi:
         return hata("yakalama_yok", 400, request)
+
+
+KARE_AZAMI_GENISLIK = 1280
+
+
+def _kare_jpeg(d: Durum) -> bytes:
+    import io
+    resim = d.kare_al().convert("RGB")
+    if resim.width > KARE_AZAMI_GENISLIK:
+        resim = resim.resize((KARE_AZAMI_GENISLIK, max(1, round(resim.height * KARE_AZAMI_GENISLIK / resim.width))))
+    tampon = io.BytesIO()
+    resim.save(tampon, "JPEG", quality=80)
+    return tampon.getvalue()
+
+
+async def api_kare(request: web.Request) -> web.Response:
+    """Bölge çizmek için anlık görüntü: yalnız bellekte, diske yazılmaz, önbelleğe alınmaz (PROTOKOL 7.1)."""
+    d: Durum = request.app[DURUM]
+    if not d.ayar.get("kaynak"):
+        return hata("kaynak_yok", 400, request)
+    try:
+        veri = await asyncio.to_thread(_kare_jpeg, d)
+    except YakalamaHatasi:
+        return hata("yakalama_yok", 400, request)
+    except Exception:
+        log.exception("Kare alınamadı")
+        return hata("yakalama_yok", 400, request)
+    return web.Response(body=veri, content_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 async def api_sozluk_al(request: web.Request) -> web.Response:
@@ -714,6 +747,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/durdur", api_durdur)
     r.add_post("/api/deneme-yazi", api_deneme_yazi)
     r.add_get("/api/kaynaklar", api_kaynaklar)
+    r.add_get("/api/kare", api_kare)
     r.add_get("/api/sozluk", api_sozluk_al)
     r.add_post("/api/sozluk", api_sozluk_yaz)
     r.add_get("/api/oyunlar", api_oyunlar_al)
