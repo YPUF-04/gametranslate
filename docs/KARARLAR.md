@@ -9,7 +9,7 @@
 | Çeviri paketi paylaşımı | `.akpaket` dosyası, sadece cümleler | Sürüyor |
 | Arayüz (premium, animasyonlu) | EN SONDA, Opus 5.5 ile | Bekliyor |
 | İsim | "Gearly" ve "Subbly" dolu; arayüz aşamasında boş 3 isim önerilecek | Bekliyor |
-| Reklam | Sona doğru. Model: ilk 30 dk ücretsiz çeviri, sonra reklam izle → süre kazan. Oyunun üstünde asla reklam yok. Takip/yorum karşılığı ödül YOK (Instagram kuralları) | Bekliyor |
+| Reklam | İPTAL: proje kişisel/hobi amaçlı. Reklam ve hak sistemi yok; en fazla isteğe bağlı bağış bağlantısı. (Eski fikir: Model: ilk 30 dk ücretsiz çeviri, sonra reklam izle → süre kazan. Oyunun üstünde asla reklam yok. Takip/yorum karşılığı ödül YOK) | Karar |
 | Maliyet | Geliştiriciye sıfır maliyet: çeviri kullanıcının bilgisayarında (yerel motor) ya da kullanıcının kendi anahtarıyla | Kural |
 | Kurulum | Tek tuşla: Windows kurucu (.exe), panelden "TV'ye kur", tek tuşla güncelleme | Sırada |
 | Kod açık mı | AÇIK kalacak (AGPL). Güven + GitHub görünürlüğü | Karar |
