@@ -114,3 +114,46 @@ class CeviriMotoru(Protocol):
 ```
 `Ceviri = {metin: str, aciklama: str | None}`. `aciklama=True` sadece görev/bilgi öğelerinde istenir.
 Ağ hatası → `AgHatasi` fırlatılır; yönetici yedek motora (`yerel`) geçer ve `durum` olayında `yedek:true` yayar.
+
+## 6. Oyun hafızası, bağlam ve kalite (sürüm 0.2)
+
+### 6.1 Oyun hafızası (çeviri belleği)
+Her oyunun kendi hafızası vardır: `<ayar_dizini>/oyunlar/<oyun_kodu>/`
+- `oyun.json`: `{"kod":"gta6","ad":"GTA 6","aciklama":"Açık dünya suç oyunu, argo bol","hitap":"sen","karakterler":[{"ad":"Lucia","cinsiyet":"k"}],"olusturma":"2026-11-18"}`
+- `sozluk.json`: terimler (eski `sozlukler/` buraya taşınır)
+- `hafiza.sqlite`: `asil → ceviri` kayıtları; alanlar: `asil`, `ceviri`, `kaynak` (`"motor"|"kullanici"|"paket"`), `motor`, `sayac`, `tarih`. `kaynak=kullanici` olan (elle düzeltilmiş) kayıt her zaman kazanır.
+
+**İzin:** Ayarlarda `hafiza_izni`: `null` (sorulmadı) | `true` | `false`. `null` iken hiçbir şey diske yazılmaz (sadece RAM önbelleği). Panel ilk "Başlat"ta sorar.
+Hafıza SADECE bu bilgisayarda durur; hiçbir yere gönderilmez.
+
+### 6.2 Paylaşılabilir çeviri paketi
+Dosya: `<oyun_kodu>.akpaket` (zip): `oyun.json`, `sozluk.json`, `hafiza.json` (yalnız metin çiftleri; kişisel bilgi, anahtar, ekran görüntüsü YOK).
+İçe alırken: kullanıcının kendi düzeltmeleri (`kaynak=kullanici`) ezilmez; paketten gelenler `kaynak=paket`.
+
+### 6.3 Bağlamlı çeviri
+Motorlara her istekte gönderilir: oyun adı + kısa açıklama + hitap (sen/siz) + karakter listesi + sözlük + **son 6 altyazı satırı (asıl ve çeviri)** + Türkçe altyazı kuralları (satır başına ~42 karakter, en çok 2 satır, doğal konuşma dili, argo gerekiyorsa argo, isimler çevrilmez).
+Yeni geçen özel isimler (kişi/yer/çete adı) motor tarafından `yeni_terimler` olarak döndürülebilir; hafıza izni varsa sözlüğe "öneri" olarak eklenir.
+
+### 6.4 Hızlı zamanlama
+- Metin ilk görüldüğü karede **önden çeviri** başlar (sonuç bekletilir); metin 2. karede aynıysa hemen yayınlanır. Değiştiyse önden çeviri çöpe atılır.
+- Hafızada/önbellekte varsa çeviri anında (0 ms) yayınlanır.
+
+### 6.5 Kalite modu
+Ayar `kalite`: `"en_iyi"` (varsayılan; Claude varsa `claude-opus-5-5`, yoksa Gemini) | `"dengeli"` | `"hizli"` (Claude Haiku 5.5 / Gemini Flash). Panel bunu "En iyi çeviri / Dengeli / En hızlı ve ucuz" diye gösterir.
+
+### 6.6 Yeni API (yalnız yerel)
+| Yöntem | Yol | Ne yapar |
+|---|---|---|
+| GET | `/api/oyunlar` | `[{"kod":"gta6","ad":"GTA 6","kayit_sayisi":1240,"terim_sayisi":35,"son_oynama":"..."}]` |
+| POST | `/api/oyunlar` | Yeni oyun: `{"ad":"GTA 6","aciklama":"...","hitap":"sen"}` → `{"kod":"gta6"}` |
+| POST | `/api/oyun-sec` | `{"kod":"gta6"}` → aktif oyun |
+| GET/POST | `/api/oyun/<kod>` | Oyun bilgisi (açıklama, hitap, karakterler) oku/güncelle |
+| DELETE | `/api/oyun/<kod>/hafiza` | O oyunun hafızasını siler |
+| GET | `/api/son-ceviriler` | Son 30 çeviri: `[{"id":"a17","asil":"...","ceviri":"...","kaynak":"motor"}]` |
+| POST | `/api/duzelt` | `{"asil":"...","ceviri":"Düzgün hâli"}` → hafızaya `kaynak=kullanici`; ekrandaysa TV'de hemen güncellenir |
+| GET | `/api/paket/<kod>` | `.akpaket` dosyasını indirir |
+| POST | `/api/paket` | `.akpaket` yükler (multipart, alan `dosya`) → `{"tamam":true,"eklenen":812,"atlanan":12}` |
+| GET | `/api/oneriler` | Önerilen yeni terimler: `[{"asil":"Vice City","ceviri":"Vice City"}]` |
+| POST | `/api/oneriler` | `{"asil":"..","kabul":true}` → sözlüğe ekler ya da reddeder |
+
+Ayarlara eklenen alanlar: `hafiza_izni` (null/true/false), `kalite` ("en_iyi"), `aktif_oyun` (oyun kodu).
