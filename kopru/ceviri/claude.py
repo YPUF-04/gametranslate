@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import istem
-from .temel import AgHatasi, AnahtarHatasi, Ceviri, MotorHatasi
+from .temel import AgHatasi, AnahtarHatasi, Baglam, Ceviri, MotorHatasi
 
 MODELLER = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
 
@@ -16,6 +16,7 @@ class ClaudeMotoru:
     anahtar_gerekli = True
     cevrimdisi = False
     ucretsiz = False
+    baglam_destekler = True
 
     def __init__(self, anahtar: str | None, model: str = MODELLER[0], istemci: Any = None) -> None:
         self._anahtar = anahtar
@@ -32,7 +33,8 @@ class ClaudeMotoru:
         return self._istemci
 
     async def cevir(self, metinler: list[str], kaynak: str, hedef: str,
-                    sozluk: dict[str, str], aciklama: bool = False) -> list[Ceviri]:
+                    sozluk: dict[str, str], aciklama: bool = False,
+                    baglam: Baglam | None = None) -> list[Ceviri]:
         import anthropic
         if not metinler:
             return []
@@ -42,8 +44,8 @@ class ClaudeMotoru:
                 model=self.model,
                 max_tokens=2000,
                 output_config={"effort": "low"},
-                system=istem.sistem_istemi(kaynak, hedef, sozluk, aciklama),
-                messages=[{"role": "user", "content": istem.kullanici_metni(metinler)}],
+                system=istem.sistem_bloklari(kaynak, hedef, sozluk, aciklama, baglam),
+                messages=[{"role": "user", "content": istem.kullanici_metni(metinler, baglam)}],
             )
         except anthropic.AuthenticationError as e:
             raise AnahtarHatasi("claude") from e
@@ -55,6 +57,9 @@ class ClaudeMotoru:
             return [Ceviri(m) for m in metinler]
         ham = "".join(b.text for b in yanit.content if getattr(b, "type", "") == "text")
         try:
-            return istem.yaniti_coz(ham, len(metinler), aciklama)
+            sonuc, terimler = istem.yaniti_coz_tam(ham, len(metinler), aciklama)
         except ValueError as e:
             raise MotorHatasi("Claude yanıtı okunamadı") from e
+        if baglam is not None:
+            baglam.yeni_terimler.extend(terimler)
+        return sonuc
