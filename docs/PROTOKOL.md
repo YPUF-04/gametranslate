@@ -157,3 +157,29 @@ Ayar `kalite`: `"en_iyi"` (varsayılan; Claude varsa `claude-opus-5-5`, yoksa Ge
 | POST | `/api/oneriler` | `{"asil":"..","kabul":true}` → sözlüğe ekler ya da reddeder |
 
 Ayarlara eklenen alanlar: `hafiza_izni` (null/true/false), `kalite` ("en_iyi"), `aktif_oyun` (oyun kodu).
+
+## 7. Bölge seçimi, akıcı gösterim ve erişim kodu (sürüm 0.3)
+
+### 7.1 Bölge seçimi ("neyi çevireceğini ben seçeyim")
+Ayar `bolgeler`: en çok 3 dikdörtgen: `[{"x":0.1,"y":0.75,"g":0.8,"y2":0.2,"tur":"altyazi"|"ust_yazi"|"diger","ad":"Altyazı"}]` (0–1 oran).
+- Liste boşsa: otomatik mod (bugünkü davranış: altyazı bölgesi + ekranın geri kalanı).
+- Doluysa: SADECE bu bölgeler okunur (daha hızlı, daha az yanlış). `altyazi` bölgesi → `yazi` olayı; diğerleri → `ekran` öğeleri (kendi konumlarında).
+- `GET /api/kare` (yalnız yerel): seçili kaynaktan anlık bir JPEG (genişlik ≤ 1280). Diske YAZILMAZ, hiçbir yere gönderilmez; sadece panelde kare çizmek için.
+
+### 7.2 Akıcı gösterim kuralları ("kesik kesik olmasın, hemen silinmesin")
+1. **En az gösterim süresi:** bir altyazı en az `max(1800 ms, okuma_suresi)` ekranda kalır; `okuma_suresi = 800 + karakter*55` (en çok 9000).
+2. **Kaybolma toleransı:** kaynak yazı 3 kare üst üste görünmezse "gitti" sayılır; tek karelik titreme yok sayılır.
+3. **Gittikten sonra:** en az gösterim süresi dolmadıysa dolana kadar, dolduysa 700 ms daha kalır; sonra 250 ms'de solarak kaybolur.
+4. **Devam eden cümle:** yeni metin eskisinin devamıysa (eskisi yenisinin başıysa / daktilo efekti) kutu yerinde güncellenir: zıplama, sönme yok.
+5. **Yeni cümle:** eskisi 150 ms'de solarken yenisi belirir; kutu alttan sabit kalır (yükseklik değişse bile yazı tabanı oynamaz).
+6. **Satır düzeni:** en çok 2 satır, satırlar dengeli bölünür (ilk satır biraz kısa), kelime ortasından bölünmez.
+7. **Önceki satır:** yeni altyazı gelince bir önceki 2,5 sn boyunca üstte küçük ve soluk görünür (`gorunum.onceki_goster`, varsayılan açık).
+8. **Ekran öğeleri** (görev/menü): aynı yerde aynı metin varsa yeniden çizilmez; değişince yerinde yumuşak güncellenir; ekrandan gidince 1 sn sonra solar.
+`yazi` olayına eklenen alan: `"devam": true|false` (4. kural için).
+
+### 7.3 Erişim kodu (sunucusuz, isteğe bağlı)
+- Program ücretsizdir. `erisim.ucretsiz_dakika_gun` (varsayılan 30) kadar günlük çeviri süresi kodsuz kullanılır; süre dolunca çeviri durmaz, panelde sakin bir "Bugünkü ücretsiz süre doldu. Erişim kodunu gir ya da yarın devam et." uyarısı çıkar ve yeni çeviri yapılmaz (hafıza/önbellekten gelenler gösterilmeye devam eder).
+- Kod biçimi: `AK1-` + base32(yük + Ed25519 imzası). Yük: `{"s":"sinirsiz"|"gun","g":30,"t":"2026-11-19","n":"rastgele"}`. Program sadece **açık anahtarı** içerir, imzayı internetsiz doğrular. Özel anahtar sadece geliştiricinin bilgisayarında, depoda ASLA yoktur.
+- Kod üretme: `araclar/kod_uret.py` (geliştirici için basit panel/komut). Hiçbir sunucu yok, maliyet yok.
+- API (yalnız yerel): `GET /api/erisim` → `{"kalan_dakika":12,"kod":"sinirsiz"|null}`; `POST /api/erisim` `{"kod":"AK1-..."}` → `{"tamam":true,"tur":"sinirsiz"}`.
+- Not: Kod açık kaynak olduğu için kontrolü kaldıran kopyalar yapılabilir; bu yasaldır (AGPL). Kod sistemi dürüst kullanıcılar içindir.

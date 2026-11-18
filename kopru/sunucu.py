@@ -11,14 +11,15 @@ from typing import Any, Awaitable, Callable
 
 from aiohttp import web
 
-from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, hafiza as hafiza_mod, metinler, oyunlar,
-               paket as paket_mod, sozluk as sozluk_mod)
+from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, guncelleme as guncelleme_mod, hafiza as hafiza_mod,
+               metinler, oyunlar, paket as paket_mod, sozluk as sozluk_mod)
 from .ceviri import BILGI, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .ceviri.yonetici import CeviriYoneticisi
 from .isleme import Isleme
 from .okuma import OkumaHatasi
 from .onbellek import Onbellek, normallestir
+from .tv_kurulum.lg import LgKurulum
 from .yakalama import YakalamaHatasi
 from .yayin import Yayin, sse_bicim
 
@@ -28,6 +29,8 @@ NABIZ_SN = 15.0
 DURUM_SN = 20.0  # EventSource yorum satırını görmez; gerçek olay gerekir
 YEREL = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
 DURUM = web.AppKey("durum", object)
+GUNCELLEME = web.AppKey("guncelleme", object)
+LG_KURULUM = web.AppKey("lg_kurulum", object)
 
 
 def uzak_adres(request: web.Request) -> str | None:
@@ -649,10 +652,50 @@ async def api_oneriler_yaz(request: web.Request) -> web.Response:
     return web.json_response({"tamam": True})
 
 
-def uygulama_olustur(ayar: dict[str, Any] | None = None, **fabrikalar: Any) -> web.Application:
+# ---------- güncelleme ve TV kurulumu ----------
+
+async def api_guncelleme_al(request: web.Request) -> web.Response:
+    g: guncelleme_mod.Guncelleme = request.app[GUNCELLEME]
+    g.arka_planda_denetle()    # ayar kapalıysa ya da bugün bakıldıysa hiçbir şey yapmaz
+    return web.json_response(g.durum())
+
+
+async def api_guncelleme_denetle(request: web.Request) -> web.Response:
+    """Kullanıcı "Güncellemeleri denetle"ye bastı: ayar kapalı olsa da bu kez bakılır."""
+    g: guncelleme_mod.Guncelleme = request.app[GUNCELLEME]
+    if g.destekli:
+        await g.denetle(elle=True)
+    return web.json_response(g.durum())
+
+
+async def api_guncelleme_kur(request: web.Request) -> web.Response:
+    g: guncelleme_mod.Guncelleme = request.app[GUNCELLEME]
+    kod = g.kur_baslat()
+    if kod:
+        return hata(kod, 400, request)
+    return web.json_response(g.durum())
+
+
+async def api_tv_lg_kur(request: web.Request) -> web.Response:
+    lg: LgKurulum = request.app[LG_KURULUM]
+    v = await _json(request)
+    kod = lg.baslat(v.get("ip"), v.get("parola"), v.get("paket", "asil"))
+    if kod:
+        return hata(kod, 409 if kod == "tv_mesgul" else 400, request)
+    return web.json_response(lg.durum())
+
+
+async def api_tv_lg_durum(request: web.Request) -> web.Response:
+    return web.json_response(request.app[LG_KURULUM].durum())
+
+
+def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None, lg_kurulum: Any = None,
+                     **fabrikalar: Any) -> web.Application:
     app = web.Application(middlewares=[kopru_katman, yerel_katman])
     durum = Durum(ayar if ayar is not None else ayarlar.yukle(), **fabrikalar)
     app[DURUM] = durum
+    app[GUNCELLEME] = guncelleme or guncelleme_mod.Guncelleme(lambda: durum.ayar)
+    app[LG_KURULUM] = lg_kurulum or LgKurulum(lambda: durum.ayar)
     r = app.router
     r.add_get("/kopru/merhaba", merhaba)
     r.add_get("/kopru/akis", akis)
@@ -683,6 +726,11 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, **fabrikalar: Any) -> w
     r.add_post("/api/duzelt", api_duzelt)
     r.add_get("/api/paket/{kod}", api_paket_indir)
     r.add_post("/api/paket", api_paket_yukle)
+    r.add_get("/api/guncelleme", api_guncelleme_al)
+    r.add_post("/api/guncelleme/denetle", api_guncelleme_denetle)
+    r.add_post("/api/guncelleme/kur", api_guncelleme_kur)
+    r.add_post("/api/tv/lg/kur", api_tv_lg_kur)
+    r.add_get("/api/tv/lg/durum", api_tv_lg_durum)
     r.add_get("/api/oneriler", api_oneriler_al)
     r.add_post("/api/oneriler", api_oneriler_yaz)
 
