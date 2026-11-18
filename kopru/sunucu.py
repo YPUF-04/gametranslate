@@ -11,7 +11,7 @@ from typing import Any, Awaitable, Callable
 
 from aiohttp import web
 
-from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, guncelleme as guncelleme_mod, hafiza as hafiza_mod,
+from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, erisim as erisim_mod, guncelleme as guncelleme_mod, hafiza as hafiza_mod,
                metinler, oyunlar, paket as paket_mod, sozluk as sozluk_mod)
 from .ceviri import BILGI, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
@@ -26,6 +26,7 @@ from .yayin import Yayin, sse_bicim
 log = logging.getLogger("kopru.sunucu")
 WEB = Path(__file__).parent / "web"
 NABIZ_SN = 15.0
+ERISIM_SN = 5.0   # süre sayacı adımı
 DURUM_SN = 20.0  # EventSource yorum satırını görmez; gerçek olay gerekir
 YEREL = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
 DURUM = web.AppKey("durum", object)
@@ -56,8 +57,10 @@ class Durum:
 
     def __init__(self, ayar: dict[str, Any], motor_fabrika: Callable[[str, dict], Any] = motor_olustur,
                  kare_fabrika: Callable[[str], Callable[[], Any]] | None = None,
-                 okuyucu_fabrika: Callable[[], Any] | None = None) -> None:
+                 okuyucu_fabrika: Callable[[], Any] | None = None,
+                 erisim: erisim_mod.Erisim | None = None) -> None:
         self.ayar = ayar
+        self.erisim = erisim or erisim_mod.Erisim(lambda: self.ayar)
         self.yayin = Yayin()
         self.motor_fabrika = motor_fabrika
         self.kare_fabrika = kare_fabrika
@@ -118,6 +121,7 @@ class Durum:
         if self.gecmis is not None:
             y.gecmis = self.gecmis
         self.gecmis = y.gecmis
+        y.erisim_izni = self.erisim.izin_var
         y.oyun_bilgisi = oyunlar.oku(kod) or {}
         y.terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(kod))
         return y
@@ -144,7 +148,17 @@ class Durum:
 
     def durum_olayi(self) -> dict[str, Any]:
         motor = self.yonetici.yedek if self.yonetici.yedekte and self.yonetici.yedek else self.yonetici.birincil
-        return {"calisiyor": self.calisiyor(), "motor": motor.ad, "yedek": bool(self.yonetici.yedekte)}
+        olay = {"calisiyor": self.calisiyor(), "motor": motor.ad, "yedek": bool(self.yonetici.yedekte)}
+        if self.erisim.sinir():
+            olay["sinir"] = True   # ücretsiz süre doldu, kod yok (panel sakin bir uyarı gösterir)
+        return olay
+
+    def erisim_say(self) -> None:
+        """Sayaç adımı: çeviri çalışırken süre ekler; sınır değişirse durumu yayınlar."""
+        once = self.erisim.sinir()
+        self.erisim.say(self.calisiyor())
+        if self.erisim.sinir() != once:
+            self.yayin.yayinla("durum", self.durum_olayi())
 
     def kare_al(self) -> Any:
         """Seçili kaynaktan şu anki kare (PIL.Image). Diske yazılmaz."""
@@ -312,7 +326,7 @@ async def api_durum(request: web.Request) -> web.Response:
     return web.json_response({
         "calisiyor": d.calisiyor(), "motor": _motor_adi(d), "yedekte": d.yonetici.yedekte,
         "tv_sayisi": d.yayin.istemci_sayisi, "son_yazi": y["metin"] if y else "",
-        "adresler": lan_adresleri(), "kapi": d.ayar["kapi"]})
+        "adresler": lan_adresleri(), "kapi": d.ayar["kapi"], "sinir": d.erisim.sinir()})
 
 
 def _ayar_gorunumu(d: Durum) -> dict[str, Any]:
@@ -351,6 +365,11 @@ def _dogrula(k: dict[str, Any]) -> bool:
             return False
         for alan in ("ekrani_cevir", "kisa_aciklama", "ses_cevir", "kurulum_tamam", "guncelleme_denetle"):
             if alan in k and not isinstance(k[alan], bool):
+                return False
+        e = k.get("erisim")
+        if e is not None:
+            m = e.get("ucretsiz_dakika_gun", 30) if isinstance(e, dict) else None
+            if not (isinstance(m, int) and not isinstance(m, bool) and 0 <= m <= 1440):
                 return False
         g = k.get("gorunum")
         if g is not None:
@@ -421,6 +440,8 @@ async def api_dene(request: web.Request) -> web.Response:
     kod = v.get("motor") or d.ayar["motor"]
     if kod not in {b[0] for b in BILGI} | {"sahte"}:
         return hata("gecersiz_istek", 400, request)
+    if not d.erisim.izin_var():
+        return hata("ucretsiz_bitti", 402, request)
     motor = d.motor_fabrika(kod, d.ayar)
     t0 = time.monotonic()
     try:
@@ -433,6 +454,24 @@ async def api_dene(request: web.Request) -> web.Response:
     except MotorHatasi:
         return hata("motor_hatasi", 502, request)
     return web.json_response({"ceviri": c.metin, "sure_ms": int((time.monotonic() - t0) * 1000)})
+
+
+async def api_erisim_al(request: web.Request) -> web.Response:
+    return web.json_response(request.app[DURUM].erisim.durum())
+
+
+async def api_erisim_yaz(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    kod = v.get("kod")
+    if not isinstance(kod, str) or not kod.strip() or len(kod) > 600:
+        return hata("gecersiz_kod", 400, request)
+    try:
+        bilgi = d.erisim.kod_gir(kod)
+    except erisim_mod.KodHatasi as e:
+        return hata(e.kod, 400, request)
+    d.yayin.yayinla("durum", d.durum_olayi())   # sınır kalktıysa panel/TV hemen öğrensin
+    return web.json_response({"tamam": True, "tur": bilgi["tur"]})
 
 
 async def api_baslat(request: web.Request) -> web.Response:
@@ -743,6 +782,8 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_get("/api/motorlar", api_motorlar)
     r.add_post("/api/anahtar", api_anahtar)
     r.add_post("/api/dene", api_dene)
+    r.add_get("/api/erisim", api_erisim_al)
+    r.add_post("/api/erisim", api_erisim_yaz)
     r.add_post("/api/baslat", api_baslat)
     r.add_post("/api/durdur", api_durdur)
     r.add_post("/api/deneme-yazi", api_deneme_yazi)
@@ -773,11 +814,18 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
             await asyncio.sleep(DURUM_SN)
             durum.yayin.yayinla("durum", durum.durum_olayi())
 
+    async def erisim_dongusu() -> None:
+        while True:
+            await asyncio.sleep(ERISIM_SN)
+            durum.erisim_say()
+
     async def ac(_: web.Application) -> None:
         app["durum_gorevi"] = asyncio.create_task(durum_dongusu())
+        app["erisim_gorevi"] = asyncio.create_task(erisim_dongusu())
 
     async def kapat(_: web.Application) -> None:
         app["durum_gorevi"].cancel()
+        app["erisim_gorevi"].cancel()
         durum.durdur()
         durum.onbellek.kapat()
         durum.hafiza.kapat()

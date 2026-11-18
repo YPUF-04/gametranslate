@@ -4,4 +4,5 @@ anthropic>=0.40
 keyring>=24
 platformdirs>=4
 pillow>=10
+cryptography>=42
 mss>=9

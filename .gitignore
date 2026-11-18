@@ -7,3 +7,7 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 node_modules/
+
+# Erisim kodu ozel anahtari: ASLA depoya girmez
+*.pem
+ozel_anahtar*
