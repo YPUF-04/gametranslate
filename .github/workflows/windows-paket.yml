@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Windows için tek klasörlük AltYaziKoprusu.exe paketini üretir (imzasız).
+name: Windows paketi
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Bağımlılıkları kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-windows.txt
+          pip install pyinstaller
+          pip install -e .
+      - name: Testleri çalıştır
+        run: |
+          pip install pytest pytest-aiohttp
+          python -m pytest -q
+      - name: Paketle
+        run: >
+          pyinstaller --noconfirm --name AltYaziKoprusu --onedir
+          --add-data "kopru/web;kopru/web"
+          --collect-submodules kopru
+          paketleme/baslat.py
+      - name: Lisans dosyalarını ekle
+        shell: pwsh
+        run: Copy-Item LICENSE,NOTICE,README.md,GIZLILIK.md dist/AltYaziKoprusu/ -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AltYaziKoprusu-Windows
+          path: dist/AltYaziKoprusu
