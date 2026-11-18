@@ -14,6 +14,10 @@ class AnahtarHatasi(Exception):
     """API anahtarı yok ya da geçersiz."""
 
 
+class ErisimSiniri(Exception):
+    """Günlük ücretsiz süre doldu ve geçerli kod yok: yeni motor çağrısı yapılmaz."""
+
+
 class MotorHatasi(Exception):
     """Motor kullanılamıyor (kurulu değil vb.)."""
 

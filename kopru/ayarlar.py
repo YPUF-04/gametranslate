@@ -27,6 +27,8 @@ VARSAYILAN: dict[str, Any] = {
     "hafiza_izni": None,     # None (sorulmadı) | True | False
     "guncelleme_denetle": True,  # günde en çok bir kez GitHub'a "yeni sürüm var mı" diye sorar
 
+    "erisim": {"ucretsiz_dakika_gun": 30},   # günlük kodsuz çeviri süresi (PROTOKOL 7.3)
+
     "kaynak": "ekran:1",
     "bolge_altyazi": {"x": 0.1, "y": 0.72, "g": 0.8, "y2": 0.25},
     "bolgeler": [],  # boş = otomatik; doluysa yalnız bu kareler okunur (en çok 3, PROTOKOL 7.1)
