@@ -56,7 +56,7 @@ def kaynaklar() -> list[dict[str, str]]:
     mss = _mss()
     out: list[dict[str, str]] = []
     try:
-        with mss.mss() as sct:
+        with (getattr(mss, "MSS", None) or mss.mss)() as sct:
             for i, m in enumerate(sct.monitors[1:], start=1):
                 out.append({"kod": f"ekran:{i}", "ad": f"Ekran {i} ({m['width']}×{m['height']})"})
     except Exception as e:
@@ -72,7 +72,7 @@ def kare_al(kaynak: str) -> Any:
     mss = _mss()
     tur, _, no = kaynak.partition(":")
     try:
-        with mss.mss() as sct:
+        with (getattr(mss, "MSS", None) or mss.mss)() as sct:
             if tur == "pencere":
                 kutu = _pencere_kutusu(int(no))
             else:

@@ -127,22 +127,22 @@ class Durum:
 # ---------- ara katmanlar ----------
 
 @web.middleware
-async def yerel_katman(request: web.Request, isle: Callable[[web.Request], Awaitable[web.StreamResponse]]):
+async def yerel_katman(request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]):
     yol = request.path
     if yol == "/" or yol.startswith(("/panel/", "/api/")) or yol == "/panel":
         if uzak_adres(request) not in YEREL:
             return hata("yalniz_yerel", 403, request)
-    return await isle(request)
+    return await handler(request)
 
 
 @web.middleware
-async def kopru_katman(request: web.Request, isle: Callable[[web.Request], Awaitable[web.StreamResponse]]):
+async def kopru_katman(request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]):
     """/kopru/* için CORS; bütün beklenmeyen hatalar JSON olur."""
     if request.method == "OPTIONS" and request.path.startswith("/kopru/"):
         yanit: web.StreamResponse = web.Response(status=204)
     else:
         try:
-            yanit = await isle(request)
+            yanit = await handler(request)
         except web.HTTPException as e:
             if e.status == 404:
                 yanit = hata("bulunamadi", 404, request)
@@ -176,7 +176,8 @@ async def akis(request: web.Request) -> web.StreamResponse:
     d: Durum = request.app[DURUM]
     r = web.StreamResponse(headers={
         "Content-Type": "text/event-stream", "Cache-Control": "no-cache",
-        "Connection": "keep-alive", "X-Accel-Buffering": "no"})
+        "Connection": "keep-alive", "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": "*"})
     await r.prepare(request)
     q = d.yayin.abone_ol()
     try:
@@ -273,7 +274,11 @@ def _dogrula(k: dict[str, Any]) -> bool:
             return False
         if "arayuz_dili" in k and k["arayuz_dili"] not in ("tr", "en"):
             return False
-        for alan in ("ekrani_cevir", "kisa_aciklama", "ses_cevir"):
+        if "cihaz" in k and k["cihaz"] not in (None, "ps5", "xbox", "pc", "kart"):
+            return False
+        if "tv" in k and k["tv"] not in (None, "lg", "samsung", "androidtv", "yok"):
+            return False
+        for alan in ("ekrani_cevir", "kisa_aciklama", "ses_cevir", "kurulum_tamam"):
             if alan in k and not isinstance(k[alan], bool):
                 return False
         g = k.get("gorunum")
@@ -308,7 +313,7 @@ async def api_ayarlar_yaz(request: web.Request) -> web.Response:
         d.yayin.yayinla("gorunum", d.ayar["gorunum"])
     if {"motor", "yedek_motor", "modeller", "aktif_oyun"} & kismi.keys():
         d.yeniden_kur()
-    return web.json_response(_ayar_gorunumu(d))
+    return web.json_response({"tamam": True})
 
 
 async def api_motorlar(request: web.Request) -> web.Response:
@@ -329,7 +334,7 @@ async def api_anahtar(request: web.Request) -> web.Response:
         kod = "kasa_yok" if str(e) == "kasa_yok" else "kasa_hata"
         return hata(kod, 503, request)
     d.yeniden_kur()
-    return web.json_response({"tamam": True, "kayitli": bool(anahtar.strip())})
+    return web.json_response({"tamam": True})
 
 
 async def api_dene(request: web.Request) -> web.Response:
@@ -357,6 +362,8 @@ async def api_dene(request: web.Request) -> web.Response:
 
 async def api_baslat(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
+    if not d.ayar.get("kaynak"):
+        return hata("kaynak_yok", 400, request)
     try:
         d.baslat()
     except YakalamaHatasi:
