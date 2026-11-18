@@ -25,6 +25,7 @@ ocr-mac = ["ocrmac"]
 ocr = ["rapidocr_onnxruntime"]
 yerel = ["argostranslate"]
 ses = ["faster-whisper", "soundcard", "numpy"]
+tv = ["paramiko>=3.4,<4"]   # TV'ye tek tuşla kurulum (LG webOS)
 test = ["pytest", "pytest-aiohttp", "pytest-asyncio"]
 
 [project.scripts]
