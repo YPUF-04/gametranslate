@@ -3,17 +3,43 @@
 .ak-kok { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; pointer-events: none;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
 .ak-kok .ak-ekran { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
-.ak-kok .ak-oge { position: absolute; box-sizing: border-box; padding: 0.3em 0.55em; border-radius: 0.3em;
-  background: rgba(14, 26, 43, 0.82); color: #FFFFFF; border-left: 0.2em solid #2EC4B6; line-height: 1.2;
-  word-wrap: break-word; }
+
+/* ekran öğeleri (görev, menü, bilgi): sakin, belirir ve solar */
+.ak-kok .ak-oge { position: absolute; box-sizing: border-box; padding: 0.3em 0.55em; border-radius: 0.35em;
+  background: rgba(10, 16, 26, 0.8); color: #FFFFFF; border-left: 0.2em solid #2EC4B6; line-height: 1.25;
+  word-wrap: break-word; opacity: 0; text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.6);
+  transition: opacity 0.25s linear, left 0.25s ease, top 0.25s ease, width 0.25s ease; }
+.ak-kok .ak-oge.ak-acik { opacity: 1; }
 .ak-kok .ak-oge.ak-gorev { border-left-color: #FFD166; }
 .ak-kok .ak-oge.ak-bilgi { border-left-color: #8FA3BF; }
 .ak-kok .ak-oge-metin { font-weight: 600; }
 .ak-kok .ak-oge-aciklama { font-size: 0.62em; opacity: 0.8; margin-top: 0.2em; color: #CFE9E6; }
-.ak-kok .ak-yazi { position: absolute; left: 50%; width: 84%; margin-left: -42%; text-align: center; display: none; }
-.ak-kok .ak-yazi-kutu { display: inline-block; box-sizing: border-box; max-width: 100%; padding: 0.35em 0.8em 0.4em;
-  border-radius: 0.35em; line-height: 1.28; font-weight: 600; text-shadow: 0 0.05em 0.12em rgba(0, 0, 0, 0.9); }
-.ak-kok .ak-konusan { font-weight: 700; margin-right: 0.45em; }
+
+/* altyazı: ekranın %70'i genişlikte, alttan (ya da üstten) sabit; büyüme hep dışarıya doğru olur */
+.ak-kok .ak-yazi { position: absolute; left: 15%; width: 70%; display: none; flex-direction: column; align-items: center; }
+.ak-kok .ak-yazi.ak-ust { flex-direction: column-reverse; }
+.ak-kok .ak-sahne { display: grid; width: 100%; justify-items: center; align-items: end; }
+.ak-kok .ak-ust .ak-sahne { align-items: start; }
+/* çapraz geçişte eski ve yeni kutu aynı hücrede üst üste durur: taban çizgisi oynamaz */
+.ak-kok .ak-yazi-kutu { grid-area: 1 / 1; box-sizing: border-box; max-width: 100%; padding: 0.38em 0.85em 0.44em;
+  border-radius: 0.45em; text-align: center; font-weight: 600; line-height: 1.38; letter-spacing: 0.005em;
+  text-shadow: 0 0.04em 0.16em rgba(0, 0, 0, 0.7); box-shadow: 0 0.18em 0.7em rgba(0, 0, 0, 0.3); opacity: 0; }
+.ak-kok .ak-metin { display: block; margin: 0 auto; text-wrap: balance; overflow-wrap: normal; word-break: normal; max-width: 100%; }
+.ak-kok .ak-konusan { display: block; font-size: 0.6em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  margin-bottom: 0.15em; opacity: 0.95; }
 .ak-kok .ak-asil { display: block; font-size: 0.55em; font-weight: 400; opacity: 0.75; margin-top: 0.3em; }
-.ak-kok .ak-durum { position: absolute; right: 1.5%; top: 2%; padding: 0.35em 0.8em; border-radius: 2em; 
+.ak-kok .ak-onceki { display: none; max-width: 100%; margin-bottom: 0.35em; text-align: center; font-size: 0.6em; font-weight: 500;
+  line-height: 1.3; opacity: 0; text-shadow: 0 0.05em 0.2em rgba(0, 0, 0, 0.9); }
+.ak-kok .ak-ust .ak-onceki { margin-bottom: 0; margin-top: 0.35em; }
+.ak-kok .ak-onceki-metin { display: inline-block; padding: 0.15em 0.6em; border-radius: 0.4em; background: rgba(8, 12, 20, 0.35); }
+.ak-kok .ak-durum { position: absolute; right: 1.5%; top: 2%; padding: 0.35em 0.8em; border-radius: 2em;
   background: rgba(14, 26, 43, 0.88); color: #FFD166; display: none; }
+
+/* JS dengesi zorlandığında (sınama) CSS dengesi kapalı */
+.ak-kok.ak-js-denge .ak-metin { text-wrap: wrap; }
+
+/* hareketi azalt: hiçbir geçiş yok, her şey anında */
+.ak-kok.ak-azalt .ak-yazi-kutu, .ak-kok.ak-azalt .ak-onceki, .ak-kok.ak-azalt .ak-oge { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ak-kok .ak-yazi-kutu, .ak-kok .ak-onceki, .ak-kok .ak-oge { transition: none !important; }
+}

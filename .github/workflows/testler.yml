@@ -28,9 +28,13 @@ jobs:
       - name: Sunucu açılıyor mu
         shell: bash
         run: |
-          python -m kopru --tarayici-acma &
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8642/kopru/merhaba && break; sleep 1; done
+          export PYTHONIOENCODING=cp1252  # Windows konsolunu taklit et: Türkçe harfte çökmemeli
+          python -m kopru --tarayici-acma > sunucu.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8642/kopru/merhaba && break; sleep 1; done
+          cat sunucu.log
           curl -sf http://127.0.0.1:8642/kopru/merhaba | grep altyazikoprusu
+          # Durum sorgusu hızlı olmalı (panel 2 sn'de bir sorar)
+          curl -sf -m 3 -o /dev/null http://127.0.0.1:8642/api/durum
           curl -sf -o /dev/null http://127.0.0.1:8642/
           curl -sf -o /dev/null http://127.0.0.1:8642/tv
   panel:
@@ -41,6 +45,6 @@ jobs:
         with:
           node-version: "22"
       - run: |
-          npm install --no-save playwright@1.56.1
+          npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium
           node kopru/web/panel/test/panel.test.js

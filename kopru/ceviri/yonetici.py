@@ -54,6 +54,17 @@ class CeviriYoneticisi:
         self.son_satirlar.append((asil, ceviri))
         self.gecmis.append({"id": id_, "asil": asil, "ceviri": ceviri, "kaynak": kaynak})
 
+    def satir_guncelle(self, id_: str, asil: str, ceviri: str, kaynak: str = "motor") -> None:
+        """Aynı cümlenin devamı: son-çeviriler listesinde yeni satır açmadan günceller."""
+        for g in reversed(self.gecmis):
+            if g["id"] == id_:
+                eski = g["asil"]
+                g["asil"], g["ceviri"], g["kaynak"] = asil, ceviri, kaynak
+                self.son_satirlar = deque(((asil, ceviri) if a == eski else (a, c)
+                                           for a, c in self.son_satirlar), maxlen=SON_SATIR_ADEDI)
+                return
+        self.satir_kaydet(id_, asil, ceviri, kaynak)
+
     def duzeltildi(self, asil: str, ceviri: str) -> None:
         """Kullanıcı düzeltmesini geçmişe ve bağlam satırlarına yansıtır."""
         from ..onbellek import normallestir

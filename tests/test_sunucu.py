@@ -146,3 +146,51 @@ async def test_baslat_kaynaksiz(istemci):
     await istemci.post("/api/ayarlar", json={"kaynak": ""})
     r = await istemci.post("/api/baslat")
     assert r.status == 400 and (await r.json())["hata"] == "kaynak_yok"
+
+
+# ---------- bölge seçimi ve /api/kare (PROTOKOL 7.1) ----------
+
+def _kare_fabrika(kaynak):
+    from PIL import Image
+    return lambda: Image.new("RGB", (1920, 1080), (40, 90, 160))
+
+
+async def test_api_kare_jpeg_kucuk_ve_onbellegesiz(aiohttp_client, uygulama_ayari, tmp_path):
+    import io
+    from PIL import Image
+    app = sunucu.uygulama_olustur(uygulama_ayari, motor_fabrika=sahte_fabrika, kare_fabrika=_kare_fabrika)
+    c = await aiohttp_client(app)
+    once = sorted(p.name for p in tmp_path.rglob("*"))
+    r = await c.get("/api/kare")
+    assert r.status == 200 and r.content_type == "image/jpeg"
+    assert r.headers["Cache-Control"] == "no-store"
+    im = Image.open(io.BytesIO(await r.read()))
+    assert im.size == (1280, 720)
+    assert sorted(p.name for p in tmp_path.rglob("*")) == once      # diske hiçbir şey yazılmadı
+
+
+async def test_api_kare_hata_dostca(aiohttp_client, uygulama_ayari):
+    from kopru.yakalama import YakalamaHatasi
+
+    def bozuk(kaynak):
+        def al():
+            raise YakalamaHatasi("yok")
+        return al
+    app = sunucu.uygulama_olustur(uygulama_ayari, motor_fabrika=sahte_fabrika, kare_fabrika=bozuk)
+    c = await aiohttp_client(app)
+    r = await c.get("/api/kare")
+    j = await r.json()
+    assert r.status == 400 and j["hata"] == "yakalama_yok" and "izin" in j["mesaj"]
+    await c.post("/api/ayarlar", json={"kaynak": ""})
+    assert (await (await c.get("/api/kare")).json())["hata"] == "kaynak_yok"
+
+
+async def test_ayar_bolgeler_dogrulanir(istemci):
+    b = {"x": 0.1, "y": 0.7, "g": 0.8, "y2": 0.2, "tur": "altyazi", "ad": "Altyazı", "fazla": 1}
+    assert (await istemci.post("/api/ayarlar", json={"bolgeler": [b]})).status == 200
+    kayit = (await (await istemci.get("/api/ayarlar")).json())["bolgeler"]
+    assert kayit == [{"x": 0.1, "y": 0.7, "g": 0.8, "y2": 0.2, "tur": "altyazi", "ad": "Altyazı"}]
+    assert (await istemci.post("/api/ayarlar", json={"bolgeler": [b] * 4})).status == 400
+    assert (await istemci.post("/api/ayarlar", json={"bolgeler": [{**b, "tur": "menu"}]})).status == 400
+    assert (await istemci.post("/api/ayarlar", json={"bolgeler": []})).status == 200
+    assert (await (await istemci.get("/api/ayarlar")).json())["bolgeler"] == []

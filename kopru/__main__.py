@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import sys
 import webbrowser
 
 from aiohttp import web
@@ -31,7 +32,24 @@ async def demo_dongusu(app: web.Application) -> None:
         await asyncio.sleep(sure_ms(metin) / 1000 + 1.5)
 
 
+def _konsolu_hazirla() -> None:
+    # Windows konsolu Türkçe harflerde çökmesin; pencere yoksa (paketli .exe) sessiz geç.
+    for akis in (sys.stdout, sys.stderr):
+        try:
+            akis.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except Exception:
+            pass
+
+
+def yaz(metin: str) -> None:
+    try:
+        print(metin, flush=True)
+    except Exception:
+        pass
+
+
 def main() -> None:
+    _konsolu_hazirla()
     p = argparse.ArgumentParser(prog="kopru", description="AltYazıKöprüsü")
     p.add_argument("--demo", action="store_true", help="örnek altyazıları döngüyle gönder")
     p.add_argument("--tarayici-acma", action="store_true", help="paneli tarayıcıda açma")
@@ -49,16 +67,16 @@ def main() -> None:
             app["demo"].cancel()
         app.on_startup.append(baslat)
         app.on_cleanup.append(durdur)
-        print(metinler.mesaj("demo_acik", dil))
+        yaz(metinler.mesaj("demo_acik", dil))
 
     async def guncelleme_bak(app: web.Application) -> None:
         app[GUNCELLEME].arka_planda_denetle()   # günde en çok bir kez; ayar kapalıysa hiç
     app.on_startup.append(guncelleme_bak)
 
     for ip in lan_adresleri():
-        print(metinler.mesaj("tv_adres", dil).format(adres=f"http://{ip}:{kapi}/tv"))
+        yaz(metinler.mesaj("tv_adres", dil).format(adres=f"http://{ip}:{kapi}/tv"))
     panel = f"http://127.0.0.1:{kapi}/"
-    print(metinler.mesaj("panel_adres", dil).format(adres=panel))
+    yaz(metinler.mesaj("panel_adres", dil).format(adres=panel))
     if not a.tarayici_acma:
         async def ac(_: web.Application) -> None:
             webbrowser.open(panel)
@@ -67,7 +85,7 @@ def main() -> None:
         web.run_app(app, host="0.0.0.0", port=kapi, print=None)
     except KeyboardInterrupt:
         pass
-    print(metinler.mesaj("durdu", dil))
+    yaz(metinler.mesaj("durdu", dil))
 
 
 if __name__ == "__main__":

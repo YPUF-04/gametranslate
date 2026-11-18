@@ -1,14 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Ana boru hattı: kare al -> değişim? -> OCR -> kararlılaştır -> çevir -> yayınla."""
+"""Ana boru hattı: kare al -> değişim? -> OCR -> kararlılaştır -> çevir -> yayınla.
+
+Akıcı gösterim kuralları docs/PROTOKOL.md 7.2'dedir; hepsi burada, saat dışarıdan verilebilir
+(`saat`) olduğu için sahte saatle sınanır.
+"""
 from __future__ import annotations
 
 import asyncio
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from typing import Any, Callable
 
+from .ayarlar import bolgeleri_temizle
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .onbellek import normallestir
 from .okuma import Satir
@@ -17,18 +23,44 @@ log = logging.getLogger("kopru.isleme")
 
 ARALIK_SN = 0.25
 SPEK_BEKLEME_SN = 0.05  # önden çeviri kısa bir an bekler: hemen değişen metne boşuna istek atılmaz
-SILME_GECIKME_SN = 0.6
 DEGISIM_ESIGI = 3.0  # küçültülmüş gri karelerde ortalama mutlak fark (0-255)
+EN_AZ_GOSTERIM_MS = 1800   # 7.2/1: bir altyazı en az bu kadar kalır
+KAYIP_KARE = 3             # 7.2/2: bu kadar kare üst üste görünmezse "gitti"
+GITTI_SONRA_SN = 0.7       # 7.2/3: süre dolmuşsa gittikten sonra bu kadar daha kalır
+EKRAN_GITTI_SN = 1.0       # 7.2/8: ekran öğesi gidince bu kadar sonra kalkar
+EN_KUCUK_OCR_YUKSEKLIK = 48  # daha küçük bölge okumadan önce büyütülür
 _KONUSAN = re.compile(r"^([A-ZÇĞİÖŞÜ][\w'. -]{0,24}):\s+(\S.*)$", re.UNICODE)
 
 
+def okuma_suresi_ms(metin: str) -> int:
+    return min(9000, 800 + len(metin) * 55)
+
+
 def sure_ms(metin: str) -> int:
-    return max(1500, min(9000, 800 + len(metin) * 55))
+    """Altyazının en az ekranda kalma süresi: max(1800, okuma süresi)."""
+    return max(EN_AZ_GOSTERIM_MS, okuma_suresi_ms(metin))
 
 
 def konusan_ayir(metin: str) -> tuple[str | None, str]:
     m = _KONUSAN.match(metin)
     return (m.group(1), m.group(2)) if m else (None, metin)
+
+
+def devam_mi(eski: str, yeni: str) -> bool:
+    """Yeni (normalize) metin eskisinin devamı mı? (daktilo, ekleme, küçük OCR farkı)"""
+    if not eski or not yeni:
+        return False
+    if yeni.startswith(eski):
+        return True
+    if len(eski) >= 8 and eski in yeni and len(eski) * 5 >= len(yeni) * 2:
+        return True
+    return SequenceMatcher(None, eski, yeni).ratio() >= 0.88
+
+
+def ceviri_benzer(a: str, b: str) -> bool:
+    """İki çeviri aynı ya da neredeyse aynı mı (kaynak OCR'ı oynasa da çeviri sabit kalır)."""
+    a, b = normallestir(a), normallestir(b)
+    return bool(a) and (a == b or SequenceMatcher(None, a, b).ratio() >= 0.92)
 
 
 def _sessiz(gorev: "asyncio.Task") -> None:
@@ -51,6 +83,26 @@ def fark(a: bytes, b: bytes) -> float:
 def bolgede_mi(s: Satir, b: dict[str, float]) -> bool:
     cx, cy = s.x + s.g / 2, s.y + s.y2 / 2
     return b["x"] <= cx <= b["x"] + b["g"] and b["y"] <= cy <= b["y"] + b["y2"]
+
+
+def kirp(resim: Any, b: dict[str, Any]) -> tuple[Any, tuple[float, float, float, float]]:
+    """Kareyi bölgeye göre keser. Dönen kutu, gerçekten kesilen pikselin 0-1 karşılığıdır."""
+    w, h = resim.size
+    x0 = min(max(int(round(b["x"] * w)), 0), w - 1)
+    y0 = min(max(int(round(b["y"] * h)), 0), h - 1)
+    x1 = max(x0 + 1, min(w, int(round((b["x"] + b["g"]) * w))))
+    y1 = max(y0 + 1, min(h, int(round((b["y"] + b["y2"]) * h))))
+    kes = resim.crop((x0, y0, x1, y1))
+    if kes.size[1] < EN_KUCUK_OCR_YUKSEKLIK:   # çok ince bölgeyi okuyucular sevmez
+        kat = min(4.0, EN_KUCUK_OCR_YUKSEKLIK / kes.size[1])
+        kes = kes.resize((max(1, int(kes.size[0] * kat)), max(1, int(kes.size[1] * kat))))
+    return kes, (x0 / w, y0 / h, (x1 - x0) / w, (y1 - y0) / h)
+
+
+def tam_kareye(satirlar: list[Satir], kutu: tuple[float, float, float, float]) -> list[Satir]:
+    """Bölge içindeki 0-1 koordinatları tam karenin 0-1 koordinatlarına çevirir."""
+    bx, by, bg, bh = kutu
+    return [Satir(s.metin, bx + s.x * bg, by + s.y * bh, s.g * bg, s.y2 * bh) for s in satirlar]
 
 
 def birlestir(satirlar: list[Satir]) -> list[Satir]:
@@ -89,13 +141,57 @@ def tur_bul(o: Satir) -> str:
     return "diger"
 
 
+def _yakin(a: Satir | Any, b: Satir | Any, esik: float = 0.03) -> bool:
+    return abs(a.x - b.x) < esik and abs(a.y - b.y) < esik
+
+
+def _ortusme(a: Any, b: Any) -> float:
+    """Kesişim alanı / küçük olanın alanı."""
+    gx = min(a.x + a.g, b.x + b.g) - max(a.x, b.x)
+    gy = min(a.y + a.y2, b.y + b.y2) - max(a.y, b.y)
+    if gx <= 0 or gy <= 0:
+        return 0.0
+    return gx * gy / max(1e-9, min(a.g * a.y2, b.g * b.y2))
+
+
 @dataclass
-class _Alan:
-    """Bir yazı alanının kararlılaştırma durumu."""
+class _Yazi:
+    """Altyazının gösterim durumu (7.2)."""
+    aktif: bool = False
+    id: str = ""
+    norm: str = ""              # şu an yayındaki kaynak (normalize)
+    asil: str = ""
+    metin: str = ""
+    konusan: str | None = None
+    tur: str = "altyazi"
+    min_bitis: float = 0.0      # en az gösterim süresinin sonu
+    bitis: float = 0.0          # TV'deki zamanlayıcının tahmini sonu (canlı tutma için)
+    kayip: int = 0              # üst üste görünmeyen kare sayısı
+    gitti: float | None = None  # "gitti" sayıldığı an
     onceki: str = ""            # önceki karedeki aday
-    gosterilen: str = ""        # şu an yayında olan (normalize) kaynak
-    bos_since: float | None = None
-    bitis: float = 0.0          # TV'nin yazıyı kaldıracağı an
+
+
+@dataclass
+class _Oge:
+    """Ekranda gösterilen bir yazı öğesi."""
+    id: str
+    norm: str
+    asil: str
+    x: float
+    y: float
+    g: float
+    y2: float
+    tur: str
+    metin: str
+    aciklama: str | None = None
+    kayip: int = 0
+    gitti: float | None = None
+
+
+@dataclass
+class _Okuma:
+    """Bir kare okumasının sonucu: (bölge sırası, bölge türü, satır). Otomatik kipte tür None."""
+    satirlar: list[tuple[int, str | None, Satir]] = field(default_factory=list)
 
 
 class Isleme:
@@ -109,15 +205,12 @@ class Isleme:
         self.ayar = ayar_getir
         self.saat = saat
         self._izi: bytes | None = None
-        self._son_satirlar: list[Satir] = []
-        self._yazi = _Alan()
-        self._ekran = _Alan()
-        self._sayac = {"a": 0, "e": 0}
-        self._yazi_id = ""
-        self._yazi_asil = ""
-        self._yazi_metin = ""
-        self._yazi_konusan: str | None = None
-        self._yazi_tur = "altyazi"
+        self._bolge_anahtari: tuple = ()
+        self._okuma = _Okuma()
+        self._y = _Yazi()
+        self._ogeler: list[_Oge] = []
+        self._oge_adaylari: list[tuple[str, Satir]] = []   # önceki karede görülen yeni öğeler
+        self._sayac = {"a": 0, "e": 0, "o": 0}
         self.durum_hatasi: str | None = None
         self._spek: asyncio.Task | None = None   # önden başlatılmış çeviri (6.4)
         self._spek_aday = ""
@@ -143,8 +236,8 @@ class Isleme:
 
     def duzeltildi(self, asil: str, ceviri: str) -> None:
         """Kullanıcı ekrandaki satırı düzeltti: canlı tutma yenilemesi de yeni metni yollasın."""
-        if self._yazi_asil and normallestir(self._yazi_asil) == normallestir(asil):
-            self._yazi_metin = ceviri
+        if self._y.asil and normallestir(self._y.asil) == normallestir(asil):
+            self._y.metin = ceviri
 
     # -- yardımcılar --
     def _yeni_id(self, on: str) -> str:
@@ -159,54 +252,102 @@ class Isleme:
             self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
                                          "yedek": bool(self.yonetici.yedekte), "hata": kod})
 
+    # -- okuma (otomatik ya da seçili bölgeler) --
+    def _oku(self, resim: Any, parcalar: list[tuple[int, dict, Any, tuple]]) -> _Okuma:
+        o = _Okuma()
+        if not parcalar:
+            for s in self.okuyucu.oku(resim):
+                o.satirlar.append((-1, None, s))
+            return o
+        for i, b, kes, kutu in parcalar:
+            for s in tam_kareye(self.okuyucu.oku(kes), kutu):
+                o.satirlar.append((i, b["tur"], s))
+        return o
+
     # -- bir adım --
     async def adim(self) -> None:
         resim = await asyncio.to_thread(self.kare_kaynagi)
-        izi = parmak_izi(resim)
-        if self._izi is None or fark(izi, self._izi) > DEGISIM_ESIGI:
-            self._son_satirlar = await asyncio.to_thread(self.okuyucu.oku, resim)
-        self._izi = izi  # değişmediyse son OCR sonucu yeniden kullanılır
         ayar = self.ayar()
-        bolge = ayar["bolge_altyazi"]
-        altyazi = [s for s in self._son_satirlar if bolgede_mi(s, bolge)]
-        diger = [s for s in self._son_satirlar if not bolgede_mi(s, bolge)]
+        bolgeler = bolgeleri_temizle(ayar.get("bolgeler"))
+        parcalar = [(i, b, *kirp(resim, b)) for i, b in enumerate(bolgeler)]
+        if parcalar:
+            izi = b"".join(parmak_izi(p[2]) for p in parcalar)
+        else:
+            izi = parmak_izi(resim)
+        anahtar = tuple((b["x"], b["y"], b["g"], b["y2"], b["tur"]) for b in bolgeler)
+        if self._izi is None or anahtar != self._bolge_anahtari or fark(izi, self._izi) > DEGISIM_ESIGI:
+            self._okuma = await asyncio.to_thread(self._oku, resim, parcalar)
+        self._izi = izi  # değişmediyse son OCR sonucu yeniden kullanılır
+        self._bolge_anahtari = anahtar
+        satirlar = self._okuma.satirlar
+        if bolgeler:
+            altyazi = [s for _, tur, s in satirlar if tur == "altyazi"]
+            diger = self._bolgeli_ogeler(satirlar)
+        else:
+            b = ayar["bolge_altyazi"]
+            altyazi = [s for _, _, s in satirlar if bolgede_mi(s, b)]
+            diger = [(None, o) for o in birlestir([s for _, _, s in satirlar if not bolgede_mi(s, b)]
+                                                  ) if len(o.metin.strip()) >= 2]
         await self._altyazi_adimi(altyazi, ayar)
-        if ayar.get("ekrani_cevir"):
+        if bolgeler or ayar.get("ekrani_cevir"):   # bölge seçildiyse açıkça istenmiştir
             await self._ekran_adimi(diger, ayar)
-        elif self._ekran.gosterilen:
-            self._ekran = _Alan()
+        elif self._ogeler:
+            self._ogeler = []
+            self._oge_adaylari = []
             self.yayin.yayinla("ekran-sil", {})
 
+    @staticmethod
+    def _bolgeli_ogeler(satirlar: list[tuple[int, str | None, Satir]]) -> list[tuple[str | None, Satir]]:
+        """Altyazı dışındaki bölgelerin satırlarını, her bölge kendi içinde birleştirerek öğeye çevirir."""
+        out: list[tuple[str | None, Satir]] = []
+        for i in sorted({i for i, tur, _ in satirlar if tur != "altyazi"}):
+            grup = [s for j, _, s in satirlar if j == i]
+            tur = next(t for j, t, _ in satirlar if j == i)
+            out += [(tur, o) for o in birlestir(grup) if len(o.metin.strip()) >= 2]
+        return out
+
+    # -- altyazı (7.2 kuralları) --
     async def _altyazi_adimi(self, satirlar: list[Satir], ayar: dict[str, Any]) -> None:
-        a, simdi = self._yazi, self.saat()
+        a, simdi = self._y, self.saat()
         sirali = sorted(satirlar, key=lambda s: (round(s.y, 2), s.x))
         metin = " ".join(s.metin for s in sirali).strip()
         aday = normallestir(metin)
         if aday:
-            a.bos_since = None
-            if aday != a.onceki and aday != a.gosterilen:
-                await self._ilk_gorulme(metin, aday, ayar, simdi)
-            elif aday == a.onceki and aday != a.gosterilen:
+            a.kayip, a.gitti = 0, None
+            if a.aktif and aday == a.norm:
+                if simdi > a.bitis - 0.8:   # kaynak hâlâ ekranda: yazıyı canlı tut (aynı id, yerinde)
+                    a.bitis = simdi + 2.0
+                    self._yayinla_yazi(2000, True)
+            elif aday == a.onceki:
                 await self._altyazi_yayinla(metin, aday, ayar, simdi)
-            elif aday == a.gosterilen and simdi > a.bitis - 0.8:
-                # kaynak hâlâ ekranda: yazıyı canlı tut
-                a.bitis = simdi + 2.0
-                self.yayin.yayinla("yazi", {
-                    "id": self._yazi_id, "metin": self._yazi_metin, "asil": self._yazi_asil,
-                    "tur": self._yazi_tur, "konusan": self._yazi_konusan, "sure_ms": 2000})
+            else:
+                await self._ilk_gorulme(metin, aday, ayar, simdi)
         else:
             self._spek_iptal()
-            if a.gosterilen:
-                if a.bos_since is None:
-                    a.bos_since = simdi
-                elif simdi - a.bos_since >= SILME_GECIKME_SN:
-                    a.gosterilen = ""
-                    self.yayin.yayinla("yazi-sil", {})
+            if a.aktif:
+                a.kayip += 1
+                if a.kayip >= KAYIP_KARE and a.gitti is None:
+                    a.gitti = simdi
+                if a.gitti is not None:
+                    # süre dolmadıysa dolana kadar, dolduysa 700 ms daha
+                    sil_an = a.min_bitis if a.gitti < a.min_bitis else a.gitti + GITTI_SONRA_SN
+                    if simdi >= sil_an:
+                        self._yazi_sil()
         a.onceki = aday
+
+    def _yazi_sil(self) -> None:
+        a = self._y
+        a.aktif, a.norm, a.gitti, a.kayip = False, "", None, 0
+        self.yayin.yayinla("yazi-sil", {})
+
+    def _yayinla_yazi(self, sure: int, devam: bool) -> None:
+        a = self._y
+        self.yayin.yayinla("yazi", {"id": a.id, "metin": a.metin, "asil": a.asil, "tur": a.tur,
+                                    "konusan": a.konusan, "sure_ms": sure, "devam": devam})
 
     async def _ilk_gorulme(self, metin: str, aday: str, ayar: dict[str, Any], simdi: float) -> None:
         """Yeni metin ilk karede: hafızada varsa hemen göster, yoksa önden çeviriyi başlat."""
-        onceki = self._yazi.onceki
+        onceki = self._y.onceki
         if onceki and (aday.startswith(onceki) or onceki.startswith(aday)):
             self._spek_iptal()  # daktilo gibi yazılıyor: kararlı olunca çevrilecek
             return
@@ -236,57 +377,110 @@ class Isleme:
         self._goster(govde, konusan, aday, c, simdi)
 
     def _goster(self, govde: str, konusan: str | None, aday: str, c: Any, simdi: float) -> None:
+        a = self._y
+        devam = a.aktif and (devam_mi(a.norm, aday) or ceviri_benzer(a.metin, c.metin))
         s = sure_ms(c.metin)
-        self._yazi_id = self._yeni_id("a")
-        self._yazi_asil, self._yazi_metin, self._yazi_konusan = govde, c.metin, konusan
-        self._yazi_tur = "altyazi"
-        self._yazi.gosterilen = aday
-        self._yazi.bitis = simdi + s / 1000
-        self.yonetici.satir_kaydet(self._yazi_id, govde, c.metin, getattr(c, "kaynak", "motor"))
-        self.yayin.yayinla("yazi", {"id": self._yazi_id, "metin": c.metin, "asil": govde,
-                                    "tur": "altyazi", "konusan": konusan, "sure_ms": s})
+        if not devam:
+            a.id = self._yeni_id("a")
+        a.asil, a.metin, a.konusan, a.tur = govde, c.metin, konusan, "altyazi"
+        a.aktif, a.norm, a.kayip, a.gitti = True, aday, 0, None
+        a.min_bitis = a.bitis = simdi + s / 1000
+        kaynak = getattr(c, "kaynak", "motor")
+        if devam and hasattr(self.yonetici, "satir_guncelle"):
+            self.yonetici.satir_guncelle(a.id, govde, c.metin, kaynak)
+        else:
+            self.yonetici.satir_kaydet(a.id, govde, c.metin, kaynak)
+        self._yayinla_yazi(s, devam)
 
-    async def _ekran_adimi(self, satirlar: list[Satir], ayar: dict[str, Any]) -> None:
-        a, simdi = self._ekran, self.saat()
-        ogeler = birlestir([s for s in satirlar if len(s.metin.strip()) >= 2])
-        imza = "|".join(normallestir(o.metin) for o in ogeler)
-        if imza:
-            a.bos_since = None
-            if imza == a.onceki and imza != a.gosterilen:
-                await self._ekran_yayinla(ogeler, imza, ayar)
-        elif a.gosterilen:
-            if a.bos_since is None:
-                a.bos_since = simdi
-            elif simdi - a.bos_since >= SILME_GECIKME_SN:
-                a.gosterilen = ""
-                self.yayin.yayinla("ekran-sil", {})
-        a.onceki = imza
+    # -- ekran öğeleri (7.2/8) --
+    def _oge_bul(self, norm: str, o: Satir, kullanilan: set[str]) -> _Oge | None:
+        for e in self._ogeler:
+            if e.id not in kullanilan and e.norm == norm and _yakin(e, o):
+                return e
+        return None
 
-    async def _ekran_yayinla(self, ogeler: list[Satir], imza: str, ayar: dict[str, Any]) -> None:
-        turler = [tur_bul(o) for o in ogeler]
+    async def _ekran_adimi(self, gelen: list[tuple[str | None, Satir]], ayar: dict[str, Any]) -> None:
+        simdi = self.saat()
+        kullanilan: set[str] = set()
+        yeniler: list[tuple[str | None, Satir, str]] = []
+        for tur_ip, o in gelen:
+            n = normallestir(o.metin)
+            e = self._oge_bul(n, o, kullanilan)
+            if e:
+                kullanilan.add(e.id)
+            elif n:
+                yeniler.append((tur_ip, o, n))
+        # yeni öğe iki kare üst üste aynı yerde görünürse kesinleşir (OCR titremesine karşı)
+        kesin = [y for y in yeniler
+                 if any(n == y[2] and _yakin(s, y[1]) for n, s in self._oge_adaylari)]
+        self._oge_adaylari = [(n, o) for _, o, n in yeniler]
+        sonuc: dict[int, Any] = {}
+        if kesin:
+            try:
+                sonuc = await self._ekran_cevir(kesin, ayar)
+            except (AgHatasi, AnahtarHatasi, MotorHatasi) as e:
+                self._hata(e)
+                self._oge_adaylari = [(n, o) for _, o, n in yeniler]
+                return
+        degisti = False
+        # görünmeyen öğeler: 3 kare kayıp -> gitti -> 1 sn sonra kalkar
+        bos = [e for e in self._ogeler if e.id not in kullanilan]
+        for e in bos:
+            e.kayip += 1
+            if e.kayip >= KAYIP_KARE and e.gitti is None:
+                e.gitti = simdi
+        for e in self._ogeler:
+            if e.id in kullanilan:
+                e.kayip, e.gitti = 0, None
+        # kesinleşen öğe, aynı yerdeki eski öğenin yerine geçer (yerinde güncelleme); yoksa eklenir
+        for i, (tur_ip, o, n) in enumerate(kesin):
+            c, tur = sonuc[i]
+            eski = next((e for e in bos if _ortusme(e, o) >= 0.5), None)
+            aciklama = c.aciklama[:60] if getattr(c, "aciklama", None) else None
+            if eski is not None:
+                bos.remove(eski)
+                eski.norm, eski.asil, eski.metin, eski.aciklama, eski.tur = n, o.metin, c.metin, aciklama, tur
+                eski.x, eski.y, eski.g, eski.y2 = o.x, o.y, o.g, o.y2
+                eski.kayip, eski.gitti = 0, None
+            else:
+                self._ogeler.append(_Oge(self._yeni_id("o"), n, o.metin, o.x, o.y, o.g, o.y2, tur,
+                                         c.metin, aciklama))
+            degisti = True
+        kalan = [e for e in self._ogeler if e.gitti is None or simdi - e.gitti < EKRAN_GITTI_SN]
+        if len(kalan) != len(self._ogeler):
+            self._ogeler, degisti = kalan, True
+        if degisti:
+            self._ekran_yayinla()
+
+    async def _ekran_cevir(self, kesin: list[tuple[str | None, Satir, str]],
+                           ayar: dict[str, Any]) -> dict[int, tuple[Any, str]]:
+        turler = []
+        for tur_ip, o, _ in kesin:
+            turler.append("gorev" if tur_ip == "ust_yazi" else tur_bul(o))
         acik = bool(ayar.get("kisa_aciklama"))
         # açıklama yalnız görev/bilgi öğeleri için istenir
         acikli = [i for i, t in enumerate(turler) if acik and t in ("gorev", "bilgi")]
-        duz = [i for i in range(len(ogeler)) if i not in acikli]
+        duz = [i for i in range(len(kesin)) if i not in acikli]
         sonuc: dict[int, Any] = {}
-        try:
-            for idx, ac in ((duz, False), (acikli, True)):
-                if idx:
-                    gelen = await self.yonetici.cevir([ogeler[i].metin for i in idx],
-                                                      ayar["kaynak_dil"], ayar["hedef_dil"], ac)
-                    sonuc.update(zip(idx, gelen))
-        except (AgHatasi, AnahtarHatasi, MotorHatasi) as e:
-            self._hata(e)
+        for idx, ac in ((duz, False), (acikli, True)):
+            if idx:
+                gelen = await self.yonetici.cevir([kesin[i][1].metin for i in idx],
+                                                  ayar["kaynak_dil"], ayar["hedef_dil"], ac)
+                sonuc.update(zip(idx, gelen))
+        self.durum_hatasi = None
+        return {i: (sonuc[i], turler[i]) for i in range(len(kesin))}
+
+    def _ekran_yayinla(self) -> None:
+        if not self._ogeler:
+            self.yayin.yayinla("ekran-sil", {})
             return
         liste = []
-        for i, o in enumerate(ogeler):
-            c = sonuc[i]
-            oge = {"x": round(o.x, 4), "y": round(o.y, 4), "g": round(o.g, 4),
-                   "y2": round(o.y2, 4), "metin": c.metin, "tur": turler[i]}
-            if c.aciklama:
-                oge["aciklama"] = c.aciklama[:60]
+        for e in self._ogeler:
+            oge = {"id": e.id, "x": round(e.x, 4), "y": round(e.y, 4), "g": round(e.g, 4),
+                   "y2": round(e.y2, 4), "metin": e.metin, "tur": e.tur}
+            if e.aciklama:
+                oge["aciklama"] = e.aciklama
             liste.append(oge)
-        self._ekran.gosterilen = imza
         self.yayin.yayinla("ekran", {"id": self._yeni_id("e"), "ogeler": liste})
 
     # -- döngü --
