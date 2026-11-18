@@ -43,6 +43,23 @@ HATALAR: dict[str, dict[str, str]] = {
     "okuma_yok": {
         "tr": "Ekrandaki yazıyı okuyacak bileşen kurulu değil, kurulum kılavuzuna bakın.",
         "en": "No text recognition component is installed, please see the setup guide."},
+    "oyun_yok": {
+        "tr": "Bu oyun bulunamadı, lütfen listeden mevcut bir oyun seçin ya da yeni oyun ekleyin.",
+        "en": "This game was not found, please pick one from the list or add a new game."},
+    "oyun_gecersiz": {
+        "tr": "Oyun adı geçersiz, lütfen en fazla 100 karakterlik bir ad yazın.",
+        "en": "The game name is invalid, please enter a name of up to 100 characters."},
+    "paket_gecersiz": {
+        "tr": "Bu dosya geçerli bir çeviri paketi değil, lütfen AltYazıKöprüsü'nden alınmış "
+              ".akpaket dosyası seçin.",
+        "en": "This file is not a valid translation pack, please choose an .akpaket file "
+              "exported from AltYazıKöprüsü."},
+    "paket_buyuk": {
+        "tr": "Çeviri paketi çok büyük (en fazla 50 MB), lütfen daha küçük bir paket seçin.",
+        "en": "The translation pack is too large (50 MB at most), please choose a smaller one."},
+    "oneri_yok": {
+        "tr": "Bu öneri artık listede yok, lütfen öneri listesini yenileyin.",
+        "en": "This suggestion is no longer in the list, please refresh the suggestions."},
     "sunucu_hatasi": {
         "tr": "Beklenmeyen bir sorun oluştu, programı yeniden başlatmayı deneyin.",
         "en": "Something unexpected went wrong, please try restarting the program."},

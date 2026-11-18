@@ -54,6 +54,12 @@ class Yayin:
                 except (asyncio.QueueEmpty, asyncio.QueueFull):
                     pass
 
+    def kalan_ms(self) -> int:
+        """Ekrandaki yazının kalan süresi (yazı yoksa 0)."""
+        if self.son_yazi is None:
+            return 0
+        return max(0, int((self._yazi_bitis - time.monotonic()) * 1000))
+
     def acilis_olaylari(self) -> list[tuple[str, dict[str, Any]]]:
         """Yeni bağlanan istemciye gönderilecek son durum."""
         out: list[tuple[str, dict[str, Any]]] = []
