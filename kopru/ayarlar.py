@@ -25,6 +25,7 @@ VARSAYILAN: dict[str, Any] = {
     "modeller": {},          # boş = `kalite` modeli seçer; yazılan model kaliteyi ezer
     "kalite": "en_iyi",      # en_iyi | dengeli | hizli
     "hafiza_izni": None,     # None (sorulmadı) | True | False
+    "guncelleme_denetle": True,  # günde en çok bir kez GitHub'a "yeni sürüm var mı" diye sorar
 
     "kaynak": "ekran:1",
     "bolge_altyazi": {"x": 0.1, "y": 0.72, "g": 0.8, "y2": 0.25},
