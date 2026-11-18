@@ -345,7 +345,7 @@ def _dogrula(k: dict[str, Any]) -> bool:
         if "aktif_oyun" in k and not (isinstance(k["aktif_oyun"], str) and
                                       0 < len(k["aktif_oyun"].strip()) <= 100):
             return False
-        for alan in ("ekrani_cevir", "kisa_aciklama", "ses_cevir", "kurulum_tamam"):
+        for alan in ("ekrani_cevir", "kisa_aciklama", "ses_cevir", "kurulum_tamam", "guncelleme_denetle"):
             if alan in k and not isinstance(k[alan], bool):
                 return False
         g = k.get("gorunum")

@@ -2,4 +2,5 @@
 """AltYazıKöprüsü çekirdeği."""
 
 SURUM = "0.1.0"
+__version__ = SURUM
 PROTOKOL = 1
