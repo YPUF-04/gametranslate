@@ -67,7 +67,7 @@
     goster('e-ara');
     $('ara-liste').innerHTML = ''; $('ara-hata').textContent = '';
     $('ara-durum').textContent = T('ara_baslik');
-    P.localAddress(function (ip) {
+    P.yerelAdres(function (ip) {
       if (no !== aramaNo) { return; }
       var m = ip && /^(\d+\.\d+\.\d+)\.(\d+)$/.exec(ip);
       if (!m) { $('ara-durum').textContent = ''; $('ara-hata').textContent = T('adres_alinamadi'); odakla($('b-elle')); return; }
@@ -153,7 +153,7 @@
   }
   function calistir() {
     durdurHepsi(); baglanti = 'baglaniyor'; goster('e-calis');
-    hdmiKapat = P.showHdmi(hdmiNo, $('hdmi'), function (d) {
+    hdmiKapat = P.hdmiAc(hdmiNo, $('hdmi'), function (d) {
       var h = $('calis-hata');
       if (d === 'hata') { h.textContent = T('hdmi_hata'); h.style.display = 'block'; } else { h.style.display = 'none'; }
     });
@@ -203,11 +203,11 @@
     if (ekran === 'e-calis') { if (demoZamanci) { durdurHepsi(); ara(); } else { durdurHepsi(); hdmiEkrani(); } return; }
     if (ekran === 'e-elle') { ara(); return; }
     if (ekran === 'e-hdmi') { ara(); return; }
-    P.exit();
+    P.cik();
   }
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode, a = document.activeElement;
-    if (k === P.backKey || k === 8 || k === 27) { e.preventDefault(); geri(); return; }
+    if (k === P.geriTusu || k === 8 || k === 27) { e.preventDefault(); geri(); return; }
     if (ekran === 'e-calis' && !panelAcik && (k === 13 || k === 405 || k === 406 || k === 403 || k === 404) && !demoZamanci) { e.preventDefault(); panelAc(); return; }
     if (ekran === 'e-elle' && !panelAcik && ((k >= 48 && k <= 57) || k === 190)) { elleTus(k === 190 ? '.' : String(k - 48)); return; }
     var y = k === 37 ? 'sol' : k === 39 ? 'sag' : k === 38 ? 'yukari' : k === 40 ? 'asagi' : null;

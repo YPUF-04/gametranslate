@@ -9,8 +9,8 @@ Ağ üzerinden sunulan değiştirilmiş sürümler de kaynak kodunu sunmak zorun
 ------------------------------------------------------------------------
 Teşekkür ve esinlenme / Acknowledgements
 ------------------------------------------------------------------------
-Bu proje aşağıdaki açık kaynak projelerden esinlenmiş ve bazı kısımlarda
-fikir/kod parçası kullanmıştır. Orijinal telif bildirimleri korunmuştur:
+Bu projenin tüm kodu AltYazıKöprüsü katkıcıları tarafından sıfırdan yazılmıştır.
+Fikir olarak şu açık kaynak projelerden esinlenilmiştir; onlara teşekkür ederiz:
 
   GameTranslator — Copyright (C) 2026 Sefflex
   https://gitlab.com/sefflex/GameTranslator  (AGPL-3.0)
@@ -18,6 +18,6 @@ fikir/kod parçası kullanmıştır. Orijinal telif bildirimleri korunmuştur:
   CouchSubs — Copyright (C) 2026 Sinan Yorulmaz
   https://github.com/yorulmazsinan/couchsubs  (AGPL-3.0)
 
-Arayüz, adlandırma, veri/alan adları, bağlantı biçimi ve görsel tasarım
-AltYazıKöprüsü'ne aittir; GameTranslator ile aynı değildir.
+Kod, arayüz, adlandırma, veri/alan adları, bağlantı biçimi ve görsel tasarım
+AltYazıKöprüsü'ne aittir.
 Üçüncü taraf bileşenler: THIRD-PARTY-NOTICES.md
