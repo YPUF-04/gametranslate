@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Kurulum rehberleri
+    url: https://github.com/YPUF-04/gametranslate/tree/main/docs/kurulum
+    about: Önce rehbere bakın; çoğu sorunun cevabı orada.

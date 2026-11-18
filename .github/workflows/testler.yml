@@ -1,19 +1,46 @@
 # SPDX-License-Identifier: AGPL-3.0-only
+# Her gönderimde testleri gerçek Linux, Windows ve Mac bilgisayarlarda çalıştırır.
 name: Testler
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: |
+      - name: Bağımlılıklar
+        run: |
           pip install -r requirements.txt
-          pip install -e . pytest pytest-aiohttp
-          python -m pytest -q
+          pip install -e ".[tv]" pytest pytest-aiohttp
+      - name: Testler
+        run: python -m pytest -q
+      - name: Sunucu açılıyor mu
+        shell: bash
+        run: |
+          python -m kopru --tarayici-acma &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8642/kopru/merhaba && break; sleep 1; done
+          curl -sf http://127.0.0.1:8642/kopru/merhaba | grep altyazikoprusu
+          curl -sf -o /dev/null http://127.0.0.1:8642/
+          curl -sf -o /dev/null http://127.0.0.1:8642/tv
+  panel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          node kopru/web/panel/test/panel.test.js

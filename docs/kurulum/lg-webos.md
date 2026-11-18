@@ -26,11 +26,23 @@ LG TV'de yazı oyunun **üstünde** görünür. Bunun için küçük TV uygulama
 
 > ⏰ **50 saat kuralı:** Geliştirici modu oturumu yaklaşık 50 saat sonra kapanır. Uygulama TV'den silinmez ama çalışmayabilir. Developer Mode uygulamasını açıp **Extend** (uzat) düğmesine bas; süre yeniden dolar.
 
-## 2. Bilgisayara kurulum aracını yükle
+## 2. Tek tuşla kur (önerilen)
+
+Ek program kurman gerekmez; AltYazıKöprüsü TV'ye uygulamayı kendisi yükler.
+
+1. AltYazıKöprüsü panelini aç (sihirbazın son adımı ya da **Gelişmiş ayarlar** > **TV'ye tek tuşla kur**).
+2. **TV'nin IP adresini** ve TV ekranındaki **kodu (Passphrase)** kutulara yaz.
+3. Önce **Önce deneme uygulamasını kur**'a bas. TV'nde **AltYazıKöprüsü Deneme** çıkarsa kurulum yolu çalışıyor demektir.
+4. Sonra **TV'ye kur**'a bas. Aşamalar ekranda görünür: anahtar, bağlanma, gönderme, kurulum, bitti. Bitince uygulama TV'de kendiliğinden açılır.
+5. Hata çıkarsa yazılan açıklamayı izle. **Ayrıntıyı göster** yazısını kopyalayıp bize gönderirsen sorunu çözmemiz kolaylaşır. İlk paket kurulmazsa **Başka bir sürümü dene** düğmesi var.
+
+> Not: Bu özellik gerçek bir LG TV'de henüz denenmemiştir; kod LG'nin resmi `ares-install` aracının yaptığı işi birebir izler. Çalışmazsa aşağıdaki elle yöntemi kullanabilirsin.
+
+## 2b. Elle kurulum (komut satırı)
 
 Kurulum için LG'nin aracı gerekir. İki yol var; **birini** seç.
 
-**A) Komut satırı (önerilen)**
+**A) Komut satırı**
 
 1. Bilgisayarına [Node.js](https://nodejs.org) (LTS) kur.
 2. **Başlat** menüsünde **Komut İstemi**'ni aç.
@@ -40,7 +52,7 @@ Kurulum için LG'nin aracı gerekir. İki yol var; **birini** seç.
 
 **B) webOS Dev Manager** adlı görsel program da kullanılabilir (LG'nin geliştirici sitesinde). Aynı IP ve Passphrase bilgileri gerekir.
 
-## 3. ÖNCE deneme uygulamasını kur
+## 3. (Elle yöntemde) ÖNCE deneme uygulamasını kur
 
 Gerçek uygulamadan önce küçük **deneme uygulamasını** kur. Böylece kurulum yolunun çalıştığını görürsün.
 
@@ -48,7 +60,7 @@ Gerçek uygulamadan önce küçük **deneme uygulamasını** kur. Böylece kurul
 2. Komut İstemi'nde: `ares-install --device tv com.altyazikoprusu.deneme_1.0.0_all.ipk` (dosya adını indirdiğinle aynı yaz)
 3. `Success` yazarsa TV'nde uygulamalar listesinde **AltYazıKöprüsü Deneme** çıkar. Aç; yazı görürsen kurulum yolu çalışıyor.
 
-## 4. Gerçek uygulamayı kur
+## 4. (Elle yöntemde) Gerçek uygulamayı kur
 
 1. Sürüm sayfasından **`com.altyazikoprusu.app_*.ipk`** dosyasını indir.
 2. Komut İstemi'nde: `ares-install --device tv com.altyazikoprusu.app_1.0.0_all.ipk`

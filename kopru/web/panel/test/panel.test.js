@@ -19,6 +19,7 @@ function sahteSunucu() {
     oyunlar: [{ kod: 'gta6', ad: 'GTA 6', kayit_sayisi: 1240, terim_sayisi: 35 }, { kod: 'tlou', ad: 'The Last of Us', kayit_sayisi: 0, terim_sayisi: 2 }],
     ceviriler: [{ id: 'a1', asil: 'Where were you last night?', ceviri: 'Dün gece neredeydin?', kaynak: 'motor' }, { id: 'a2', asil: 'Head back to the safehouse.', ceviri: 'Güvenli eve dön.', kaynak: 'motor' }],
     oneriler: [{ asil: 'Vice City', ceviri: 'Vice City' }],
+    guncelleme: { ilerleme: 0, asama: 'bosta' }, tvIstekleri: [], tvKuyruk: [], tvSon: { asama: 'bosta', mesaj: '', ayrinti: '' },
     calisiyor: false, anahtarlar: {}, istekler: [], govdeler: {}, sozluk: { oyun: 'varsayilan', terimler: [{ asil: 'Ellie', ceviri: 'Ellie' }] }
   };
   const motorlar = () => [
@@ -69,6 +70,24 @@ function sahteSunucu() {
         case 'GET /api/oneriler': return j(st.oneriler);
         case 'POST /api/oneriler': st.oneriler = st.oneriler.filter((o) => o.asil !== b.asil); return j({ tamam: true });
         case 'DELETE /api/oyun/rdr3/hafiza': st.silindi = true; return j({ tamam: true });
+        case 'GET /api/guncelleme': {
+          const g = st.guncelleme;
+          if (g.asama === 'indiriliyor' && g.sayac++ >= 1) { g.ilerleme = g.ilerleme >= 80 ? 100 : 80; if (g.ilerleme === 100) g.asama = 'baslatiliyor'; }
+          return j({ var: true, surum: '0.3.0', notlar: 'Tek tuşla güncelleme', boyut_mb: 48, mevcut: '0.1.0', ilerleme: g.ilerleme, asama: g.asama, mesaj: g.mesaj, denetim_acik: st.ayarlar.guncelleme_denetle !== false, son_denetim: 1 });
+        }
+        case 'POST /api/guncelleme/kur': st.guncelleme = { asama: 'indiriliyor', ilerleme: 40, sayac: 0 }; return j({ var: true, surum: '0.3.0', notlar: '', boyut_mb: 48, mevcut: '0.1.0', ilerleme: 40, asama: 'indiriliyor' });
+        case 'POST /api/guncelleme/denetle': return j({ var: true, surum: '0.3.0', notlar: '', boyut_mb: 48, mevcut: '0.1.0', ilerleme: st.guncelleme.ilerleme, asama: st.guncelleme.asama, son_denetim: 2 });
+        case 'POST /api/tv/lg/kur': {
+          st.tvIstekleri.push(b);
+          if (b.parola === 'BAD000') {
+            st.tvKuyruk = [{ asama: 'anahtar', mesaj: 'TV\'den anahtar alınıyor...', ayrinti: '' }, { asama: 'hata', mesaj: 'Kod yanlış görünüyor. TV\'deki Developer Mode uygulamasındaki 6 haneli kodu tekrar yazın.', ayrinti: 'TvHatasi: Anahtar bu kodla açılamadı' }];
+          } else {
+            st.tvKuyruk = ['baglaniyor', 'yukleniyor', 'kuruluyor', 'bitti'].map((a) => ({ asama: a, mesaj: a === 'bitti' ? 'Kuruldu. Uygulama TV\'de açılıyor.' : a + '...', ayrinti: '' }));
+          }
+          st.tvSon = { asama: 'anahtar', mesaj: 'TV\'den anahtar alınıyor...', ayrinti: '' };
+          return j(st.tvSon);
+        }
+        case 'GET /api/tv/lg/durum': if (st.tvKuyruk.length) st.tvSon = st.tvKuyruk.shift(); return j(st.tvSon);
         case 'GET /api/sozluk': return j(st.sozluk);
         case 'POST /api/sozluk': st.sozluk = b; return j({ tamam: true });
       }
@@ -78,7 +97,19 @@ function sahteSunucu() {
   return { sunucu, st };
 }
 
+function dilKontrol() {
+  const oku = (k) => JSON.parse(fs.readFileSync(path.join(PANEL, 'dil', k + '.json'), 'utf8'));
+  const tr = oku('tr'), en = oku('en');
+  assert.deepStrictEqual(Object.keys(tr).sort(), Object.keys(en).sort(), 'tr ve en anahtarları aynı olmalı');
+  const js = fs.readFileSync(path.join(PANEL, 'panel.js'), 'utf8');
+  const eksik = [];
+  for (const m of js.matchAll(/\b(?:t|ne|adimlar|bolum)\('([a-z0-9_]+(?:\.[a-z0-9_]+)+)'/g)) if (!(m[1] in tr)) eksik.push(m[1]);
+  assert.deepStrictEqual(eksik, [], 'panel.js içinde tr.json\'da olmayan anahtar: ' + eksik.join(', '));
+}
+
 (async () => {
+  dilKontrol();
+  console.log('  ok - tr/en anahtarları eşit, panel.js anahtarları tanımlı');
   const { sunucu, st } = sahteSunucu();
   await new Promise((r) => sunucu.listen(0, '127.0.0.1', r));
   const taban = 'http://127.0.0.1:' + sunucu.address().port;
@@ -149,6 +180,37 @@ function sahteSunucu() {
 
     await sayfa.waitForSelector('#deneme-yazi');
     assert.match(await sayfa.textContent('#adres-kutu'), /192\.168\.1\.20:8642\/tv/);
+    // TV'ye tek tuşla kur kartı (LG seçili)
+    await sayfa.waitForSelector('#tv-kart');
+    assert.strictEqual(await sayfa.locator('#tv-kart > ol:not(.tv-asamalar) > li').count(), 3);
+    assert.match(await sayfa.textContent('#tv-kart > ol:not(.tv-asamalar)'), /Developer Mode uygulamasını aç[\s\S]*IP adresini ve ekrandaki kodu \(Passphrase\)[\s\S]*Kur'a bas/);
+    await sayfa.click('#tv-kur');
+    assert.match(await sayfa.textContent('#tv-hata'), /IP adresini ve ekrandaki kodu yaz/);
+    await sayfa.fill('#tv-ip', '192.168.1.30');
+    await sayfa.fill('#tv-parola', 'BAD000');
+    await sayfa.click('#tv-kur');
+    await sayfa.waitForSelector('#tv-hata-mesaj', { timeout: 6000 });
+    assert.match(await sayfa.textContent('#tv-hata-mesaj'), /Kod yanlış görünüyor/);
+    assert.ok(!(await sayfa.isVisible('#tv-ayrinti')), 'ham metin kapalı gelmeli');
+    await sayfa.click('#tv-ayrinti-kap > summary');
+    assert.match(await sayfa.textContent('#tv-ayrinti'), /Anahtar bu kodla açılamadı/);
+    await gor('v3-tv-hata.png');
+    assert.deepStrictEqual(st.tvIstekleri[0], { ip: '192.168.1.30', parola: 'BAD000', paket: 'asil' });
+    await sayfa.click('#tv-acgsiz');
+    await sayfa.waitForFunction(() => !document.querySelector('#tv-acgsiz') && document.querySelector('#tv-hata-mesaj'), null, { timeout: 6000 });
+    assert.strictEqual(st.tvIstekleri[1].paket, 'acgsiz');
+    adim('TV kartı: boş alan uyarısı, yanlış kod dostça hata, ayrıntı aç/kapa, başka sürüm denemesi');
+    assert.ok(!(await sayfa.locator('#tv-acgsiz').count()), 'acgsiz denemesinden sonra tekrar önerilmez');
+    await sayfa.fill('#tv-parola', 'GOOD12');
+    await sayfa.click('#tv-deneme');
+    await sayfa.waitForSelector('#tv-bitti', { timeout: 8000 });
+    assert.strictEqual(st.tvIstekleri[2].paket, 'deneme');
+    assert.strictEqual(await sayfa.locator('#tv-asamalar li.bitti').count(), 5);
+    assert.strictEqual(await sayfa.inputValue('#tv-parola'), '', 'kod başarıdan sonra silinir');
+    assert.match(await sayfa.textContent('#tv-bitti'), /Kuruldu/);
+    await gor('v3-tv-bitti.png');
+    assert.ok(!JSON.stringify(await sayfa.evaluate(() => Object.assign({}, localStorage))).match(/BAD000|GOOD12/), 'kod tarayıcıda saklanmaz');
+    adim('TV kartı: deneme uygulaması aşamaları (anahtar→…→bitti), kod saklanmadı');
     await sayfa.click('#deneme-yazi');
     await sayfa.waitForSelector('#hayir');
     await sayfa.click('#hayir');
@@ -174,6 +236,16 @@ function sahteSunucu() {
     // son çeviriler + düzelt
     await sayfa.waitForSelector('.ceviri-satir[data-id=a1]', { timeout: 6000 });
     await sayfa.waitForSelector('#oneri-kart:not([hidden])');
+    await sayfa.waitForSelector('#guncelleme-bar #guncelle-dugme', { timeout: 8000 });
+    assert.match(await sayfa.textContent('#guncelleme-bar'), /Yeni sürüm hazır \(0\.3\.0\)\./);
+    await gor('v3-guncelleme.png');
+    await sayfa.click('#guncelle-dugme');
+    await sayfa.waitForFunction(() => /indiriliyor/.test(document.querySelector('#guncelleme-metin').textContent));
+    assert.ok(await sayfa.locator('#guncelleme-bar [role=progressbar]').count());
+    await sayfa.waitForFunction(() => /Program kendini yeniden başlatacak\./.test(document.querySelector('#guncelleme-metin').textContent), null, { timeout: 8000 });
+    assert.strictEqual(await sayfa.getAttribute('#guncelleme-bar [role=progressbar]', 'aria-valuenow'), '100');
+    assert.ok(st.istekler.includes('POST /api/guncelleme/kur'));
+    adim('güncelleme çubuğu: Yeni sürüm hazır → Güncelle → ilerleme → "Program kendini yeniden başlatacak."');
     await gor('v2-ana.png');
     await sayfa.click('[data-id=a1] .duzelt');
     await sayfa.fill('[data-id=a1] .duzelt-girdi', 'Dün gece neredeydin sen?');
@@ -191,6 +263,15 @@ function sahteSunucu() {
     // gelişmiş ayarlar
     await sayfa.click('#gelismis > summary');
     assert.match(await sayfa.getAttribute('#paket-paylas', 'href'), /\/api\/paket\/rdr3$/);
+    assert.strictEqual(await sayfa.inputValue('#tv-ip'), '192.168.1.30', 'IP hatırlanır');
+    assert.strictEqual(await sayfa.locator('#gelismis #tv-kart').count(), 1);
+    await sayfa.click('#guncelleme-denetle-ayar', { force: true });
+    await sayfa.waitForTimeout(150);
+    assert.strictEqual(st.ayarlar.guncelleme_denetle, false);
+    await sayfa.click('#guncelleme-denetle');
+    await sayfa.waitForFunction(() => /Yeni sürüm var: 0\.3\.0/.test(document.querySelector('#guncelleme-durum').textContent));
+    assert.ok(st.istekler.includes('POST /api/guncelleme/denetle'));
+    adim('ayarlar: güncelleme anahtarı kapandı, "Güncellemeleri denetle" çalıştı, TV kartı ayarlarda');
     await sayfa.click('#kalite-ayar-hizli');
     await sayfa.waitForTimeout(150);
     assert.strictEqual(st.ayarlar.kalite, 'hizli');
@@ -215,8 +296,16 @@ function sahteSunucu() {
     await sayfa.waitForTimeout(200);
     assert.strictEqual(st.ayarlar.arayuz_dili, 'en');
     assert.match(await sayfa.textContent('body'), /Also translate other on-screen text/);
+    assert.match(await sayfa.textContent('#guncelleme-metin'), /The program will restart by itself\./);
+    assert.match(await sayfa.textContent('#tv-kart h2'), /Install on the TV in one click/);
     await gor('5-ana-en.png');
     adim('EN diline geçildi ve ayar kaydedildi');
+
+    // güncelleme hata verirse (ör. doğrulanamadı) mesaj ve "Try again" görünür
+    st.guncelleme = { asama: 'hata', ilerleme: 0, sayac: 0, mesaj: 'The downloaded file could not be verified and was not installed, please try again later.' };
+    await sayfa.waitForFunction(() => /could not be verified/.test((document.querySelector('#guncelleme-metin') || {}).textContent || ''), null, { timeout: 6000 });
+    assert.match(await sayfa.textContent('#guncelle-dugme'), /Try again/);
+    adim('güncelleme hatası mesajla ve "Tekrar dene" ile gösterildi');
 
     // API kapanınca dostça uyarı
     sunucu.closeAllConnections && sunucu.closeAllConnections();

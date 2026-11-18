@@ -183,3 +183,18 @@ Ayar `bolgeler`: en çok 3 dikdörtgen: `[{"x":0.1,"y":0.75,"g":0.8,"y2":0.2,"tu
 - Kod üretme: `araclar/kod_uret.py` (geliştirici için basit panel/komut). Hiçbir sunucu yok, maliyet yok.
 - API (yalnız yerel): `GET /api/erisim` → `{"kalan_dakika":12,"kod":"sinirsiz"|null}`; `POST /api/erisim` `{"kod":"AK1-..."}` → `{"tamam":true,"tur":"sinirsiz"}`.
 - Not: Kod açık kaynak olduğu için kontrolü kaldıran kopyalar yapılabilir; bu yasaldır (AGPL). Kod sistemi dürüst kullanıcılar içindir.
+
+## 8. Güncelleme ve TV kurulumu (sürüm 0.2, yalnız yerel)
+
+Ayar: `guncelleme_denetle` (bool, varsayılan `true`). Kapalıyken program kendiliğinden hiç istek yapmaz.
+
+| Yöntem | Yol | Ne yapar |
+|---|---|---|
+| GET | `/api/guncelleme` | `{"var":true,"surum":"0.3.0","notlar":"...","boyut_mb":48,"ilerleme":0,"asama":"bosta"\|"indiriliyor"\|"dogrulaniyor"\|"baslatiliyor"\|"hata","mesaj":"...","mevcut":"0.2.0","denetim_acik":true,"baglanti":"https://github.com/.../releases/latest"}`. Yeni sürüm yoksa `{"var":false,"neden":"guncel"\|"kapali"\|"bekleniyor"}`. Windows dışında `{"var":false,"neden":"desteklenmiyor","mesaj":"...","baglanti":"..."}`. Gerekirse arka planda (günde en çok 1 kez) GitHub'a bakar |
+| POST | `/api/guncelleme/denetle` | Kullanıcı elle bastı: ayar kapalı olsa da bir kez bakar; `GET` ile aynı gövdeyi döner |
+| POST | `/api/guncelleme/kur` | İndirmeyi başlatır; `ilerleme` 0-100. `SHA256SUMS.txt` ile doğrulanamazsa kurulmaz (`asama:"hata"`). Doğrulanırsa kurucu `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /GUNCELLEME=1` ile başlar ve sunucu kapanır |
+| POST | `/api/tv/lg/kur` | `{"ip":"192.168.1.30","parola":"ABC123","paket":"asil"\|"deneme"\|"acgsiz"}` → arka planda kurar. Yalnız yerel ağ IPv4. Parola/anahtar hiçbir yere yazılmaz |
+| GET | `/api/tv/lg/durum` | `{"asama":"bosta"\|"anahtar"\|"baglaniyor"\|"yukleniyor"\|"kuruluyor"\|"bitti"\|"hata","mesaj":"...","ayrinti":"ham hata metni"}` |
+
+Güncelleme adresleri yalnız `https` ve `github.com`, `api.github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` olabilir (yönlendirmeler dahil her adımda denetlenir).
+LG kurulumu, LG'nin `ares-install` aracını izler: `http://<TV>:9991/webos_rsa` (anahtar), SSH `<TV>:9922` kullanıcı `prisoner`, SFTP `/media/developer/temp/`, `luna-send-pub -i luna://com.webos.appInstallService/dev/install`, ardından `luna://com.webos.applicationManager/launch`.

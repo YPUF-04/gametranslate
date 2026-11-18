@@ -1,0 +1,67 @@
+name: Hata bildirimi
+description: Bir şey çalışmadı mı? Buradan anlatın. Türkçe ya da İngilizce yazabilirsiniz.
+title: "[Hata] "
+labels: ["hata"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Teşekkürler! Ne kadar çok bilgi verirseniz sorunu o kadar çabuk çözeriz. Bilmediğiniz kutuyu boş bırakabilirsiniz.
+        **Şifrelerinizi, API anahtarınızı ve TV'deki kodu (Passphrase) bu forma YAZMAYIN.**
+  - type: textarea
+    id: ne-oldu
+    attributes:
+      label: Ne oldu?
+      description: Ne yapmaya çalışıyordunuz, ne oldu, ne olmasını beklerdiniz?
+      placeholder: "Örnek: TV'ye kur'a bastım, 'Kod yanlış görünüyor' dedi ama kodu doğru yazdım."
+    validations:
+      required: true
+  - type: dropdown
+    id: cihaz
+    attributes:
+      label: Oyunu nereden oynuyorsunuz?
+      options:
+        - PS5 (PS Remote Play)
+        - Xbox
+        - PC oyunu
+        - Yakalama kartı / OBS
+        - Bilmiyorum
+    validations:
+      required: false
+  - type: input
+    id: tv-model
+    attributes:
+      label: TV modeli
+      description: TV'de Ayarlar > Tüm Ayarlar > Genel > Cihaz Bilgisi bölümünde yazar.
+      placeholder: "Örnek: LG OLED55C1"
+  - type: input
+    id: webos
+    attributes:
+      label: webOS sürümü
+      description: Aynı yerde (Cihaz Bilgisi) yazar.
+      placeholder: "Örnek: webOS 6.0"
+  - type: input
+    id: surum
+    attributes:
+      label: AltYazıKöprüsü sürümü
+      description: Kurucunun dosya adında yazar (AltYaziKoprusu-Kur-0.2.0.exe).
+      placeholder: "Örnek: 0.2.0"
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows sürümü
+      options:
+        - Windows 11
+        - Windows 10
+        - Başka / bilmiyorum
+  - type: textarea
+    id: hata-metni
+    attributes:
+      label: Hata yazısı
+      description: Panelde ya da TV kartında "Ayrıntıyı göster" diyerek açılan yazıyı buraya yapıştırın.
+      render: text
+  - type: textarea
+    id: ekstra
+    attributes:
+      label: Eklemek istedikleriniz
+      description: Ekran görüntüsü sürükleyip bırakabilirsiniz.
