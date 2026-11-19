@@ -1,0 +1,64 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* AltYazıKöprüsü - ortak bindirme stili. Tüm ölçüler JS tarafından 1920 genişliğe göre ölçeklenir.
+   Yazı tipi: Atkinson Hyperlegible Next (SIL OFL 1.1, yazi-LISANS-OFL.txt) — az gören okurlar için
+   tasarlanmış, harfleri birbirine karışmayan bir yazı; Türkçe harflerin hepsi içinde. İnternet gerekmez. */
+@font-face { font-family: "AYK Yazi"; font-style: normal; font-weight: 200 800; font-display: swap;
+  src: url(yazi-latin.woff2) format("woff2-variations"), url(yazi-latin.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "AYK Yazi"; font-style: normal; font-weight: 200 800; font-display: swap;
+  src: url(yazi-latin-ext.woff2) format("woff2-variations"), url(yazi-latin-ext.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+.ak-kok { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; pointer-events: none;
+  font-family: "AYK Yazi", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-kerning: normal; }
+.ak-kok .ak-ekran { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+
+/* ekran öğeleri (görev, menü, bilgi): küçük, sakin etiketler; belirir ve solar.
+   Renkli çizgi türü söyler: turkuaz = menü/diğer, sarı = görev, gri-mavi = bilgi. */
+.ak-kok .ak-oge { position: absolute; box-sizing: border-box; padding: 0.34em 0.7em 0.38em 1em; border-radius: 0.5em;
+  background: rgba(9, 15, 27, 0.84); color: #FFFFFF; line-height: 1.25; letter-spacing: 0.005em;
+  box-shadow: inset 0 0 0 0.04em rgba(255, 255, 255, 0.08), 0 0.2em 0.8em rgba(0, 0, 0, 0.28);
+  word-wrap: break-word; opacity: 0; text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.55);
+  transition: opacity 0.25s linear, left 0.25s ease, top 0.25s ease, width 0.25s ease; }
+.ak-kok .ak-oge:before { content: ""; position: absolute; left: 0.38em; top: 0.38em; bottom: 0.38em; width: 0.17em; border-radius: 0.1em; background: #2EC4B6; }
+.ak-kok .ak-oge.ak-acik { opacity: 1; }
+.ak-kok .ak-oge.ak-gorev { box-shadow: inset 0 0 0 0.04em rgba(255, 209, 102, 0.24), 0 0.2em 0.8em rgba(0, 0, 0, 0.28); }
+.ak-kok .ak-oge.ak-gorev:before { background: #FFD166; }
+.ak-kok .ak-oge.ak-bilgi:before { background: #9FB3CC; }
+.ak-kok .ak-oge-metin { font-weight: 650; }
+.ak-kok .ak-gorev .ak-oge-metin { color: #FFE3A3; }
+.ak-kok .ak-oge-aciklama { font-size: 0.64em; font-weight: 500; margin-top: 0.22em; color: #D6E4F2; opacity: 0.92; }
+
+/* altyazı: ekranın %70'i genişlikte, alttan (ya da üstten) sabit; büyüme hep dışarıya doğru olur */
+.ak-kok .ak-yazi { position: absolute; left: 15%; width: 70%; display: none; flex-direction: column; align-items: center; }
+.ak-kok .ak-yazi.ak-ust { flex-direction: column-reverse; }
+.ak-kok .ak-sahne { display: grid; width: 100%; justify-items: center; align-items: end; }
+.ak-kok .ak-ust .ak-sahne { align-items: start; }
+/* çapraz geçişte eski ve yeni kutu aynı hücrede üst üste durur: taban çizgisi oynamaz */
+.ak-kok .ak-yazi-kutu { grid-area: 1 / 1; box-sizing: border-box; max-width: 100%; padding: 0.36em 0.9em 0.44em;
+  border-radius: 0.5em; text-align: center; font-weight: 600; line-height: 1.34; letter-spacing: 0.01em;
+  text-shadow: 0 0.03em 0.12em rgba(0, 0, 0, 0.75), 0 0 0.02em rgba(0, 0, 0, 0.9);
+  box-shadow: inset 0 0 0 0.03em rgba(255, 255, 255, 0.07), 0 0.22em 0.9em rgba(0, 0, 0, 0.32); opacity: 0; }
+.ak-kok .ak-metin { display: block; margin: 0 auto; text-wrap: balance; overflow-wrap: normal; word-break: normal; max-width: 100%; }
+/* konuşan: küçük, kalın, renkli ad; adın önündeki ince çizgi onu metinden ayırır */
+.ak-kok .ak-konusan { display: block; font-size: 0.58em; font-weight: 750; letter-spacing: 0.03em;
+  margin-bottom: 0.12em; opacity: 0.98; }
+.ak-kok .ak-asil { display: block; font-size: 0.56em; font-weight: 450; color: #DCE6F2; opacity: 0.8; margin-top: 0.3em; }
+/* önceki satır: üstte, küçük ve soluk (saydamlığı JS verir: 0.5) */
+.ak-kok .ak-onceki { display: none; max-width: 100%; margin-bottom: 0.4em; text-align: center; font-size: 0.6em; font-weight: 550;
+  line-height: 1.3; opacity: 0; color: #FFFFFF; text-shadow: 0 0.05em 0.2em rgba(0, 0, 0, 0.9); }
+.ak-kok .ak-ust .ak-onceki { margin-bottom: 0; margin-top: 0.4em; }
+.ak-kok .ak-onceki-metin { display: inline-block; padding: 0.16em 0.7em 0.2em; border-radius: 0.5em; background: rgba(8, 12, 20, 0.5); }
+.ak-kok .ak-durum { position: absolute; right: 1.5%; top: 2%; padding: 0.4em 0.9em 0.42em; border-radius: 2em;
+  background: rgba(11, 21, 36, 0.9); color: #FFD166; display: none; font-weight: 600;
+  box-shadow: inset 0 0 0 0.05em rgba(255, 209, 102, 0.35), 0 0.2em 0.8em rgba(0, 0, 0, 0.3); }
+
+/* JS dengesi zorlandığında (sınama) CSS dengesi kapalı */
+.ak-kok.ak-js-denge .ak-metin { text-wrap: wrap; }
+
+/* hareketi azalt: hiçbir geçiş yok, her şey anında */
+.ak-kok.ak-azalt .ak-yazi-kutu, .ak-kok.ak-azalt .ak-onceki, .ak-kok.ak-azalt .ak-oge { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ak-kok .ak-yazi-kutu, .ak-kok .ak-onceki, .ak-kok .ak-oge { transition: none !important; }
+}

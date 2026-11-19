@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Windows için: testler -> PyInstaller paketi -> Inno Setup kurucusu -> SHA256SUMS.txt -> (etikette) GitHub Sürümü.
+# Sürüm yayınlamak: pyproject.toml ve kopru/__init__.py içindeki sürümü yükseltin, sonra `git tag v0.2.0 && git push --tags`.
+# Hiçbir sunucu kullanılmaz; her şey GitHub Actions ve GitHub Releases üzerindedir.
+name: Windows paketi
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    # Geliştirme dalında da kurucu üretilsin ki gerçekten derlendiği görülsün (yayın yapılmaz).
+    branches: ["claude/**"]
+    paths: ["paketleme/**", "kopru/**", "pyproject.toml", "requirements*.txt", ".github/workflows/windows-paket.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Bağımlılıkları kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-windows.txt
+          pip install -e ".[tv,test]"
+      - name: Testleri çalıştır
+        run: python -m pytest -q
+
+  paket:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Sürümü belirle (pyproject.toml / etiket)
+        id: surum
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $s = python paketleme/surum.py $env:GITHUB_REF_NAME } else { $s = python paketleme/surum.py }
+          if ($LASTEXITCODE -ne 0) { throw "Sürüm numaraları uyuşmuyor (ayrıntı yukarıda)." }
+          "surum=$s" >> $env:GITHUB_OUTPUT
+      - name: Bağımlılıkları kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-windows.txt
+          pip install pyinstaller
+          pip install -e ".[tv]"
+      - name: Paketle (PyInstaller)
+        run: >
+          pyinstaller --noconfirm --name AltYaziKoprusu --onedir
+          --paths .
+          --add-data "kopru/web;kopru/web"
+          --add-data "tv/paketler;tv/paketler"
+          --collect-submodules kopru
+          --hidden-import paramiko
+          --collect-all winocr
+          --collect-submodules winrt
+          --hidden-import keyring.backends.Windows
+          paketleme/baslat.py
+      - name: Paketlenmiş program açılıyor mu (duman testi)
+        shell: bash
+        run: |
+          ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --tarayici-acma > sunucu.log 2>&1 &
+          ok=0
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8642/kopru/merhaba && ok=1 && break; sleep 1; done
+          cat sunucu.log || true
+          taskkill //IM AltYaziKoprusu.exe //F || true
+          test "$ok" = 1
+      - name: Paketin içinde ekran yazısı okuma çalışıyor mu
+        shell: bash
+        run: ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --ozdenetim
+      - name: Lisans dosyalarını ekle
+        shell: pwsh
+        run: Copy-Item LICENSE,NOTICE,README.md,GIZLILIK.md dist/AltYaziKoprusu/ -ErrorAction SilentlyContinue
+      - name: Inno Setup kur
+        run: choco install innosetup -y --no-progress
+      - name: Kurucuyu üret (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          & $iscc "/DSurum=${{ steps.surum.outputs.surum }}" paketleme\windows\kurulum.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup derlemesi başarısız." }
+      - name: Sürüm dosyalarını hazırla (kurucu, taşınabilir zip, SHA256SUMS.txt)
+        shell: pwsh
+        run: |
+          $v = '${{ steps.surum.outputs.surum }}'
+          New-Item -ItemType Directory -Force dist/yayin | Out-Null
+          Copy-Item "dist/kurulum/AltYaziKoprusu-Kur-$v.exe" dist/yayin/
+          Compress-Archive -Path dist/AltYaziKoprusu -DestinationPath "dist/yayin/AltYaziKoprusu-Tasinabilir-$v.zip"
+          # sha256sum biçimi: "<küçük harfli özet>  <dosya adı>" (güncelleyici bu dosyayı okur)
+          $satirlar = Get-ChildItem dist/yayin -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          }
+          [IO.File]::WriteAllText((Join-Path (Get-Location) 'dist/yayin/SHA256SUMS.txt'), (($satirlar -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
+          Get-Content dist/yayin/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AltYaziKoprusu-Windows
+          path: dist/yayin/*
+
+  yayinla:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: paket
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: AltYaziKoprusu-Windows
+          path: yayin
+      - name: GitHub Sürümünü oluştur
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          files: |
+            yayin/AltYaziKoprusu-Kur-*.exe
+            yayin/AltYaziKoprusu-Tasinabilir-*.zip
+            yayin/SHA256SUMS.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

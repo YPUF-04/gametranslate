@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Kurulum denemesi</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; color: #F3F6FA; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(1100px 620px at 50% 20%, rgba(46, 196, 182, 0.18), rgba(46, 196, 182, 0) 65%), linear-gradient(180deg, #0E1A2E 0%, #08111F 100%); }
+  .orta { position: absolute; left: 0; right: 0; top: 300px; text-align: center; }
+  .orta svg { width: 160px; height: 160px; border-radius: 42px; box-shadow: 0 30px 80px -30px rgba(46, 196, 182, 0.7); }
+  h1 { margin: 56px 0 18px; font-size: 92px; font-weight: 700; letter-spacing: -2px; }
+  p { margin: 0; font-size: 38px; color: #B4C3D7; }
+</style>
+</head>
+<body>
+<div class="orta">
+  <svg viewBox="0 0 64 64" aria-hidden="true">
+    <defs><linearGradient id="z" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1A3256"/><stop offset="1" stop-color="#0C1729"/></linearGradient></defs>
+    <rect width="64" height="64" rx="16" fill="url(#z)"/>
+    <path d="M8 33 A30 30 0 0 1 56 33" fill="none" stroke="#2EC4B6" stroke-width="5" stroke-linecap="round"/>
+    <path d="M20 26 V36 M32 23 V36 M44 26 V36" stroke="#2EC4B6" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+    <rect x="10" y="37" width="44" height="11" rx="5.5" fill="#FFD166"/>
+  </svg>
+  <h1>Merhaba! Kurulum çalışıyor.</h1>
+  <p id="alt">TV’ye uygulama kurmak sorunsuz. Şimdi asıl uygulamayı kurabilirsin.</p>
+</div>
+<script src="marka.js"></script>
+<script>
+  if (window.MARKA && window.MARKA.ad) {
+    document.title = window.MARKA.ad + ' deneme';
+    document.getElementById('alt').textContent = 'TV’ye uygulama kurmak sorunsuz. Şimdi asıl ' + window.MARKA.ad + ' uygulamasını kurabilirsin.';
+  }
+</script>
+</body>
+</html>

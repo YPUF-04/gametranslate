@@ -1,0 +1,23 @@
+AltYazıKöprüsü (AltyaziKoprusu)
+Copyright (C) 2026 AltYazıKöprüsü katkıcıları
+
+Bu program özgür yazılımdır: GNU Affero Genel Kamu Lisansı sürüm 3
+(AGPL-3.0-only, bkz. LICENSE) şartlarıyla dağıtabilir ve değiştirebilirsiniz.
+Ağ üzerinden sunulan değiştirilmiş sürümler de kaynak kodunu sunmak zorundadır
+(AGPL-3.0, madde 13).
+
+------------------------------------------------------------------------
+Teşekkür ve esinlenme / Acknowledgements
+------------------------------------------------------------------------
+Bu projenin tüm kodu AltYazıKöprüsü katkıcıları tarafından sıfırdan yazılmıştır.
+Fikir olarak şu açık kaynak projelerden esinlenilmiştir; onlara teşekkür ederiz:
+
+  GameTranslator — Copyright (C) 2026 Sefflex
+  https://gitlab.com/sefflex/GameTranslator  (AGPL-3.0)
+
+  CouchSubs — Copyright (C) 2026 Sinan Yorulmaz
+  https://github.com/yorulmazsinan/couchsubs  (AGPL-3.0)
+
+Kod, arayüz, adlandırma, veri/alan adları, bağlantı biçimi ve görsel tasarım
+AltYazıKöprüsü'ne aittir.
+Üçüncü taraf bileşenler: THIRD-PARTY-NOTICES.md

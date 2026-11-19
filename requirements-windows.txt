@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+-r requirements.txt
+winocr
+pywin32
+keyring>=24
+paramiko>=3.4,<4

@@ -1,0 +1,147 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# macOS için: testler -> PyInstaller .app -> duman testi -> .dmg -> SHA256SUMS-mac.txt -> (etikette) GitHub Sürümü.
+# Uygulama imzasız/noter onaysız (ücretli Apple hesabı yok); yalnız "ad hoc" imzalanır. Ayrıntı: docs/kurulum/mac.md
+# Hiçbir sunucu kullanılmaz; her şey GitHub Actions ve GitHub Releases üzerindedir.
+name: macOS paketi
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    branches: ["claude/**"]
+    paths: ["paketleme/**", "kopru/**", "pyproject.toml", "requirements*.txt", ".github/workflows/mac-paket.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Bağımlılıkları kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[tv,ocr-mac,test]"
+      - name: Testleri çalıştır
+        run: python -m pytest -q
+
+  paket:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mimari: arm64        # Apple Silicon (M1/M2/M3/M4)
+            kosucu: macos-latest
+          - mimari: x86_64       # Intel (macos-13 kapatıldı; yerine macos-15-intel)
+            kosucu: macos-15-intel
+    runs-on: ${{ matrix.kosucu }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Sürümü belirle (pyproject.toml / etiket)
+        id: surum
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then s=$(python paketleme/surum.py "$GITHUB_REF_NAME"); else s=$(python paketleme/surum.py); fi
+          echo "surum=$s" >> "$GITHUB_OUTPUT"
+      - name: Bağımlılıkları kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -e ".[tv,ocr-mac]"
+      - name: Paketle (PyInstaller .app)
+        run: >
+          pyinstaller --noconfirm --windowed --name AltYaziKoprusu
+          --paths .
+          --osx-bundle-identifier com.altyazikoprusu.mac
+          --add-data "kopru/web:kopru/web"
+          --add-data "tv/paketler:tv/paketler"
+          --collect-submodules kopru
+          --collect-submodules ocrmac
+          --hidden-import paramiko
+          --hidden-import keyring.backends.macOS
+          --hidden-import Vision
+          --hidden-import Quartz
+          --hidden-import Foundation
+          --hidden-import objc
+          --collect-all ocrmac
+          paketleme/baslat.py
+      - name: Info.plist'i düzelt, lisansları ekle, adlandır
+        run: |
+          python paketleme/mac/bilgi_ekle.py dist/AltYaziKoprusu.app "${{ steps.surum.outputs.surum }}"
+          cp LICENSE NOTICE README.md GIZLILIK.md dist/AltYaziKoprusu.app/Contents/Resources/ 2>/dev/null || true
+          # Çalıştırılabilir dosya adı ASCII kalır (CFBundleExecutable); yalnız görünen .app adı Türkçe olur.
+          mv dist/AltYaziKoprusu.app "dist/AltYazıKöprüsü.app"
+      - name: Ad hoc imzala (Apple Silicon'da açılması için)
+        run: |
+          codesign --force --deep -s - "dist/AltYazıKöprüsü.app"
+          codesign --verify --deep --verbose=2 "dist/AltYazıKöprüsü.app"
+      - name: Duman testi (uygulama açılıyor ve yanıt veriyor mu?)
+        run: |
+          "dist/AltYazıKöprüsü.app/Contents/MacOS/AltYaziKoprusu" --tarayici-acma > duman.log 2>&1 &
+          PID=$!
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8642/kopru/merhaba; then ok=1; echo; break; fi
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 1
+          done
+          echo "---- günlük ----"; cat duman.log
+          kill "$PID" 2>/dev/null || true
+          if [ "$ok" != 1 ]; then echo "HATA: 30 sn içinde /kopru/merhaba yanıt vermedi." >&2; exit 1; fi
+      - name: Paketin içinde ekran yazısı okuma çalışıyor mu
+        run: '"dist/AltYazıKöprüsü.app/Contents/MacOS/AltYaziKoprusu" --ozdenetim'
+      - name: .dmg üret (UDZO, Uygulamalar kısayoluyla)
+        run: |
+          bash paketleme/mac/dmg_yap.sh "dist/AltYazıKöprüsü.app" \
+            "dist/yayin/AltYaziKoprusu-${{ steps.surum.outputs.surum }}-mac-${{ matrix.mimari }}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AltYaziKoprusu-mac-${{ matrix.mimari }}
+          path: dist/yayin/*.dmg
+
+  ozet:
+    needs: paket
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: AltYaziKoprusu-mac-*
+          merge-multiple: true
+          path: yayin
+      - name: SHA256SUMS-mac.txt üret
+        run: |
+          cd yayin
+          sha256sum *.dmg > SHA256SUMS-mac.txt
+          cat SHA256SUMS-mac.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AltYaziKoprusu-macOS
+          path: yayin/*
+
+  yayinla:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: ozet
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: AltYaziKoprusu-macOS
+          path: yayin
+      - name: GitHub Sürümüne ekle
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          files: |
+            yayin/AltYaziKoprusu-*-mac-*.dmg
+            yayin/SHA256SUMS-mac.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

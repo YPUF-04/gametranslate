@@ -1,0 +1,25 @@
+name: Öneri
+description: Bir fikriniz mi var? Yeni özellik ya da iyileştirme önerin.
+title: "[Öneri] "
+labels: ["öneri"]
+body:
+  - type: textarea
+    id: fikir
+    attributes:
+      label: Ne istiyorsunuz?
+      description: Kısaca anlatın. Hangi oyunda ya da hangi durumda işinize yarar?
+    validations:
+      required: true
+  - type: textarea
+    id: neden
+    attributes:
+      label: Şu an ne yapıyorsunuz?
+      description: Bunu şimdi nasıl çözüyorsunuz, neden yetersiz kalıyor? (isteğe bağlı)
+  - type: dropdown
+    id: onem
+    attributes:
+      label: Sizin için ne kadar önemli?
+      options:
+        - Olsa güzel olur
+        - Çok işime yarar
+        - Bu olmadan kullanamıyorum

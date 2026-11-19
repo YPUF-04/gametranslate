@@ -1,0 +1,86 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* TV ekranları: 1920×1080, kumanda ile kullanılır. Koyu, sakin, büyük; odak her zaman açıkça görünür. */
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0A1424; color: #F3F6FA;
+  font-family: "AYK Yazi", "Segoe UI", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+#hdmi { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: transparent; }
+#hdmi .hdmi-video { width: 1920px; height: 1080px; }
+#kok { z-index: 2; }
+.ekran { display: none; position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; box-sizing: border-box;
+  padding: 96px 160px; z-index: 5;
+  background:
+    radial-gradient(1100px 620px at 8% -10%, rgba(46, 196, 182, 0.16), rgba(46, 196, 182, 0) 65%),
+    radial-gradient(900px 600px at 100% 0%, rgba(61, 96, 160, 0.28), rgba(61, 96, 160, 0) 62%),
+    linear-gradient(180deg, #0E1A2E 0%, #08111F 100%); }
+.ekran.sade { background: transparent; z-index: 4; pointer-events: none; padding: 0; }
+.ekran.acik { display: block; }
+#panel { background: rgba(10, 19, 34, 0.94); z-index: 9; }
+body.demo { background: #16263D; }
+body.demo.calisiyor #hdmi { background:
+  radial-gradient(900px 500px at 70% 30%, rgba(255, 190, 120, 0.18), rgba(255, 190, 120, 0) 70%),
+  linear-gradient(160deg, #24395A 0%, #12213A 55%, #0A1322 100%); }
+
+/* marka satırı (ana ekran) */
+.tv-marka { display: flex; align-items: center; margin-bottom: 72px; }
+.tv-logo { width: 96px; height: 96px; margin-right: 28px; border-radius: 26px; box-shadow: 0 18px 50px -18px rgba(46, 196, 182, 0.6); }
+.tv-ad { font-size: 46px; font-weight: 760; letter-spacing: -0.5px; line-height: 1.1; }
+.tv-slogan { font-size: 30px; color: #B4C3D7; margin-top: 6px; }
+
+h1 { font-size: 68px; margin: 0 0 20px; color: #FFFFFF; font-weight: 760; letter-spacing: -1px; line-height: 1.1; }
+.yardim { font-size: 34px; color: #B4C3D7; margin: 0 0 36px; max-width: 1500px; line-height: 1.4; }
+.hata { font-size: 34px; color: #FFD166; margin: 0 0 28px; max-width: 1500px; min-height: 46px; line-height: 1.35; }
+.satir { margin-top: 20px; }
+
+/* arama göstergesi: dönen yay (yalnız transform) */
+#ara-durum.araniyor { position: relative; padding-left: 64px; }
+#ara-durum.araniyor:before { content: ""; position: absolute; left: 0; top: 50%; width: 36px; height: 36px; margin-top: -21px; box-sizing: border-box;
+  border-radius: 50%; border: 5px solid rgba(46, 196, 182, 0.22); border-top-color: #2EC4B6; -webkit-animation: don 0.9s linear infinite; animation: don 0.9s linear infinite; }
+
+/* düğmeler: odakta büyür ve parlar (yumuşak geçiş) */
+.dugme { position: relative; font: inherit; font-size: 38px; font-weight: 650; color: #F3F6FA; background: #172B4A;
+  border: 4px solid rgba(255, 255, 255, 0.06); border-radius: 22px; padding: 22px 46px; margin: 0 24px 24px 0; min-width: 200px; cursor: pointer; outline: none;
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(.2, .8, .2, 1), background-color 0.2s, border-color 0.2s, box-shadow 0.25s;
+  transition: transform 0.2s cubic-bezier(.2, .8, .2, 1), background-color 0.2s, border-color 0.2s, box-shadow 0.25s; }
+.dugme.buyuk { font-size: 52px; font-weight: 760; padding: 44px 56px; min-width: 300px; }
+.dugme:focus, .dugme.odak { border-color: #2EC4B6; background: #1F3E66; color: #FFFFFF;
+  -webkit-transform: scale(1.05); transform: scale(1.05);
+  box-shadow: 0 0 0 6px rgba(46, 196, 182, 0.28), 0 14px 36px -14px rgba(46, 196, 182, 0.6); }
+.liste { margin: -24px -48px -36px; padding: 24px 48px 60px; max-height: 490px; overflow-y: auto; overflow-x: hidden; }
+.liste::-webkit-scrollbar { width: 0; height: 0; }
+.liste .dugme { display: block; text-align: left; width: 980px; box-sizing: border-box; padding: 28px 46px; font-size: 40px;
+  background: #13253F; border-color: rgba(255, 209, 102, 0.0); }
+.liste .dugme:focus { -webkit-transform: scale(1.03); transform: scale(1.03); }
+.liste .dugme .pc-adres { display: block; font-size: 28px; font-weight: 450; color: #B4C3D7; margin-top: 6px; }
+
+.adres-alan { font-size: 84px; letter-spacing: 6px; font-weight: 760; background: #08111F; border: 3px solid #2A4467; border-radius: 22px; padding: 18px 40px;
+  width: 760px; min-height: 100px; margin-bottom: 24px; color: #FFD166; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+.tus-izgara { width: 780px; margin-bottom: 8px; font-size: 0; }
+.tus-izgara .dugme { width: 236px; min-width: 0; margin: 0 12px 12px 0; padding: 14px 0; text-align: center; font-size: 46px; }
+
+/* "OK'a bas" gibi küçük ipuçları: altta sakin bir hap */
+.ipucu { position: absolute; left: 0; right: 0; bottom: 30px; text-align: center; font-size: 28px; color: #D6E1EE; opacity: 0;
+  -webkit-transition: opacity 0.4s; transition: opacity 0.4s; }
+.ipucu.goster { opacity: 0.92; }
+.ipucu span { background: rgba(11, 21, 36, 0.88); padding: 10px 26px; border-radius: 40px; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.08); }
+.buyuk-hata { position: absolute; left: 160px; right: 160px; top: 380px; text-align: center; font-size: 44px; background: rgba(11, 21, 36, 0.96);
+  padding: 44px; border-radius: 28px; display: none; width: auto; box-shadow: inset 0 0 0 3px rgba(255, 209, 102, 0.35); }
+
+.bilgi { border-collapse: collapse; font-size: 38px; margin-bottom: 28px; }
+.bilgi th { text-align: left; color: #6BE3D7; padding: 14px 60px 14px 0; font-weight: 650; white-space: nowrap; }
+.bilgi td { padding: 14px 0; max-width: 1100px; border-bottom: 2px solid rgba(255, 255, 255, 0.06); }
+
+/* açılışta nazik giriş: başlık, metin ve düğmeler sırayla belirir */
+.ekran.acik > * { -webkit-animation: gir 0.5s cubic-bezier(.2, .8, .2, 1) both; animation: gir 0.5s cubic-bezier(.2, .8, .2, 1) both; }
+.ekran.acik > *:nth-child(2) { -webkit-animation-delay: 0.06s; animation-delay: 0.06s; }
+.ekran.acik > *:nth-child(3) { -webkit-animation-delay: 0.12s; animation-delay: 0.12s; }
+.ekran.acik > *:nth-child(n+4) { -webkit-animation-delay: 0.18s; animation-delay: 0.18s; }
+.ekran.sade.acik > * { -webkit-animation: none; animation: none; }
+@-webkit-keyframes gir { from { opacity: 0; -webkit-transform: translateY(18px); } to { opacity: 1; -webkit-transform: none; } }
+@keyframes gir { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@-webkit-keyframes don { to { -webkit-transform: rotate(360deg); } }
+@keyframes don { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ekran.acik > *, #ara-durum.araniyor:before { -webkit-animation: none !important; animation: none !important; }
+  .dugme, .ipucu { -webkit-transition: none !important; transition: none !important; }
+}
+

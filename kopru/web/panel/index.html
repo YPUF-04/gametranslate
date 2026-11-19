@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Altyazı</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230E1A2B'/%3E%3Cpath d='M8 33 A30 30 0 0 1 56 33' fill='none' stroke='%232EC4B6' stroke-width='6' stroke-linecap='round'/%3E%3Crect x='10' y='37' width='44' height='12' rx='6' fill='%23FFD166'/%3E%3C/svg%3E">
+<link rel="preload" href="/statik/yazi-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/panel/panel.css">
+<script>
+  /* tercihleri ilk boyamadan önce uygula: sayfa titremesin */
+  (function () { var d = document.documentElement, v;
+    try { v = localStorage.getItem('buyuk_yazi'); if (v === '1') d.classList.add('buyuk-yazi');
+      v = localStorage.getItem('hareket_azalt'); if (v === '1') d.classList.add('hareket-az'); else if (v === '0') d.classList.add('hareket-acik');
+    } catch (e) { /* özel pencere: varsayılanlar */ } }());
+</script>
+</head>
+<body>
+<a class="atla-link" href="#ana" data-i="genel.icerige_gec"></a>
+<header class="ust">
+  <div class="marka">
+    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="logo-zemin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1A3256"/><stop offset="1" stop-color="#0C1729"/></linearGradient>
+        <linearGradient id="logo-kemer" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2EC4B6"/><stop offset="1" stop-color="#6BE3D7"/></linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="16" fill="url(#logo-zemin)"/>
+      <rect x=".75" y=".75" width="62.5" height="62.5" rx="15.25" fill="none" stroke="#FFFFFF" stroke-opacity=".08" stroke-width="1.5"/>
+      <path d="M8 33 A30 30 0 0 1 56 33" fill="none" stroke="url(#logo-kemer)" stroke-width="5" stroke-linecap="round"/>
+      <path d="M20 26 V36 M32 23 V36 M44 26 V36" stroke="#2EC4B6" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+      <rect x="10" y="37" width="44" height="11" rx="5.5" fill="#FFD166"/>
+      <rect x="17" y="41" width="17" height="3" rx="1.5" fill="#0C1729" opacity=".72"/>
+      <rect x="37" y="41" width="10" height="3" rx="1.5" fill="#0C1729" opacity=".72"/>
+    </svg>
+    <span class="ad" id="marka-ad"></span>
+  </div>
+  <div class="ust-sag">
+    <details class="tercih" id="tercih">
+      <summary class="tercih-ac" id="tercih-ac"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 19 9.5 5h1L16 19M6.2 14h7.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 11.5h4M19 9.5v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span data-i="tercih.dugme"></span></summary>
+      <div class="tercih-pano" role="group" aria-labelledby="tercih-ac">
+        <label class="anahtar"><span class="ac"><span data-i="tercih.buyuk"></span><small data-i="tercih.buyuk.k"></small></span><span class="sw"><input type="checkbox" id="buyuk-yazi"><i></i></span></label>
+        <label class="anahtar"><span class="ac"><span data-i="tercih.hareket"></span><small data-i="tercih.hareket.k"></small></span><span class="sw"><input type="checkbox" id="hareket-azalt"><i></i></span></label>
+      </div>
+    </details>
+    <div class="dilsecim" role="group" aria-label="Dil / Language">
+      <button type="button" data-dil="tr" class="dil-dugme" lang="tr" aria-label="TR, Türkçe">TR</button>
+      <button type="button" data-dil="en" class="dil-dugme" lang="en" aria-label="EN, English">EN</button>
+    </div>
+  </div>
+</header>
+<div id="afis" class="afis" hidden role="alert"></div>
+<main id="ana" tabindex="-1">
+  <p class="yukleniyor"><span class="yukleniyor-cizgi" aria-hidden="true"></span></p>
+</main>
+<footer class="alt"><span data-i="alt.bilgi"></span></footer>
+<script src="/panel/marka.js"></script>
+<script src="/panel/panel.js"></script>
+</body>
+</html>
