@@ -267,3 +267,26 @@ Aynı `yazi`/`ekran`/`gorunum` olaylarını ve §7.2 akıcılık kurallarını k
 ### 10.4 Çevrimdışı motor
 argostranslate yerine doğrudan Argos dil dosyası (`.argosmodel` = CTranslate2 modeli + SentencePiece) indirilir ve `ctranslate2` + `sentencepiece` ile çalıştırılır (torch/stanza gerekmez, pakete sığar).
 Dizin: `https://raw.githubusercontent.com/argosopentech/argospm-index/main/index.json` (en→tr örneği: `https://argos-net.com/v1/translate-en_tr-1_5.argosmodel`). İndirme yalnız kullanıcı "İndir"e basınca; ayar dizinine `modeller/argos/<from>_<to>/` olarak açılır.
+
+## 11. Gerçek kullanım düzeltmeleri (sürüm 0.6)
+
+### 11.1 Kendi yazısını okumama (geri besleme döngüsü)
+- Ekran katmanı penceresi ekran yakalamadan HARİÇ tutulur: Windows'ta `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE=0x11)` (Win10 2004+); olmazsa katman kutularının bulunduğu alanlar okumadan önce karartılır (maske).
+- Ek güvenlik: son 60 sn'de yayınlanan çevirilere çok benzeyen (≥%80) okunan satırlar atılır.
+
+### 11.2 Yalnız seçilen pencere
+- `kaynak = "pencere:<hwnd>"` iken yalnız o pencerenin içi yakalanır (Windows: PrintWindow PW_RENDERFULLCONTENT, olmazsa pencere dikdörtgeni kırpılır). Katman da o pencerenin üstüne konumlanır (koordinatlar pencereye göre).
+
+### 11.3 Okuma süzgeci
+- En az 2 harf içermeyen, çoğu rakam/simge olan (HUD sayıları: "358", "30 30"), tek karakterlik veya aynı kelimenin tekrarından oluşan satırlar çevrilmez.
+- Otomatik modda altyazı yalnız ekranın alt-orta bandından alınır; bölge varsa yalnız `altyazi` türündeki bölgeden.
+
+### 11.4 Bölge başına "nereye yazayım"
+`bolgeler[i]` yeni alanlar:
+- `hedef`: `"ustune"` (aynı yerin üstüne, varsayılan görev/menü için) | `"altyazi"` (alttaki altyazı çubuğuna; altyazı türü için varsayılan) | `{"x","y","g","y2"}` (kullanıcının çizdiği hedef kutu)
+- `olcek`: 0.6–2.0 (yazı büyüklüğü çarpanı, varsayılan 1.0)
+`ekran` olayındaki öğelere `hedef` kutusu ve `boyut_px` (1080p'ye göre önerilen yazı boyu) eklenir.
+
+### 11.5 Ekran öğesi çizimi
+- Yazı boyu kaynak yazının yüksekliğinden hesaplanır (1080p'de 14–30 px, `olcek` ve genel `gorunum.ekran_olcek` ile çarpılır).
+- Kelime ortasından/harf harf ASLA bölünmez; kutu metne göre genişler (en çok ekran genişliğinin %45'i), sığmazsa yazı küçülür (en az 12 px).
