@@ -330,7 +330,8 @@ def _b(**ek):
 def test_bolge_dogrulama():
     assert ayarlar.bolgeler_gecerli([])
     assert ayarlar.bolgeler_gecerli([_b(), _b(tur="ust_yazi"), _b(tur="diger")])
-    assert not ayarlar.bolgeler_gecerli([_b()] * 4)                    # en çok 3
+    assert ayarlar.bolgeler_gecerli([_b()] * 6)
+    assert not ayarlar.bolgeler_gecerli([_b()] * 7)                    # en çok 6
     assert not ayarlar.bolgeler_gecerli([_b(x=-0.1)])
     assert not ayarlar.bolgeler_gecerli([_b(x=0.8, g=0.3)])             # ekran dışına taşar
     assert not ayarlar.bolgeler_gecerli([_b(g=0.01)])                   # çok küçük

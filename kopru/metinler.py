@@ -200,12 +200,29 @@ HATALAR: dict[str, dict[str, str]] = {
     "dublaj_eleven_hata": {
         "tr": "ElevenLabs isteği başarısız oldu, ses kimliğini ve hesabınızı kontrol edip tekrar deneyin.",
         "en": "The ElevenLabs request failed, check the voice ID and your account and try again."},
+    "yerel_dil_dosyasi_yok": {
+        "tr": "Çevrimdışı çeviri için dil dosyası henüz indirilmedi. 'İndir' düğmesine basın (yaklaşık 100 MB, bir kez).",
+        "en": "The offline language file isn't downloaded yet. Press 'Download' (about 100 MB, once)."},
+    "yerel_bilesen_yok": {
+        "tr": "Çevrimdışı çeviri bileşeni (ctranslate2 / sentencepiece) bu kurulumda yok; programı yeniden kurun ya da başka bir çeviri motoru seçin.",
+        "en": "The offline translation component (ctranslate2 / sentencepiece) is missing in this install; reinstall the program or pick another translation engine."},
+    "yerel_indirme_hata": {
+        "tr": "Dil dosyası indirilemedi. İnternet bağlantınızı ve boş disk alanını kontrol edip 'İndir' düğmesine tekrar basın.",
+        "en": "The language file could not be downloaded. Check your internet connection and free disk space, then press 'Download' again."},
+    "katman_destek_yok": {
+        "tr": "Bu bilgisayarda ekran katmanı için gereken Tk bileşeni yok; çeviriyi TV'de ya da tarayıcıda göstermeyi seçin.",
+        "en": "The Tk component needed for the on-screen overlay is missing on this computer; choose to show the translation on a TV or in a browser."},
+    "katman_coktu": {
+        "tr": "Ekran katmanı üst üste kapandı ve yeniden denenmedi; 'Deneme' düğmesine basarak tekrar başlatın ya da gösterimi TV/tarayıcıya alın.",
+        "en": "The screen overlay kept closing and was not retried; press 'Test' to start it again or switch to TV/browser display."},
     "sunucu_hatasi": {
         "tr": "Beklenmeyen bir sorun oluştu, programı yeniden başlatmayı deneyin.",
         "en": "Something unexpected went wrong, please try restarting the program."},
 }
 
 DIGER: dict[str, dict[str, str]] = {
+    "katman_deneme": {"tr": "Merhaba! Çeviriler burada, oyunun üstünde görünecek.",
+                      "en": "Hello! Translations will appear here, on top of the game."},
     "deneme_tr": {"tr": "Merhaba! Bu bir deneme altyazısıdır.", "en": "Hello! This is a test subtitle."},
     "tv_adres": {"tr": "TV'de bu adresi açın: {adres}", "en": "Open this address on the TV: {adres}"},
     "panel_adres": {"tr": "Kontrol paneli: {adres}", "en": "Control panel: {adres}"},

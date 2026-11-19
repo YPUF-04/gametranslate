@@ -11,3 +11,4 @@ node_modules/
 # Erisim kodu ozel anahtari: ASLA depoya girmez
 *.pem
 ozel_anahtar*
+paketleme/windows/surum-bilgisi.txt

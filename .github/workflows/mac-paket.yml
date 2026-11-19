@@ -58,6 +58,9 @@ jobs:
       - name: Paketle (PyInstaller .app)
         run: >
           pyinstaller --noconfirm --windowed --name AltYaziKoprusu
+          --icon paketleme/simge/uygulama.icns
+          --collect-all ctranslate2
+          --collect-all sentencepiece
           --paths .
           --osx-bundle-identifier com.altyazikoprusu.mac
           --add-data "kopru/web:kopru/web"
@@ -97,6 +100,10 @@ jobs:
           if [ "$ok" != 1 ]; then echo "HATA: 30 sn içinde /kopru/merhaba yanıt vermedi." >&2; exit 1; fi
       - name: Paketin içinde ekran yazısı okuma çalışıyor mu
         run: '"dist/AltYazıKöprüsü.app/Contents/MacOS/AltYaziKoprusu" --ozdenetim'
+      - name: Paketin içinde çevrimdışı çeviri çalışıyor mu (en->tr dil dosyasını indirir)
+        run: |
+          "dist/AltYazıKöprüsü.app/Contents/MacOS/AltYaziKoprusu" --ozdenetim-ceviri | tee ceviri.log
+          grep -q "OZDENETIM ceviri=" ceviri.log
       - name: .dmg üret (UDZO, Uygulamalar kısayoluyla)
         run: |
           bash paketleme/mac/dmg_yap.sh "dist/AltYazıKöprüsü.app" \

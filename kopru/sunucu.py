@@ -21,6 +21,7 @@ from . import dublaj as dublaj_mod
 from .dublaj.temel import DublajHatasi
 from .dublaj.yonetim import DublajYonetici
 from .isleme import Isleme
+from .katman import yonetim as katman_yonetim
 from .okuma import OkumaHatasi
 from .onbellek import Onbellek, normallestir
 from .tv_kurulum.lg import LgKurulum
@@ -30,6 +31,7 @@ from .yayin import Yayin, sse_bicim
 log = logging.getLogger("kopru.sunucu")
 WEB = Path(__file__).parent / "web"
 NABIZ_SN = 15.0
+KATMAN_SN = 2.0   # ekran katmanı süreç denetimi
 ERISIM_SN = 5.0   # süre sayacı adımı
 DURUM_SN = 20.0  # EventSource yorum satırını görmez; gerçek olay gerekir
 YEREL = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
@@ -66,7 +68,9 @@ class Durum:
                  kare_fabrika: Callable[[str], Callable[[], Any]] | None = None,
                  okuyucu_fabrika: Callable[[], Any] | None = None,
                  erisim: erisim_mod.Erisim | None = None,
-                 dublaj_fabrikalari: dict[str, Any] | None = None) -> None:
+                 dublaj_fabrikalari: dict[str, Any] | None = None,
+                 katman_baslatici: Callable[[list[str]], Any] | None = None,
+                 katman_destek: Callable[[], bool] | None = None) -> None:
         self.ayar = ayar
         self.erisim = erisim or erisim_mod.Erisim(lambda: self.ayar)
         self.yayin = Yayin()
@@ -87,6 +91,13 @@ class Durum:
         # Türkçe dublaj (PROTOKOL 9): varsayılan kapalı; yalnız ayar açıksa ve Başlat basılıysa çalışır
         self.dublaj = DublajYonetici(lambda: self.ayar, self.yayin, lambda: self.yonetici,
                                      **(dublaj_fabrikalari or {}))
+        # bilgisayar ekranı katmanı (PROTOKOL 10.3): ayrı süreç
+        self.katman = katman_yonetim.KatmanYonetici(
+            lambda: self.ayar, self.yayin, self.calisiyor, lambda: self.calisan_kapi or self.ayar["kapi"],
+            katman_baslatici, katman_destek)
+        self.yerel_indirme: dict[str, Any] = {"durum": "yok", "yuzde": 0, "mesaj": None, "ayrinti": None}
+        self._yerel_gorev: asyncio.Task | None = None
+        self._okuma_dene_okuyucu: Any = None
         self.yayin.yayinla("gorunum", ayar["gorunum"])
 
     @property
@@ -208,6 +219,7 @@ class Durum:
         self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
                                      "yedek": False})
         self.dublaj.senkronla(True)   # dublaj kapalıysa hiçbir şey yapmaz
+        self.katman.senkronla(kullanici_istegi=True)
 
     def _gorev_bitti(self, gorev: asyncio.Task) -> None:
         """Boru hattı kendi kendine ölürse sessizce "çalışıyor" görünmesin."""
@@ -224,6 +236,7 @@ class Durum:
         if self.gorev:
             self.gorev.cancel()
             self.gorev = None
+        self.katman.kapat()
         self.yayin.yayinla("yazi-sil", {})
         self.yayin.yayinla("ekran-sil", {})
         self.yayin.yayinla("durum", {"calisiyor": False, "motor": self.yonetici.birincil.ad,
@@ -235,7 +248,8 @@ class Durum:
         if gorev:
             gorev.cancel()
         self.dublaj.durdur()
-        gorevler = [t for t in (gorev, self.dublaj._gorev, self.dublaj._hazirla_gorevi) if t]
+        self.katman.kapat()
+        gorevler = [t for t in (gorev, self._yerel_gorev, self.dublaj._gorev, self.dublaj._hazirla_gorevi) if t]
         for t in gorevler:
             t.cancel()
         if gorevler:
@@ -302,12 +316,15 @@ async def kopru_katman(request: web.Request, handler: Callable[[web.Request], Aw
     return yanit
 
 
-def hata(kod: str, durum: int, request: web.Request | None = None) -> web.Response:
+def hata(kod: str, durum: int, request: web.Request | None = None, ayrinti: str | None = None) -> web.Response:
     dil = "tr"
     if request is not None:
         d = request.app.get(DURUM)
         dil = d.dil if d else "tr"
-    return web.json_response({"hata": kod, "mesaj": metinler.mesaj(kod, dil)}, status=durum)
+    govde: dict[str, Any] = {"hata": kod, "mesaj": metinler.mesaj(kod, dil)}
+    if ayrinti:
+        govde["ayrinti"] = ayrinti[:300]
+    return web.json_response(govde, status=durum)
 
 
 # ---------- TV uç noktaları ----------
@@ -467,6 +484,11 @@ def _dogrula(k: dict[str, Any]) -> bool:
             return False
         if "kalite" in k and k["kalite"] not in ("en_iyi", "dengeli", "hizli"):
             return False
+        if "gosterim" in k and k["gosterim"] not in ayarlar.GOSTERIMLER:
+            return False
+        if "katman_ekran" in k and not (isinstance(k["katman_ekran"], int) and not isinstance(k["katman_ekran"], bool)
+                                        and 1 <= k["katman_ekran"] <= ayarlar.EN_COK_EKRAN):
+            return False
         if "kaynak" in k and not (isinstance(k["kaynak"], str) and len(k["kaynak"]) <= 200):
             return False
         for alan in ("kaynak_dil", "hedef_dil"):   # istem metnine girer: kısa, harf/tire
@@ -530,6 +552,8 @@ async def api_ayarlar_yaz(request: web.Request) -> web.Response:
         d.dublaj.senkronla()
     if "gorunum" in kismi:
         d.yayin.yayinla("gorunum", d.ayar["gorunum"])
+    if {"gosterim", "katman_ekran"} & kismi.keys():
+        d.katman.senkronla(kullanici_istegi=True)   # gösterim/ekran değişti: aç, kapat ya da yeni ekrana taşı
     if {"motor", "yedek_motor", "modeller", "aktif_oyun", "kalite", "hafiza_izni"} & kismi.keys():
         d.yeniden_kur()
     return web.json_response({"tamam": True})
@@ -559,6 +583,19 @@ async def api_anahtar(request: web.Request) -> web.Response:
     return web.json_response({"tamam": True})
 
 
+def _bilinen_kod(e: BaseException) -> str | None:
+    """Hatanın bilinen bir kullanıcı mesajı kodu var mı (`e.kod` ya da ilk argüman)?"""
+    for aday in (getattr(e, "kod", None), e.args[0] if e.args else None):
+        if isinstance(aday, str) and aday in metinler.HATALAR:
+            return aday
+    return None
+
+
+def _ayrinti(e: BaseException) -> str:
+    ek = getattr(e, "ayrinti", None)
+    return f"{type(e).__name__}: {ek or e}"[:300]
+
+
 async def api_dene(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     v = await _json(request)
@@ -578,12 +615,16 @@ async def api_dene(request: web.Request) -> web.Response:
         if len(gelen) != 1:
             raise MotorHatasi("sayi")
         c = gelen[0]
-    except AnahtarHatasi:
-        return hata("anahtar_yok" if not anahtarlar.kayitli_mi(kod) else "anahtar_gecersiz", 400, request)
-    except AgHatasi:
-        return hata("ag_hatasi", 502, request)
-    except MotorHatasi:
-        return hata("motor_hatasi", 502, request)
+    except AnahtarHatasi as e:
+        return hata(_bilinen_kod(e) or ("anahtar_yok" if not anahtarlar.kayitli_mi(kod) else "anahtar_gecersiz"),
+                    400, request, _ayrinti(e))
+    except AgHatasi as e:
+        return hata(_bilinen_kod(e) or "ag_hatasi", 502, request, _ayrinti(e))
+    except MotorHatasi as e:
+        return hata(_bilinen_kod(e) or "motor_hatasi", 502, request, _ayrinti(e))
+    except Exception as e:   # noqa: BLE001 — gerçekten bilinmeyen: genel mesaj + ayrıntı
+        log.exception("Çeviri denemesi beklenmedik biçimde başarısız")
+        return hata("motor_hatasi", 502, request, _ayrinti(e))
     return web.json_response({"ceviri": c.metin, "sure_ms": int((time.monotonic() - t0) * 1000)})
 
 
@@ -969,6 +1010,138 @@ async def api_tv_lg_durum(request: web.Request) -> web.Response:
     return web.json_response(request.app[LG_KURULUM].durum())
 
 
+# ---------- ekran katmanı, okuma denemesi, çevrimdışı motor (PROTOKOL 10.2) ----------
+
+async def api_katman_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    ekranlar = await asyncio.to_thread(katman_yonetim.ekranlari_listele)
+    b = d.katman.bilgi()
+    cikti = {"destek": b["destek"], "acik": b["acik"], "ekran": d.ayar.get("katman_ekran", 1),
+             "ekranlar": ekranlar}
+    hata_kodu = b["hata"] if b["hata"] else (None if b["destek"] else "katman_destek_yok")
+    if hata_kodu:
+        cikti["hata"], cikti["mesaj"] = hata_kodu, metinler.mesaj(hata_kodu, d.dil)
+    return web.json_response(cikti)
+
+
+async def api_katman_dene(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    if not d.katman.destek():
+        return hata("katman_destek_yok", 400, request)
+    acik = await asyncio.to_thread(d.katman.dene)
+    if not acik:
+        return hata(d.katman.son_hata or "katman_destek_yok", 400, request)
+    sure = 4000
+    d.yayin.yayinla("yazi", {
+        "id": f"k{int(time.time())}", "metin": metinler.mesaj("katman_deneme", "tr"),
+        "asil": metinler.mesaj("katman_deneme", "en"), "tur": "altyazi",
+        "konusan": None, "sure_ms": sure, "devam": False})
+    return web.json_response({"tamam": True, "acik": True, "sure_ms": sure})
+
+
+def _okuma_dene(d: Durum) -> dict[str, Any]:
+    t0 = time.monotonic()
+    kare = d.kare_al()
+    if d._okuma_dene_okuyucu is None:
+        d._okuma_dene_okuyucu = d.okuyucu_olustur()
+    okuyucu = d._okuma_dene_okuyucu
+    satirlar = okuyucu.oku(kare)
+    return {"satirlar": [{"metin": s.metin, "x": round(s.x, 4), "y": round(s.y, 4),
+                          "g": round(s.g, 4), "y2": round(s.y2, 4)} for s in satirlar if s.metin.strip()],
+            "sure_ms": int((time.monotonic() - t0) * 1000),
+            "okuyucu": str(getattr(okuyucu, "ad", type(okuyucu).__name__))}
+
+
+async def api_okuma_dene(request: web.Request) -> web.Response:
+    """Bir kare al, bütün karede yazıları oku, normalize kutularıyla döndür (sihirbaz adım 2)."""
+    d: Durum = request.app[DURUM]
+    if not d.ayar.get("kaynak"):
+        return hata("kaynak_yok", 400, request)
+    try:
+        return web.json_response(await asyncio.to_thread(_okuma_dene, d))
+    except YakalamaHatasi as e:
+        return hata("yakalama_yok", 400, request, _ayrinti(e))
+    except OkumaHatasi as e:
+        d._okuma_dene_okuyucu = None
+        return hata("okuma_yok", 400, request, _ayrinti(e))
+    except Exception as e:   # noqa: BLE001
+        log.exception("Okuma denemesi başarısız")
+        d._okuma_dene_okuyucu = None
+        return hata("okuma_yok", 500, request, _ayrinti(e))
+
+
+_DIL = re.compile(r"[A-Za-z]{2,12}(-[A-Za-z0-9]{1,8})?")
+
+
+def _yerel_diller(d: Durum, v: dict[str, Any] | None = None) -> tuple[str, str]:
+    v = v or {}
+    kaynak = v.get("kaynak") or d.ayar.get("kaynak_dil") or "en"
+    if kaynak in ("otomatik", "auto"):
+        kaynak = "en"
+    hedef = v.get("hedef") or d.ayar.get("hedef_dil") or "tr"
+    if not (isinstance(kaynak, str) and _DIL.fullmatch(kaynak) and isinstance(hedef, str) and _DIL.fullmatch(hedef)):
+        return "en", "tr"
+    return kaynak, hedef
+
+
+async def _yerel_durum_json(d: Durum, kaynak: str, hedef: str) -> dict[str, Any]:
+    from .ceviri import yerel as yerel_mod
+    try:
+        b = dict(await asyncio.to_thread(yerel_mod.durum, kaynak, hedef))
+    except Exception as e:   # noqa: BLE001 — durum okunamadı: "hazır değil" de, ayrıntıyı ver
+        b = {"hazir": False, "boyut_mb": None, "ayrinti": _ayrinti(e)}
+    ind = dict(d.yerel_indirme)
+    if ind["durum"] == "yok" and isinstance(b.get("indirme"), dict):
+        ind = b["indirme"]
+    b["indirme"] = {"durum": ind.get("durum", "yok"), "yuzde": ind.get("yuzde", 0), "mesaj": ind.get("mesaj"),
+                    **({"ayrinti": ind["ayrinti"]} if ind.get("ayrinti") else {})}
+    b.setdefault("hazir", False)
+    b.setdefault("boyut_mb", None)
+    if not b["hazir"] and b["indirme"]["durum"] in ("yok", "hata") and not b["indirme"]["mesaj"]:
+        b["mesaj"] = metinler.mesaj("yerel_dil_dosyasi_yok", d.dil)
+    return b
+
+
+async def api_yerel_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    return web.json_response(await _yerel_durum_json(d, *_yerel_diller(d)))
+
+
+async def _yerel_hazirla(d: Durum, kaynak: str, hedef: str) -> None:
+    from .ceviri import yerel as yerel_mod
+    ind = d.yerel_indirme
+
+    def ilerleme(*a: Any) -> None:
+        try:
+            ind["yuzde"] = max(0, min(99, int(float(a[0]))))
+        except (IndexError, TypeError, ValueError):
+            pass
+    ind.update(durum="iniyor", yuzde=0, mesaj=None, ayrinti=None)
+    try:
+        await yerel_mod.hazirla(kaynak, hedef, ilerleme)
+        ind.update(durum="bitti", yuzde=100)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:   # noqa: BLE001
+        kod = _bilinen_kod(e) or ("yerel_bilesen_yok" if isinstance(e, ImportError) else "yerel_indirme_hata")
+        log.warning("Çevrimdışı dil dosyası hazırlanamadı: %s", e)
+        ind.update(durum="hata", mesaj=metinler.mesaj(kod, d.dil), ayrinti=_ayrinti(e), kod=kod)
+
+
+async def api_yerel_hazirla(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    try:
+        v = await request.json() if request.can_read_body else {}
+    except ValueError:
+        v = {}
+    kaynak, hedef = _yerel_diller(d, v if isinstance(v, dict) else {})
+    if not (d._yerel_gorev and not d._yerel_gorev.done()):
+        d._yerel_gorev = asyncio.get_running_loop().create_task(_yerel_hazirla(d, kaynak, hedef))
+        d.yerel_indirme.update(durum="iniyor", yuzde=0, mesaj=None, ayrinti=None)
+        await asyncio.sleep(0)
+    return web.json_response(await _yerel_durum_json(d, kaynak, hedef))
+
+
 def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None, lg_kurulum: Any = None,
                      **fabrikalar: Any) -> web.Application:
     app = web.Application(middlewares=[kopru_katman, yerel_katman])
@@ -1017,6 +1190,11 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_get("/api/tv/lg/durum", api_tv_lg_durum)
     r.add_get("/api/oneriler", api_oneriler_al)
     r.add_post("/api/oneriler", api_oneriler_yaz)
+    r.add_get("/api/ekran-katmani", api_katman_al)
+    r.add_post("/api/ekran-katmani/dene", api_katman_dene)
+    r.add_get("/api/okuma-dene", api_okuma_dene)
+    r.add_get("/api/motor/yerel", api_yerel_al)
+    r.add_post("/api/motor/yerel/hazirla", api_yerel_hazirla)
     r.add_get("/api/dublaj", api_dublaj_al)
     r.add_post("/api/dublaj", api_dublaj_yaz)
     r.add_post("/api/dublaj/hazirla", api_dublaj_hazirla)
@@ -1038,13 +1216,22 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
             except Exception:   # sayaç hatası (ör. disk) döngüyü öldürüp süreyi donduramaz
                 log.exception("Erişim sayacı adımı başarısız")
 
+    async def katman_dongusu() -> None:
+        while True:
+            await asyncio.sleep(KATMAN_SN)
+            try:
+                durum.katman.izle()
+            except Exception:   # noqa: BLE001
+                log.exception("Ekran katmanı denetimi başarısız")
+
     async def ac(_: web.Application) -> None:
-        await asyncio.to_thread(anahtarlar.isit)   # kasa ilk okuması olay döngüsünü tutmasın
+        await asyncio.to_thread(anahtarlar.isit)
+        app["katman_gorevi"] = asyncio.create_task(katman_dongusu())   # kasa ilk okuması olay döngüsünü tutmasın
         app["durum_gorevi"] = asyncio.create_task(durum_dongusu())
         app["erisim_gorevi"] = asyncio.create_task(erisim_dongusu())
 
     async def kapat(_: web.Application) -> None:
-        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi") if k in app]
+        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi", "katman_gorevi") if k in app]
         for t in arka:
             t.cancel()
         await asyncio.gather(*arka, return_exceptions=True)

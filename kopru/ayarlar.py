@@ -38,7 +38,7 @@ VARSAYILAN: dict[str, Any] = {
 
     "kaynak": "ekran:1",
     "bolge_altyazi": {"x": 0.1, "y": 0.72, "g": 0.8, "y2": 0.25},
-    "bolgeler": [],  # boş = otomatik; doluysa yalnız bu kareler okunur (en çok 3, PROTOKOL 7.1)
+    "bolgeler": [],  # boş = otomatik; doluysa yalnız bu kareler okunur (en çok 6, PROTOKOL 7.1/10.2)
     "ekrani_cevir": True,
     "kisa_aciklama": True,
     "ses_cevir": False,
@@ -46,14 +46,18 @@ VARSAYILAN: dict[str, Any] = {
     "kapi": 8642,
     "aktif_oyun": "varsayilan",
     "kurulum_tamam": False,
+    "gosterim": "bilgisayar",   # bilgisayar | tv | tarayici (PROTOKOL 10.2)
+    "katman_ekran": 1,          # ekran katmanının açılacağı ekran numarası (1..n)
     "cihaz": None,   # ps5 | xbox | pc | kart
     "tv": None,      # lg | samsung | androidtv | yok
     "gorunum": VARSAYILAN_GORUNUM,
 }
 
 
+GOSTERIMLER = ("bilgisayar", "tv", "tarayici")
+EN_COK_EKRAN = 16
 BOLGE_TURLERI = ("altyazi", "ust_yazi", "diger")
-EN_COK_BOLGE = 3
+EN_COK_BOLGE = 6
 EN_KUCUK_GENISLIK = 0.03
 EN_KUCUK_YUKSEKLIK = 0.02
 _BOLGE_AD = {"altyazi": "Altyazı", "ust_yazi": "Üstteki yazılar", "diger": "Diğer"}
@@ -196,6 +200,10 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
         s["kapi"] = v["kapi"]
     if s["arayuz_dili"] not in ("tr", "en"):
         s["arayuz_dili"] = v["arayuz_dili"]
+    if s["gosterim"] not in GOSTERIMLER:
+        s["gosterim"] = v["gosterim"]
+    if not (isinstance(s["katman_ekran"], int) and 1 <= s["katman_ekran"] <= EN_COK_EKRAN):
+        s["katman_ekran"] = v["katman_ekran"]
     if s["kalite"] not in ("en_iyi", "dengeli", "hizli"):
         s["kalite"] = v["kalite"]
     for alan in ("motor",):

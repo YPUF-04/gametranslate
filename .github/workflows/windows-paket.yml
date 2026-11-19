@@ -52,9 +52,15 @@ jobs:
           pip install -r requirements-windows.txt
           pip install pyinstaller
           pip install -e ".[tv]"
+      - name: Exe sürüm bilgisini üret
+        run: python paketleme/windows/surum_bilgisi.py "${{ steps.surum.outputs.surum }}" paketleme/windows/surum-bilgisi.txt
       - name: Paketle (PyInstaller)
         run: >
           pyinstaller --noconfirm --name AltYaziKoprusu --onedir
+          --icon paketleme/simge/uygulama.ico
+          --version-file paketleme/windows/surum-bilgisi.txt
+          --collect-all ctranslate2
+          --collect-all sentencepiece
           --paths .
           --add-data "kopru/web;kopru/web"
           --add-data "tv/paketler;tv/paketler"
@@ -76,6 +82,11 @@ jobs:
       - name: Paketin içinde ekran yazısı okuma çalışıyor mu
         shell: bash
         run: ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --ozdenetim
+      - name: Paketin içinde çevrimdışı çeviri çalışıyor mu (en->tr dil dosyasını indirir)
+        shell: bash
+        run: |
+          ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --ozdenetim-ceviri | tee ceviri.log
+          grep -q "OZDENETIM ceviri=" ceviri.log
       - name: Lisans dosyalarını ekle
         shell: pwsh
         run: Copy-Item LICENSE,NOTICE,README.md,GIZLILIK.md dist/AltYaziKoprusu/ -ErrorAction SilentlyContinue

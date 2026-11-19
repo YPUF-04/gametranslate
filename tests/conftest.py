@@ -41,3 +41,24 @@ def uygulama_ayari():
 
 def sahte_fabrika(kod, ayar):
     return SahteMotor()
+
+
+class SahteSurec:
+    def __init__(self, cmd):
+        self.cmd, self.kapandi, self.cikis = cmd, False, None
+
+    def poll(self):
+        return self.cikis
+
+    def terminate(self):
+        self.kapandi = True
+        self.cikis = -15
+
+
+@pytest.fixture(autouse=True)
+def katman_surec_yok(monkeypatch):
+    """Testler gerçek ekran katmanı süreci başlatmasın."""
+    from kopru.katman import yonetim
+    baslatilanlar = []
+    monkeypatch.setattr(yonetim, "surec_baslat", lambda cmd: baslatilanlar.append(SahteSurec(cmd)) or baslatilanlar[-1])
+    return baslatilanlar

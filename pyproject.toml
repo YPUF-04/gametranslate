@@ -17,13 +17,15 @@ dependencies = [
   "platformdirs>=4",
   "pillow>=10",
   "mss>=9",
+  "ctranslate2>=4.0",
+  "sentencepiece>=0.2",
 ]
 
 [project.optional-dependencies]
 ocr-windows = ["winocr"]
 ocr-mac = ["ocrmac"]
 ocr = ["rapidocr_onnxruntime"]
-yerel = ["argostranslate"]
+yerel = ["ctranslate2>=4.0", "sentencepiece>=0.2"]   # uyumluluk: artık çekirdek bağımlılık
 ses = ["faster-whisper", "soundcard", "numpy"]
 # Türkçe dublaj (deneysel, PROTOKOL 9). pycaw yalnız Windows'ta (oyun sesini uygulama bazında kısmak için).
 dublaj = [

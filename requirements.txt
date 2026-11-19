@@ -7,3 +7,5 @@ pillow>=10
 # Uygulama kullanmaz; testler ve araclar/kod_uret.py için
 cryptography>=42
 mss>=9
+ctranslate2>=4.0
+sentencepiece>=0.2
