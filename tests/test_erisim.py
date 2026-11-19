@@ -380,3 +380,29 @@ def test_arac_web_sayfasi(tmp_path, monkeypatch):
     finally:
         s.shutdown()
         s.server_close()
+
+
+def test_saf_dogrulayici_cryptography_ile_uyumlu():
+    """Uygulamadaki kütüphanesiz doğrulayıcı, gerçek Ed25519 imzalarını kabul etmeli, bozukları reddetmeli."""
+    import os
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from kopru.ed25519_dogrula import AcikAnahtar
+    for i in range(10):
+        k = Ed25519PrivateKey.generate()
+        m = os.urandom(i * 11)
+        imza = k.sign(m)
+        a = AcikAnahtar(k.public_key().public_bytes_raw())
+        a.verify(imza, m)
+        bozuk = bytearray(imza)
+        bozuk[i] ^= 1
+        with pytest.raises(ValueError):
+            a.verify(bytes(bozuk), m)
+        with pytest.raises(ValueError):
+            a.verify(imza, m + b"!")
+
+
+def test_uygulama_cryptography_yuklemez():
+    import subprocess, sys
+    kod = "import sys, kopru.sunucu; print('cryptography' in sys.modules)"
+    cikti = subprocess.run([sys.executable, "-c", kod], capture_output=True, text=True, check=True).stdout.strip()
+    assert cikti == "False"
