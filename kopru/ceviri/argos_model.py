@@ -249,7 +249,10 @@ def kur(kaynak: str, hedef: str, ilerleme: ILERLEME | None = None,
         raise ModelHatasi("izinsiz_adres", str(paket["links"][0]))
     kok = modeller_dizini()
     kok.mkdir(parents=True, exist_ok=True)
-    gecici_zip = Path(tempfile.mkstemp(prefix=f"{kaynak}_{hedef}-", suffix=".indiriliyor", dir=kok)[1])
+    # mkstemp açık bir dosya tutamağı da döndürür; Windows'ta açık dosya taşınamaz/silinemez -> hemen kapat
+    _fd, _yol = tempfile.mkstemp(prefix=f"{kaynak}_{hedef}-", suffix=".indiriliyor", dir=kok)
+    os.close(_fd)
+    gecici_zip = Path(_yol)
     gecici_klasor = Path(tempfile.mkdtemp(prefix=f"{kaynak}_{hedef}-", suffix=".aciliyor", dir=kok))
     try:
         indir(url, gecici_zip, (lambda y: ilerleme(min(95, y))) if ilerleme else None)
