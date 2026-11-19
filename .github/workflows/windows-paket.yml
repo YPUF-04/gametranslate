@@ -77,7 +77,9 @@ jobs:
           paketleme/baslat.py
       - name: Pakete giren C++ kütüphaneleri (tanı)
         shell: bash
-        run: ls dist/AltYaziKoprusu/_internal | grep -iE "msvcp|vcruntime|concrt|sentencepiece|ctranslate|iomp" || true
+        run: |
+          ls dist/AltYaziKoprusu/_internal | grep -iE "msvcp|vcruntime|concrt|sentencepiece|ctranslate|iomp" || true
+          ls -la dist/AltYaziKoprusu/_internal/sentencepiece.libs dist/AltYaziKoprusu/_internal/sentencepiece || true
       - name: Paketlenmiş program açılıyor mu (duman testi)
         shell: bash
         run: |

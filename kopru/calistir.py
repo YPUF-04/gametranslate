@@ -170,6 +170,19 @@ def _dll_yollari() -> None:
                 os.add_dll_directory(yol)
             except OSError:
                 pass
+    # delvewheel'li tekerlekler (sentencepiece.libs) DLL'leri sırayla önden yükler; paketlenince bu adım
+    # kayboluyor. Aynısını biz yapıyoruz: .libs klasöründeki DLL'leri ad sırasıyla önden yükle.
+    import ctypes
+    for libs in ("sentencepiece.libs", "ctranslate2.libs"):
+        klasor = os.path.join(kok, libs)
+        if not os.path.isdir(klasor):
+            continue
+        for ad in sorted(os.listdir(klasor)):
+            if ad.lower().endswith(".dll"):
+                try:
+                    ctypes.WinDLL(os.path.join(klasor, ad))
+                except OSError:
+                    pass
 
 
 def main() -> None:
