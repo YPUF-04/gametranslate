@@ -86,7 +86,7 @@ kasasındadır (Windows Kimlik Bilgisi Yöneticisi / macOS Anahtar Zinciri / Lin
   "kaynak_dil": "otomatik",
   "motor": "gemini",
   "yedek_motor": "yerel",
-  "modeller": {"claude":"claude-opus-5-5","gemini":"gemini-2.5-flash","deepseek":"deepseek-chat"},
+  "modeller": {"claude":"claude-opus-5-5","gemini":"gemini-3.8-flash","deepseek":"deepseek-chat"},
   "kaynak": "ekran:1",
   "bolge_altyazi": {"x":0.1,"y":0.72,"g":0.8,"y2":0.25},
   "ekrani_cevir": true,

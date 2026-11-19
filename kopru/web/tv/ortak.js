@@ -8,7 +8,7 @@
   var belge = pencere.document;
 
   var VARSAYILAN = { yazi_boyutu: 44, konum: 'alt', kenar_bosluk: 0.08, arka_plan: 0.55,
-    yazi_rengi: '#FFFFFF', konusan_rengi: '#FFD166', asil_goster: false, ekran_cevir: true, onceki_goster: true };
+    yazi_rengi: '#FFFFFF', konusan_rengi: '#FFD166', asil_goster: false, ekran_cevir: true, onceki_goster: true, ekran_olcek: 1.0 };
 
   var GIR_MS = 150;        // yeni cümle belirirken eskisi bu sürede solar (çapraz geçiş)
   var SIL_MS = 250;        // yazi-sil: bu sürede solarak kaybolur
@@ -255,13 +255,31 @@
     }
 
     // ---------- ekran öğeleri ----------
-    function ogeImza(e) { return [e.x, e.y, e.g, e.y2, e.metin, e.aciklama || '', e.tur || ''].join('|'); }
+    function ogeImza(e) {
+      var h = (e.hedef && typeof e.hedef === 'object') ? e.hedef : {};
+      return [e.x, e.y, e.g, e.y2, e.metin, e.aciklama || '', e.tur || '', h.x, h.y, h.g, h.y2, e.boyut_px].join('|');
+    }
+    // PROTOKOL 11.5: yazı boyu `boyut_px` (1080p'ye göre); kutu metne göre genişler (en çok %45), kelime
+    // ortasından/harf harf ASLA bölünmez; sığmazsa yazı küçülür (en az 12 px), ekran dışına taşmaz.
     function ogeStil(d, e, o, y) {
-      d.style.left = sinirla(sayi(e.x, 0), 0, 1) * 100 + '%';
-      d.style.top = sinirla(sayi(e.y, 0), 0, 1) * 100 + '%';
-      d.style.width = sinirla(sayi(e.g, 0.2), 0.03, 1) * 100 + '%';
-      d.style.minHeight = sinirla(sayi(e.y2, 0.04), 0.01, 1) * 100 + '%';
-      d.style.fontSize = Math.round(sinirla(sayi(e.y2, 0.04) * y * 0.5, 18 * o, 40 * o) * 10) / 10 + 'px';
+      var h = (e.hedef && typeof e.hedef === 'object') ? e.hedef : e;
+      var s = y / 1080, bp = sayi(e.boyut_px, 0);
+      var px = bp > 0 ? bp : sinirla(Math.round(sayi(e.y2, 0.04) * 1080 * 0.62), 14, 30);
+      d._px = Math.max(12, px) * s; d._h = h;
+      d.style.left = sinirla(sayi(h.x, 0), 0, 1) * 100 + '%';
+      d.style.top = sinirla(sayi(h.y, 0), 0, 1) * 100 + '%';
+      d.style.fontSize = Math.round(d._px * 10) / 10 + 'px';
+    }
+    function ogeSigdir(d) {
+      var s = yukseklik() / 1080, en = Math.max(12 * s, 1), px = d._px || en, W = kok.clientWidth || pencere.innerWidth || 1920;
+      var H = yukseklik(), n = 0, h = d._h || {}, sol, ust;
+      d.style.fontSize = px + 'px';
+      while (n++ < 40 && px > en && (d.scrollWidth > d.clientWidth + 1 || satirSayisi(d) > 4)) {
+        px = Math.max(en, px * 0.92); d.style.fontSize = Math.round(px * 10) / 10 + 'px';
+      }
+      sol = sinirla(sayi(h.x, 0), 0, 1) * W; ust = sinirla(sayi(h.y, 0), 0, 1) * H;
+      d.style.left = Math.max(0, Math.min(sol, W - d.offsetWidth)) + 'px';
+      d.style.top = Math.max(0, Math.min(ust, H - d.offsetHeight)) + 'px';
     }
     function ogeIcerik(d, e) {
       var t, a;
@@ -293,12 +311,12 @@
         h = ogeHarita[anahtar];
         if (h) {
           if (h.imza === imza) { continue; }          // aynı yerde aynı yazı: yeniden çizilmez
-          ogeStil(h.el, e, o, y); ogeIcerik(h.el, e);  // değişti: yerinde yumuşak güncelle
+          ogeStil(h.el, e, o, y); ogeIcerik(h.el, e); ogeSigdir(h.el);  // değişti: yerinde yumuşak güncelle
           h.el.className = 'ak-oge ak-acik ak-' + (e.tur || 'diger'); h.imza = imza;
           continue;
         }
         d = oge('ak-oge ak-' + (e.tur || 'diger'), ekranKatman);
-        ogeStil(d, e, o, y); ogeIcerik(d, e);
+        ogeStil(d, e, o, y); ogeIcerik(d, e); ogeSigdir(d);
         ogeHarita[anahtar] = { el: d, imza: imza };
         reflow(d);
         d.className += ' ak-acik';

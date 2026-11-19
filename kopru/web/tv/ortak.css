@@ -19,7 +19,7 @@
 .ak-kok .ak-oge { position: absolute; box-sizing: border-box; padding: 0.34em 0.7em 0.38em 1em; border-radius: 0.5em;
   background: rgba(9, 15, 27, 0.84); color: #FFFFFF; line-height: 1.25; letter-spacing: 0.005em;
   box-shadow: inset 0 0 0 0.04em rgba(255, 255, 255, 0.08), 0 0.2em 0.8em rgba(0, 0, 0, 0.28);
-  word-wrap: break-word; opacity: 0; text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.55);
+  width: max-content; max-width: 45%; white-space: normal; overflow-wrap: normal; word-break: normal; hyphens: manual; opacity: 0; text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.55);
   transition: opacity 0.25s linear, left 0.25s ease, top 0.25s ease, width 0.25s ease; }
 .ak-kok .ak-oge:before { content: ""; position: absolute; left: 0.38em; top: 0.38em; bottom: 0.38em; width: 0.17em; border-radius: 0.1em; background: #2EC4B6; }
 .ak-kok .ak-oge.ak-acik { opacity: 1; }

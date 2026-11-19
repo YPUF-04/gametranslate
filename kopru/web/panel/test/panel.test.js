@@ -55,7 +55,7 @@ const KARE = ornekPng(960, 540);
 function sahteSunucu() {
   const st = {
     ayarlar: { arayuz_dili: 'tr', hedef_dil: 'tr', motor: 'gemini', yedek_motor: 'yerel', kaynak: 'ekran:1', ekrani_cevir: true,
-      kisa_aciklama: true, ses_cevir: false, kapi: 8642, modeller: { gemini: 'gemini-2.5-flash' },
+      kisa_aciklama: true, ses_cevir: false, kapi: 8642, modeller: { gemini: 'gemini-3.8-flash' },
       gorunum: { yazi_boyutu: 44, konum: 'alt', arka_plan: 0.55 }, dublaj: { motor: 'kapali', oyun_sesi_kis: 0.25, hiz_siniri: 1.25, ses_seviyesi: 1, cikis: 'bilgisayar', elevenlabs_onay: false, elevenlabs_klon_onay: false, elevenlabs_ses_kimligi: '', elevenlabs_model: 'eleven_multilingual_v2' }, hafiza_izni: null, kalite: 'en_iyi', aktif_oyun: null },
     oyunlar: [{ kod: 'gta6', ad: 'GTA 6', kayit_sayisi: 1240, terim_sayisi: 35 }, { kod: 'tlou', ad: 'The Last of Us', kayit_sayisi: 0, terim_sayisi: 2 }],
     ceviriler: [{ id: 'a1', asil: 'Where were you last night?', ceviri: 'Dün gece neredeydin?', kaynak: 'motor' }, { id: 'a2', asil: 'Head back to the safehouse.', ceviri: 'Güvenli eve dön.', kaynak: 'motor' }],

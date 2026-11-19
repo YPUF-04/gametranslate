@@ -673,7 +673,7 @@ class Isleme:
                 kullanilan.add(e.id)
                 ozel = hz[0] is not None   # bölge hedefi/ölçeği sonradan değiştiyse yerinde güncelle
                 kutu = _hedef_kutusu(o, hz[0]) if ozel else e.hedef   # kaynağın üstündekinde OCR titremesi yok sayılır
-                if abs(hz[1] - e.boyut_px) >= 1.0 or ozel != e.ozel or (ozel and kutu != e.hedef):
+                if abs(hz[1] - e.boyut_px) >= 2.0 or ozel != e.ozel or (ozel and kutu != e.hedef):
                     e.hedef, e.boyut_px, e.ozel = kutu, hz[1], ozel
                     degisti = True
             elif n:

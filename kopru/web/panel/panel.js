@@ -1416,6 +1416,7 @@
     var sorun = d.hata === 'yakalama' || d.hata === 'genel' ? d.hata : null;   // boru hattı durduysa nedeni
     ekran.led.className = 'led' + (d.calisiyor ? (d.yedekte ? ' yedek' : ' acik') : (sorun ? ' sorun' : ''));
     ekran.durum.textContent = !d.calisiyor ? (sorun ? t('durum.hata.' + sorun) : t('durum.durdu')) : (d.yedekte ? t('durum.yedekte') : t('durum.calisiyor'));
+    if (d.calisiyor && d.yedekte && d.yedek_neden && d.yedek_neden.mesaj) ekran.durum.textContent = d.yedek_neden.mesaj;   // neden yedeğe geçtiğini açıkça söyle
     var mot = motorBilgi(d.motor), gos = S.gosterim || (S.ayarlar && S.ayarlar.gosterim) || 'bilgisayar';
     var nerede = gos === 'bilgisayar' ? t('durum.bu_ekran') : t('durum.tv', { n: d.tv_sayisi || 0 });
     ekran.alt.textContent = (mot ? t('durum.motor', { ad: mot.ad }) + ' · ' : '') + nerede;

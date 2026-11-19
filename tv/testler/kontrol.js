@@ -40,10 +40,22 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     s.yayinla('yazi-sil'); await bekle(400); assert(await p.isVisible('.ak-yazi-kutu'), 'sure_ms dolmadan kaldırıldı'); ok('yazi-sil, sure_ms dolmadan yazıyı kaldırmaz'); await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 4000 }); ok('yazi-sil sonunda kaldırdı');
     s.yayinla('ekran', { id: 'e1', ogeler: [{ x: 0.1, y: 0.2, g: 0.3, y2: 0.05, metin: 'Ana kampa dön', aciklama: 'Görev: üsse geri git', tur: 'gorev' }, { x: 0.5, y: 0.5, g: 0.2, y2: 0.04, metin: 'Menü', tur: 'menu' }] });
     await p.waitForSelector('.ak-oge'); var r = await p.$$eval('.ak-oge', function (l) { return l.map(function (e) { var b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), e.textContent]; }); });
-    assert.strictEqual(r.length, 2); assert(Math.abs(r[0][0] - 192) <= 2 && Math.abs(r[0][1] - 216) <= 2 && Math.abs(r[0][2] - 576) <= 2, JSON.stringify(r));
+    assert.strictEqual(r.length, 2); assert(Math.abs(r[0][0] - 192) <= 2 && Math.abs(r[0][1] - 216) <= 2 && r[0][2] <= 0.45 * 1920 + 2, JSON.stringify(r));
     assert(Math.abs(r[1][0] - 960) <= 2 && Math.abs(r[1][1] - 540) <= 2); assert(r[0][3].indexOf('üsse geri git') >= 0); ok('ekran öğeleri normalize konumda + açıklama');
     await p.screenshot({ path: path.join(SHOT, 'tv-html-ekran.png') });
     s.yayinla('ekran-sil'); await p.waitForFunction(function () { return !document.querySelector('.ak-oge'); }); ok('ekran-sil çalışıyor');
+    // PROTOKOL 11.5: hedef kutusu + boyut_px; kelime ortasından bölünmez; genişlik <= %45; ekran dışına taşmaz
+    s.yayinla('ekran', { id: 'e9', ogeler: [
+      { id: 'h1', x: 0.1, y: 0.2, g: 0.02, y2: 0.03, metin: 'Parti: Hazır', tur: 'menu', hedef: { x: 0.6, y: 0.3, g: 0.2, y2: 0.05 }, boyut_px: 24 },
+      { id: 'h2', x: 0.1, y: 0.5, g: 0.02, y2: 0.03, metin: 'Bu çok uzun bir görev açıklaması olup kutu genişleyip sonra kelime sınırlarında alt satıra geçmelidir', tur: 'gorev', hedef: { x: 0.9, y: 0.9, g: 0.05, y2: 0.03 }, boyut_px: 30 }] });
+    await p.waitForSelector('.ak-oge'); await bekle(400);
+    var hr = await p.$$eval('.ak-oge', function (l) { return l.map(function (e) {
+      var b = e.getBoundingClientRect(), t = e.querySelector('.ak-oge-metin'), w = t.textContent.split(' '), bolundu = false, n = t.firstChild, i, rg = document.createRange(), pos = 0, k;
+      for (i = 0; i < w.length; i++) { rg.setStart(n, pos); rg.setEnd(n, pos + w[i].length); k = rg.getClientRects(); var ust = {}; for (var j = 0; j < k.length; j++) { ust[Math.round(k[j].top)] = 1; } if (Object.keys(ust).length > 1) { bolundu = true; } pos += w[i].length + 1; }
+      return { l: b.left, t: b.top, w: b.width, r: b.right, b: b.bottom, f: parseFloat(getComputedStyle(e).fontSize), bolundu: bolundu }; }); });
+    assert(Math.abs(hr[0].l - 1152) <= 2 && Math.abs(hr[0].t - 324) <= 2, JSON.stringify(hr)); assert(Math.abs(hr[0].f - 24) <= 0.6, JSON.stringify(hr));
+    assert(hr[0].w < 0.45 * 1920 && !hr[0].bolundu && !hr[1].bolundu, JSON.stringify(hr)); assert(hr[1].w <= 0.45 * 1920 + 2 && hr[1].r <= 1920 + 1 && hr[1].b <= 1080 + 1 && hr[1].f >= 12, JSON.stringify(hr)); ok('ekran öğesi hedef + boyut_px, kelime bölünmez, ≤%45, ekran içinde');
+    s.yayinla('ekran-sil'); await p.waitForFunction(function () { return !document.querySelector('.ak-oge'); });
     s.yayinla('yazi', { id: 'a3', metin: 'Boyut', sure_ms: 60000 }); await p.waitForSelector('.ak-yazi-kutu:visible');
     var f1 = await p.$eval('.ak-yazi', function (e) { return parseFloat(getComputedStyle(e).fontSize); });
     s.yayinla('gorunum', { yazi_boyutu: 66, konum: 'ust', kenar_bosluk: 0.05, arka_plan: 0.9, yazi_rengi: '#00FF00', konusan_rengi: '#FFD166', asil_goster: true, ekran_cevir: true });
