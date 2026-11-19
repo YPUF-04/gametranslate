@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 import socket
+import sys
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -668,6 +669,21 @@ async def api_durdur(request: web.Request) -> web.Response:
     return web.json_response({"calisiyor": False})
 
 
+async def api_kapat(request: web.Request) -> web.Response:
+    """Paneldeki 'Programı kapat': konsol penceresi gizli olduğundan kapatmanın yolu budur."""
+    d: Durum = request.app[DURUM]
+    try:
+        d.durdur()
+    except Exception:   # noqa: BLE001
+        pass
+
+    def _cik() -> None:
+        import os
+        os._exit(0)
+    asyncio.get_running_loop().call_later(0.6, _cik)
+    return web.json_response({"tamam": True})
+
+
 async def api_deneme_yazi(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     d.yayin.yayinla("yazi", {
@@ -1070,6 +1086,32 @@ async def api_okuma_dene(request: web.Request) -> web.Response:
         return hata("okuma_yok", 500, request, _ayrinti(e))
 
 
+async def api_okuma_diller(request: web.Request) -> web.Response:
+    """Windows'ta kurulu yazı okuma dilleri; İngilizce paket yoksa panel kurmayı önerir."""
+    if sys.platform != "win32":
+        return web.json_response({"destek": False, "kurulu": [], "ingilizce": True})
+    from .okuma import windows as wocr
+    kurulu = await asyncio.to_thread(wocr.kurulu_diller)
+    return web.json_response({"destek": True, "kurulu": kurulu, "ingilizce": wocr.ingilizce_var(kurulu),
+                              "kullanilan": wocr.dil_sec(kurulu)})
+
+
+async def api_okuma_ingilizce_kur(request: web.Request) -> web.Response:
+    """İngilizce OCR paketini Windows'un kendi aracıyla kurar; Windows yönetici izni (UAC) penceresi açılır."""
+    if sys.platform != "win32":
+        return hata("desteklenmiyor", 400, request)
+    from .okuma import windows as wocr
+    import subprocess
+    komut = ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
+             "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList "
+             "'-NoProfile','-Command','" + wocr.EN_PAKETI_KOMUTU.replace("'", "''") + "'"]
+    try:
+        await asyncio.to_thread(subprocess.Popen, komut, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError as e:
+        return hata("okuma_yok", 500, request, _ayrinti(e))
+    return web.json_response({"tamam": True, "baslatildi": True})
+
+
 _DIL = re.compile(r"[A-Za-z]{2,12}(-[A-Za-z0-9]{1,8})?")
 
 
@@ -1193,6 +1235,9 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_get("/api/ekran-katmani", api_katman_al)
     r.add_post("/api/ekran-katmani/dene", api_katman_dene)
     r.add_get("/api/okuma-dene", api_okuma_dene)
+    r.add_get("/api/okuma/diller", api_okuma_diller)
+    r.add_post("/api/kapat", api_kapat)
+    r.add_post("/api/okuma/ingilizce-kur", api_okuma_ingilizce_kur)
     r.add_get("/api/motor/yerel", api_yerel_al)
     r.add_post("/api/motor/yerel/hazirla", api_yerel_hazirla)
     r.add_get("/api/dublaj", api_dublaj_al)

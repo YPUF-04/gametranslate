@@ -140,3 +140,14 @@ async def test_bolgeler_en_cok_6(aiohttp_client, uygulama_ayari):
     assert (await c.post("/api/ayarlar", json={"bolgeler": [b] * 6})).status == 200
     assert (await c.post("/api/ayarlar", json={"bolgeler": [b] * 7})).status == 400
     assert len((await (await c.get("/api/ayarlar")).json())["bolgeler"]) == 6
+
+
+def test_windows_ocr_dil_secimi():
+    """Türkçe Windows'ta İngilizce OCR paketi yoksa kurulu dille (tr-TR) okunur."""
+    from kopru.okuma import windows as w
+    assert w.dil_sec(["tr-TR"]) == "tr-TR"
+    assert w.dil_sec(["tr-TR", "en-US"]) == "en-US"
+    assert w.dil_sec(["en-GB"]) == "en-GB"
+    assert w.dil_sec(["ja-JP"]) == "ja-JP"
+    assert w.dil_sec([]) is None
+    assert w.ingilizce_var(["tr-TR"]) is False and w.ingilizce_var(["en-US"]) is True

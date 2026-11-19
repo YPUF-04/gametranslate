@@ -402,6 +402,23 @@
       });
       liste.hidden = !satirlar.length;
     }
+    var paket = h('div', { id: 'okuma-paket' });
+    function paketKontrol() {   // Türkçe Windows'ta İngilizce okuma paketi yoksa sakin bir öneri göster
+      api('GET', '/api/okuma/diller', undefined, 8000).then(function (r) {
+        paket.textContent = '';
+        if (!r || !r.destek || r.ingilizce) return;
+        var dugme = h('button', { type: 'button', class: 'dugme', id: 'okuma-paket-kur' }, t('okuma.paket.dugme'));
+        dugme.onclick = function () {
+          dugme.disabled = true;
+          api('POST', '/api/okuma/ingilizce-kur', {}, 15000).then(function () {
+            paket.textContent = '';
+            paket.appendChild(h('div', { class: 'ipucu', text: t('okuma.paket.basladi') }));
+          }, function (e) { dugme.disabled = false; paket.appendChild(hataKutusu(e, 'okuma-paket-hata', [])); });
+        };
+        paket.appendChild(h('div', { class: 'ipucu' }, [h('b', { text: t('okuma.paket.baslik') }), h('br'),
+          t('okuma.paket.aciklama', { dil: r.kullanilan || '' }), h('div', { class: 'satir' }, dugme)]));
+      }, function () {});
+    }
     function okuBaslat() {
       c.sifirla(); durum.textContent = ''; oku.disabled = true;
       durum.appendChild(yukleniyor(t('okuma.okuyor'), 'okuma-bekle'));
@@ -412,6 +429,7 @@
         if (!document.body.contains(durum)) return;
         var satirlar = ((r[1] && r[1].satirlar) || []).filter(function (s) { return s && typeof s.metin === 'string'; });
         S.okunan = satirlar;
+        paketKontrol();
         sahne.hidden = !r[0]; durum.textContent = '';
         kutulariCiz(satirlar);
         if (!satirlar.length) {
@@ -421,14 +439,14 @@
         var bilgi = [r[1].okuyucu ? t('okuma.okuyucu', { ad: r[1].okuyucu }) : '', r[1].sure_ms != null ? t('okuma.sure', { n: r[1].sure_ms }) : ''].filter(Boolean).join(' · ');
         c.tamam(t('okuma.tamam', { n: satirlar.length }), bilgi ? h('div', { class: 'sessiz', text: bilgi }) : null);
       }).catch(function (e) {
-        oku.disabled = false; durum.textContent = '';
+        oku.disabled = false; durum.textContent = ''; paketKontrol();
         durum.appendChild(hataKutusu(e, 'okuma-hata', [{ id: 'okuma-tekrar', ad: t('genel.tekrar'), f: okuBaslat },
           e && (e.hata === 'kaynak_yok' || e.hata === 'yakalama_yok') ? { id: 'okuma-goruntu', ad: t('okuma.goruntuye_don'), f: function () { S.adim = 1; ciz(); } } : null]));
       });
     }
     c = asamaCerceve(2, {
       baslik: t('asama2.baslik'), alt: t('asama2.alt'), ne: 'asama2.ne', sorun: 'sorun.asama2',
-      govde: [h('div', { class: 'kart' }, [h('div', { class: 'satir' }, oku), durum, sahne, liste])]
+      govde: [h('div', { class: 'kart' }, [h('div', { class: 'satir' }, oku), durum, paket, sahne, liste])]
     });
     if (S.okunan && S.okunan.length && S.kareUrl) {   // daha önce okunduysa göster (yeniden okumak için düğme)
       resimYukle(resim, S.kareUrl).then(function () { sahne.hidden = false; }, function () {});
@@ -1941,6 +1959,14 @@
     hz.addEventListener('change', function () {
       kok.classList.toggle('hareket-az', hz.checked); kok.classList.toggle('hareket-acik', !hz.checked);
       ls('hareket_azalt', hz.checked ? '1' : '0');
+    });
+    var kp = $('#program-kapat');
+    if (kp) kp.addEventListener('click', function () {
+      if (!window.confirm(t('tercih.kapat.onay'))) return;
+      api('POST', '/api/kapat', {}, 5000).catch(function () {}).then(function () {
+        document.body.textContent = '';
+        document.body.appendChild(h('main', { class: 'kapandi' }, [h('h1', { text: t('tercih.kapat.bitti') }), h('p', { text: t('tercih.kapat.bitti.k') })]));
+      });
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && tercih.open) { tercih.open = false; $('#tercih-ac').focus(); } });
     document.addEventListener('click', function (e) { if (tercih.open && !tercih.contains(e.target)) tercih.open = false; });

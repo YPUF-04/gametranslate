@@ -40,6 +40,9 @@ HATALAR: dict[str, dict[str, str]] = {
     "kaynak_yok": {
         "tr": "Yakalanacak ekran seçilmemiş, lütfen listeden oyunun göründüğü ekranı seçin.",
         "en": "No screen is selected, please pick the screen that shows the game."},
+    "desteklenmiyor": {
+        "tr": "Bu özellik yalnız Windows'ta var.",
+        "en": "This feature is only available on Windows."},
     "okuma_yok": {
         "tr": "Ekrandaki yazıyı okuyacak bileşen kurulu değil, kurulum kılavuzuna bakın.",
         "en": "No text recognition component is installed, please see the setup guide."},

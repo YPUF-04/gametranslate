@@ -57,6 +57,7 @@ jobs:
       - name: Paketle (PyInstaller)
         run: >
           pyinstaller --noconfirm --name AltYaziKoprusu --onedir
+          --hide-console hide-early
           --icon paketleme/simge/uygulama.ico
           --version-file paketleme/windows/surum-bilgisi.txt
           --collect-all ctranslate2
