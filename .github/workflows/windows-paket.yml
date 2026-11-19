@@ -75,6 +75,12 @@ jobs:
           --collect-submodules winrt
           --hidden-import keyring.backends.Windows
           paketleme/baslat.py
+      - name: sentencepiece.libs DLL'lerini pakete kopyala (PyInstaller bazılarını atlıyor)
+        shell: bash
+        run: |
+          kaynak=$(python -c "import sentencepiece, os; print(os.path.join(os.path.dirname(os.path.dirname(sentencepiece.__file__)), 'sentencepiece.libs'))")
+          mkdir -p dist/AltYaziKoprusu/_internal/sentencepiece.libs
+          cp -v "$kaynak"/*.dll dist/AltYaziKoprusu/_internal/sentencepiece.libs/
       - name: Pakete giren C++ kütüphaneleri (tanı)
         shell: bash
         run: |
@@ -89,7 +95,7 @@ jobs:
               pe = pefile.PE(pyd)
               for d in pe.DIRECTORY_ENTRY_IMPORT:
                   ad = d.dll.decode()
-                  print(os.path.basename(pyd), '->', ad, 'VAR' if ad.lower() in var else 'YOK(sistemde olmalı)')
+                  print(os.path.basename(pyd), '->', ad, 'VAR' if ad.lower() in var else 'YOK')
           " || true
       - name: Paketlenmiş program açılıyor mu (duman testi)
         shell: bash
