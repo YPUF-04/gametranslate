@@ -37,6 +37,31 @@ async def demo_dongusu(app: web.Application) -> None:
         await asyncio.sleep(sure_ms(metin) / 1000 + 1.5)
 
 
+def ozdenetim() -> int:
+    """Paketin içinde ekran yazısı okuyucunun gerçekten çalıştığını dener (ekran gerekmez)."""
+    from PIL import Image, ImageDraw, ImageFont
+    from . import okuma
+    try:
+        okuyucu = okuma.sec()
+    except Exception as e:  # okuyucu yoksa açıkça söyle
+        yaz(f"OZDENETIM HATA: okuyucu yok: {e}")
+        return 1
+    resim = Image.new("RGB", (900, 200), "black")
+    try:
+        yazi_tipi = ImageFont.load_default(size=64)
+    except TypeError:
+        yazi_tipi = ImageFont.load_default()
+    ImageDraw.Draw(resim).text((30, 60), "HELLO WORLD", fill="white", font=yazi_tipi)
+    try:
+        satirlar = okuyucu.oku(resim)
+    except Exception as e:
+        yaz(f"OZDENETIM HATA: okuma basarisiz: {e}")
+        return 1
+    metin = " ".join(getattr(s, "metin", str(s)) for s in satirlar)
+    yaz(f"OZDENETIM okuyucu={type(okuyucu).__module__} metin={metin!r}")
+    return 0 if "HELLO" in metin.upper() else 1
+
+
 def _konsolu_hazirla() -> None:
     # Windows konsolu Türkçe harflerde çökmesin; pencere yoksa (paketli .exe) sessiz geç.
     for akis in (sys.stdout, sys.stderr):
@@ -113,7 +138,10 @@ def main() -> None:
     p = argparse.ArgumentParser(prog="kopru", description="AltYazıKöprüsü")
     p.add_argument("--demo", action="store_true", help="örnek altyazıları döngüyle gönder")
     p.add_argument("--tarayici-acma", action="store_true", help="paneli tarayıcıda açma")
+    p.add_argument("--ozdenetim", action="store_true", help="yazı okumayı dener ve çıkar (paket testi)")
     a = p.parse_args()
+    if a.ozdenetim:
+        raise SystemExit(ozdenetim())
     gunluk_kur()
     ayar = ayarlar.yukle()
     dil, ayarli_kapi = ayar["arayuz_dili"], ayar["kapi"]
