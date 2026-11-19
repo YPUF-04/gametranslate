@@ -333,5 +333,11 @@
 "sihirbaz.ad.cihaz": "Cihaz",
 "sihirbaz.ad.oyun": "Oyun",
 "sihirbaz.ad.ceviri": "Çeviri",
-"sihirbaz.ad.test": "Test"
+"sihirbaz.ad.test": "Test",
+"durum.hata.yakalama": "Durdu: ekran görüntüsü alınamadı",
+"durum.hata.yakalama.k": "Oyunun penceresi açık ve küçültülmemiş olsun. Sonra Başlat'a bas. Olmazsa \"Kurulumu baştan yap\" ile ekranı yeniden seç.",
+"durum.hata.genel": "Durdu: beklenmedik bir sorun oldu",
+"durum.hata.genel.k": "Başlat'a bir kez daha bas. Yine durursa programı kapatıp aç.",
+"ana.baslik": "Ana ekran",
+"son.senin": "Senin düzeltmen"
 }

@@ -67,6 +67,7 @@
     goster('e-ara');
     $('ara-liste').innerHTML = ''; $('ara-hata').textContent = '';
     $('ara-durum').textContent = T('ara_baslik'); $('ara-durum').className = 'yardim araniyor';
+    $('e-ara').getElementsByTagName('h1')[0].textContent = T('ara_baslik');
     P.yerelAdres(function (ip) {
       if (no !== aramaNo) { return; }
       var m = ip && /^(\d+\.\d+\.\d+)\.(\d+)$/.exec(ip);
@@ -100,6 +101,7 @@
         $('ara-durum').textContent = T('ara_ilerleme', [bitenSay, TOPLAM]);
         if (bitenSay >= TOPLAM) {
           $('ara-durum').textContent = T('ara_bitti'); $('ara-durum').className = 'yardim';
+          if (bulunan.length) { $('e-ara').getElementsByTagName('h1')[0].textContent = T('bulunan'); }
           if (!bulunan.length) { $('ara-hata').textContent = T('bulunamadi'); }
         } else { sonraki(); }
       }
