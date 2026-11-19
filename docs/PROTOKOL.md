@@ -327,3 +327,11 @@ Ayar `kisayollar`: `{"baslat_durdur":"ctrl+shift+t","gizle_goster":"ctrl+shift+h
 
 ### 13.3 Ana ekran (kurulum bittikten sonra)
 Üstte büyük Başlat/Durdur + durum; altında kartlar: Oyun · Görüntü kaynağı · Çeviri motoru · Nerede göreyim · Çevrilecek yerler · Kısayol tuşları · Son çeviriler (kompakt). Her kartta tek "Değiştir" → o sihirbaz adımını tek başına açar, "Bitti" ile ana ekrana döner. Gelişmiş ayarlar tek bağlantının arkasında.
+
+### 13.4 Oyunla aynı süre (kayık zamanlama) — §13.2'nin altyazı kuralının yerine geçer
+Her altyazı satırı için: kaynak ekrana gelme anı `t_gel`, kaybolma anı `t_git`, çevirinin hazır olduğu an `t_hazir`; gecikme `L = t_hazir - t_gel`.
+- Çeviri `t_hazir`'da gösterilir ve `t_git + L` anında silinir → ekranda oyundaki süre kadar kalır (yalnız L kadar kayık).
+- Arka arkaya diyaloglarda (2 sn, 2 sn, 1,3 sn, 1 sn) her biri kendi süresi kadar görünür; bir sonrakinin gösterim anı gelince önceki o anda değişir (çakışma yok).
+- Çok kısa yanıp sönmeleri önlemek için en az 0,8 sn gösterilir (ayar `gorunum.en_az_ms`, varsayılan 800).
+- Kaynak hiç kaybolmadan değişirse (yeni cümle) önceki için `t_git` = yeni cümlenin `t_gel`'i.
+- Ekran öğeleri (görev/menü) aynı kayık kuralla silinir.
