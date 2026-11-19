@@ -182,7 +182,7 @@
     var n = 0;
     function adim() {
       var o = ORNEK[n % ORNEK.length]; n++;
-      kontrol.yaziGoster({ id: 'd' + n, metin: o.metin, asil: o.asil, konusan: o.konusan, sure_ms: 3500 });
+      kontrol.yaziGoster({ id: 'd' + n, metin: o.metin, asil: o.asil, konusan: o.konusan, sure_ms: 3500, otomatik_sil: true });
       kontrol.ekranGoster({ id: 'de' + n, ogeler: [
         { x: 0.03, y: 0.05, g: 0.28, y2: 0.05, metin: 'Ana kampa dön', aciklama: 'Görev: üsse geri git', tur: 'gorev' },
         { x: 0.70, y: 0.06, g: 0.2, y2: 0.045, metin: 'Sağlık: 80', tur: 'bilgi' } ] });

@@ -145,8 +145,9 @@ async def test_en_az_gosterim_suresi_korunur():
     (t_yazi, v), = yalniz(olaylar, "yazi")
     (t_sil, _), = yalniz(olaylar, "yazi-sil")
     assert v["sure_ms"] == 1800
-    # §13.2: kaynak gidince (ilk boş kare 2*DT) en çok 1500 ms kalır; en az süre bunu uzatmaz
-    assert t_sil - 2 * DT <= 1.5 + 1e-9
+    # §13.4: en az gösterim süresi gorunum.en_az_ms (800); eski 1800/1500 ms kuralı yok
+    assert t_sil - t_yazi >= 0.8 - 1e-9
+    assert t_sil - t_yazi < 1.8
 
 
 async def test_uzun_yazinin_okuma_suresi_korunur():
@@ -155,19 +156,20 @@ async def test_uzun_yazinin_okuma_suresi_korunur():
     olaylar = await kos_zamanli(k)
     (t_yazi, v), = yalniz(olaylar, "yazi")
     (t_sil, _), = yalniz(olaylar, "yazi-sil")
-    assert v["sure_ms"] > 1800
-    assert t_sil - 2 * DT <= 1.5 + 1e-9   # §13.2: uzun okuma süresi bile kaynak gidince en çok 1500 ms
+    assert v["sure_ms"] > 1800            # sure_ms yalnız bilgi; silmeyi sunucu t_git + L ile yapar (§13.4)
+    assert t_sil - t_yazi < v["sure_ms"] / 1000   # okuma süresi bile kaynak gidince uzatmaz
 
 
-async def test_gittikten_sonra_700ms_daha_kalir():
-    # kaynak 12 kare (3 sn) görünür: en az süre çoktan dolmuş
+async def test_gittikten_sonra_t_git_arti_L_de_silinir():
+    # kaynak 12 kare (3 sn) görünür; t_gel=0, çeviri 2. karede hazır (L=0,25); t_git=3,0 -> sil_an=3,25
     k = [(10, altyazi("Run!"))] * 12 + [(50, [])] * 12
     olaylar = await kos_zamanli(k)
-    (t_sil, _), = yalniz(olaylar, "yazi-sil")
-    ilk_bos = 12 * DT
-    gitti = ilk_bos + 2 * DT                     # 3. boş karede "gitti" sayılır
-    assert t_sil >= gitti + 0.7 - 1e-9
-    assert t_sil < gitti + 0.7 + DT + 1e-9
+    (t_yazi, v) = yalniz(olaylar, "yazi")[0]
+    (t_sil, sv), = yalniz(olaylar, "yazi-sil")
+    assert sv == {"id": v["id"]}                      # id'ye göre silinir
+    t_git, L = 12 * DT, t_yazi - 0.0
+    assert t_sil >= t_git + L - 1e-9
+    assert t_sil <= t_git + L + 2 * DT + 1e-9         # 3. boş kare onayı en çok 2 kare geç
 
 
 async def test_gitti_sayilmadan_silinmez():
@@ -365,8 +367,10 @@ async def test_ekran_ogesi_gidince_600ms_sonra_kalkar():
     k = ekran_senaryo([menu], 4, 16)
     olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
     (t_sil, _), = yalniz(olaylar, "ekran-sil")
-    gitti = 4 * DT + 1 * DT          # 2 ardışık boş karenin ikincisi
-    assert t_sil <= gitti + 0.6 + DT + 1e-9   # §13.2: tek öğe de olsa bölge boş: en geç ~600-800 ms
+    (t_ekran, _), = yalniz(olaylar, "ekran")
+    # §13.4: t_git = ilk boş kare (4*DT); L = t_ekran - 0; en az gösterim 0,8 sn
+    assert t_sil >= max(4 * DT + t_ekran, t_ekran + 0.8) - 1e-9
+    assert t_sil <= 4 * DT + t_ekran + 2 * DT + 1e-9
 
 
 async def test_ekran_tek_kareli_titreme_ogeyi_kaldirmaz():
@@ -449,8 +453,9 @@ async def test_ekran_ogesi_gidince_600ms_icinde_ekran_olayi_onu_cikarir():
     ekranlar = yalniz(olaylar, "ekran")
     assert len(ekranlar) == 2 and len(ekranlar[0][1]["ogeler"]) == 2 and len(ekranlar[1][1]["ogeler"]) == 1
     ilk_bos = 4 * DT
-    assert ekranlar[1][0] - ilk_bos <= 0.6 + 2 * DT + 1e-9        # 2. boş kare + 600 ms (kare aralığı payıyla)
-    assert ekranlar[1][0] - ilk_bos >= 0.6 - 1e-9
+    t_hazir = ekranlar[0][0]
+    assert ekranlar[1][0] >= max(ilk_bos + t_hazir, t_hazir + 0.8) - 1e-9   # t_git + L, en az 0,8 sn
+    assert ekranlar[1][0] <= ilk_bos + t_hazir + 2 * DT + 1e-9
 
 
 async def test_bolge_bosalinca_tum_ogeler_silinir():
@@ -462,12 +467,13 @@ async def test_bolge_bosalinca_tum_ogeler_silinir():
     assert t_sil - 4 * DT <= 2 * DT + 1e-9                        # 2 ardışık boş kare yeter
 
 
-async def test_altyazi_kaynak_gidince_en_cok_1500ms_kalir():
+async def test_altyazi_kaynak_gidince_okuma_suresiyle_uzamaz():
     for okuma in ("Hi", "We should really head back to the base before it gets dark"):
         k = [(10, altyazi(okuma))] * 3 + [(50, [])] * 20
         olaylar = await kos_zamanli(k)
+        (t_yazi, _), = yalniz(olaylar, "yazi")
         (t_sil, _), = yalniz(olaylar, "yazi-sil")
-        assert t_sil - 3 * DT <= 1.5 + 1e-9, okuma
+        assert t_sil - 3 * DT <= 1.0 + 1e-9, okuma   # §13.4: eski 1500 ms/okuma süresi kuralı yok
 
 
 async def test_yeniden_oku_her_seyi_siler_ve_hemen_okutur():

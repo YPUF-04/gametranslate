@@ -462,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         k = Katman(a.url, a.ekran, a.ebeveyn or os.getpid(), a.pencere)
         if a.ozdenetim:
-            k.kuyruk.put(("yazi", {"id": "oz", "metin": "Öz denetim: Türkçe harfler çğıöşü", "sure_ms": 3000}))
+            k.kuyruk.put(("yazi", {"id": "oz", "metin": "Öz denetim: Türkçe harfler çğıöşü", "sure_ms": 3000, "otomatik_sil": True}))
             def _bitti() -> None:
                 print(f"OZDENETIM katman ciziliyor={k._son_imza is not None} boyut={k.G}x{k.Y}", flush=True)
                 k.bitir()

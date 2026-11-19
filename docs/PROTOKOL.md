@@ -335,3 +335,6 @@ Her altyazı satırı için: kaynak ekrana gelme anı `t_gel`, kaybolma anı `t_
 - Çok kısa yanıp sönmeleri önlemek için en az 0,8 sn gösterilir (ayar `gorunum.en_az_ms`, varsayılan 800).
 - Kaynak hiç kaybolmadan değişirse (yeni cümle) önceki için `t_git` = yeni cümlenin `t_gel`'i.
 - Ekran öğeleri (görev/menü) aynı kayık kuralla silinir.
+- Bu kural §7.2 kural 1–3'ün ve §13.2 altyazı kuralının yerine geçer. Silme olayı `yazi-sil` artık `{"id": ...}` taşır; istemci başka id'li silmeyi yok sayar.
+- İstemciler kendi süre sayacıyla silmez (sunucu karar verir); bağlantı koparsa diye 15 sn güvenlik süresi vardır.
+- Deneme/demo yazıları `"otomatik_sil": true` taşır: istemci bunları `sure_ms` sonunda kendisi siler.

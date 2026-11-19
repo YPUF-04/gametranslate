@@ -35,7 +35,11 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     var renk = await p.$eval('.ak-konusan', function (e) { return getComputedStyle(e).color; }); assert.strictEqual(renk, 'rgb(255, 209, 102)'); ok('konuşan adı sarı');
     assert.strictEqual(await p.$$eval('.ak-asil', function (l) { return l.length; }), 0); ok('asil_goster=false iken özgün satır yok');
     await p.screenshot({ path: path.join(SHOT, 'tv-html.png') });
-    await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 3000 }); ok('sure_ms sonunda gizlendi');
+    await bekle(1800); assert(await p.isVisible('.ak-yazi-kutu'), 'sure_ms dolunca kendiliğinden gizlendi'); ok('§13.4: sure_ms dolsa da istemci kendiliğinden gizlemez');
+    s.yayinla('yazi', { id: 'a1b', metin: 'Yeni cümle', sure_ms: 300 }); await bekle(300);
+    s.yayinla('yazi-sil', { id: 'a1' }); await bekle(150);   // eskinin gecikmiş silmesi yeni yazıyı silmez
+    assert(await p.isVisible('.ak-yazi-kutu'), 'başka id\'li yazi-sil yeni yazıyı sildi'); ok('yazi-sil id eşleşmezse yok sayılır');
+    s.yayinla('yazi-sil', { id: 'a1b' }); await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 3000 }); ok('yazi-sil (id) ile gizlendi');
     s.yayinla('yazi', { id: 'a2', metin: 'İkinci', sure_ms: 1500 }); await p.waitForSelector('.ak-yazi-kutu:visible');
     s.yayinla('yazi-sil'); await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 1500 }); ok('yazi-sil (§13.2): kaynak gitti, en az süre beklenmeden kalkar');
     s.yayinla('yazi', { id: 'g1', metin: 'Üçüncü', sure_ms: 3000 }); await p.waitForSelector('.ak-yazi-kutu:visible');

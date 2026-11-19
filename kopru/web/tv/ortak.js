@@ -15,6 +15,7 @@
   var ONCEKI_MS = 2500;    // önceki satır bu kadar görünür
   var ONCEKI_SOLMA_MS = 400;
   var EKRAN_MS = 250;      // ekran öğeleri belirme / solma
+  var GUVENLIK_MS = 15000; // §13.4: silmeyi sunucu (yazi-sil) yapar; bağlantı koparsa son güncellemeden bu kadar sonra kalkar
 
   function kopyala(a, b) { var s = {}, k; for (k in a) { if (a.hasOwnProperty(k)) { s[k] = a[k]; } }
     if (b) { for (k in b) { if (b.hasOwnProperty(k)) { s[k] = b[k]; } } } return s; }
@@ -112,11 +113,10 @@
   function baslat(url, kok, secenekler) {
     var sec = secenekler || {};
     var gorunum = kopyala(VARSAYILAN, sec.gorunum);
-    var es = null, bekle = null, gozcu = null, gizle = null, silBekle = null, oncekiZ = null, durduruldu = false, deneme = 0;
+    var es = null, bekle = null, gozcu = null, gizle = null, oncekiZ = null, durduruldu = false, deneme = 0;
     var sonYaziId = null, sonYazi = null, durum = 'baglaniyor';
     var kutu = null;            // şu an görünen altyazı kutusu
     var gecerli = null;         // {id, metin, konusan, asil} şu an gösterilen
-    var minBitis = 0;           // bu ana kadar kutu kaldırılmaz (sure_ms)
     var ayrilanlar = [];        // solmakta olan kutular
     var ogeHarita = {};         // ekran öğeleri: anahtar -> {el, imza}
     var denge = !cssDengeli() || !!sec.dengeJs;   // true: dengeyi JS kurar
@@ -260,17 +260,12 @@
 
     function gizleKur(ms) {
       if (gizle) { pencere.clearTimeout(gizle); }
-      gizle = pencere.setTimeout(function () { gizle = null; yaziSil(true); }, sinirla(ms, 300, 60000));
+      gizle = pencere.setTimeout(function () { gizle = null; yaziSil(); }, sinirla(ms, 300, 60000));
     }
 
-    function yaziSil(zorla) {
-      var kalan = minBitis - simdi();
-      if (silBekle) { pencere.clearTimeout(silBekle); silBekle = null; }
+    // §13.4: silme kararı (t_git + L) sunucudadır; burada en az süre / sure_ms beklemesi yok.
+    function yaziSil() {
       if (!kutu) { return; }
-      if (!zorla && kalan > 0) {   // en az süre dolmadan kaldırılmaz (olaylar ters sırada gelse bile)
-        silBekle = pencere.setTimeout(function () { silBekle = null; yaziSil(true); }, kalan);
-        return;
-      }
       if (gizle) { pencere.clearTimeout(gizle); gizle = null; }
       var k = kutu;
       kutu = null; gecerli = null;
@@ -279,11 +274,11 @@
     }
 
     function yaziGoster(v) {
-      var t = simdi(), sureMs, yerinde, degisti, yeni, eski, oncekiMetin;
+      var sureMs, yerinde, degisti, yeni, eski, oncekiMetin;
       if (!v || typeof v.metin !== 'string' || v.metin === '') { return; }
       if (v.id !== undefined && v.id !== null && v.id === sonYaziId && !kutu) { return; } // yeniden bağlanınca / geç gelen yenileme eski yazıyı geri getirmesin
-      sureMs = sinirla(sayi(v.sure_ms, 5000), 300, 60000);
-      if (silBekle) { pencere.clearTimeout(silBekle); silBekle = null; }
+      // sure_ms yalnız bilgi; `otomatik_sil: true` (deneme yazısı) ise o kadar sonra kalkar, yoksa yalnız güvenlik zaman aşımı
+      sureMs = (v.otomatik_sil === true) ? sinirla(sayi(v.sure_ms, 5000), 300, 60000) : GUVENLIK_MS;
       sonYaziId = (v.id === undefined ? null : v.id);
       sonYazi = v.metin;
       yerinde = !!kutu && !!gecerli && (v.devam === true || (v.id !== undefined && v.id !== null && v.id === gecerli.id));
@@ -291,7 +286,7 @@
       if (yerinde) {
         // devam: aynı kutu, aynı yerde güncellenir (sönme ve zıplama yok)
         degisti = v.metin !== gecerli.metin || (v.konusan || null) !== (gecerli.konusan || null) || (gorunum.asil_goster && v.asil !== gecerli.asil);
-        if (degisti) { kutuIcerik(kutu, v); minBitis = Math.max(minBitis, t + sureMs); }
+        if (degisti) { kutuIcerik(kutu, v); }
         gecerli = { id: v.id, metin: v.metin, konusan: v.konusan || null, asil: v.asil };
       } else {
         oncekiMetin = (kutu && gecerli) ? gecerli.metin : '';
@@ -308,7 +303,6 @@
         yeni.className += ' ak-gorunur';
         kutu = yeni;
         gecerli = { id: v.id, metin: v.metin, konusan: v.konusan || null, asil: v.asil };
-        minBitis = t + sureMs;
         if (eski) { kutuKaldir(eski, GIR_MS); oncekiGoster(oncekiMetin); }
       }
       gizleKur(sureMs);
@@ -458,7 +452,10 @@
       es.onopen = function () { deneme = 0; durumDegistir('bagli'); gozcuKur(); };
       es.onerror = function () { yenidenBaglan(); };
       dinle('yazi', function (v) { yaziGoster(v); });
-      dinle('yazi-sil', function () { yaziSil(true); });   // §13.2: kaynak gitti kararı sunucuda; en az süre için ek bekleme yok
+      dinle('yazi-sil', function (v) {   // §13.4: silmeyi sunucu t_git + L'de yapar; başka id'li (eski) silme yeni yazıyı silmez
+        if (v && v.id !== undefined && v.id !== null && gecerli && gecerli.id !== undefined && gecerli.id !== null && v.id !== gecerli.id) { return; }
+        yaziSil();
+      });
       dinle('katman-gizle', function () { gizliAyarla(true); });
       dinle('katman-goster', function () { gizliAyarla(false); });
       dinle('ekran', function (v) { ekranGoster(v); });
@@ -484,7 +481,6 @@
       durduruldu = true; kapat(); sesDurdur();
       if (bekle) { pencere.clearTimeout(bekle); } if (gozcu) { pencere.clearTimeout(gozcu); }
       if (gizle) { pencere.clearTimeout(gizle); gizle = null; }
-      if (silBekle) { pencere.clearTimeout(silBekle); silBekle = null; }
       kutu = null; gecerli = null; ayrilanlar = []; bosalt(sahne); oncekiTemizle(); yazi.style.display = 'none';
       bosalt(ekranKatman); ogeHarita = {};
       pencere.removeEventListener('resize', yeniden, false);
@@ -495,7 +491,7 @@
     if (url) { durumDegistir('baglaniyor'); baglan(); } else { durumDegistir('bagli'); }
 
     return {
-      durdur: durdur, yaziGoster: yaziGoster, yaziSil: function () { yaziSil(false); }, ekranGoster: ekranGoster, ekranSil: ekranSil, gizliAyarla: gizliAyarla,
+      durdur: durdur, yaziGoster: yaziGoster, yaziSil: function () { yaziSil(); }, ekranGoster: ekranGoster, ekranSil: ekranSil, gizliAyarla: gizliAyarla,
       gorunumUygula: gorunumUygula,
       sesCal: sesCal, sesDurdur: sesDurdur,
       durumu: function () { return durum; },

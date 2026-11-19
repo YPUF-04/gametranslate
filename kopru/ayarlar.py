@@ -22,6 +22,7 @@ VARSAYILAN_GORUNUM: dict[str, Any] = {
     "yazi_rengi": "#FFFFFF", "konusan_rengi": "#FFD166",
     "asil_goster": False, "ekran_cevir": True, "onceki_goster": True,
     "ekran_olcek": 1.0,   # ekran öğelerinin genel yazı çarpanı, 0.6-2.0 (PROTOKOL 11.4)
+    "en_az_ms": 800,      # çevirinin en az ekranda kalma süresi, 0-3000 ms (PROTOKOL 13.4)
 }
 
 VARSAYILAN: dict[str, Any] = {
@@ -70,6 +71,10 @@ EN_KUCUK_OLCEK, EN_BUYUK_OLCEK = 0.6, 2.0
 
 def _oran(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1
+
+
+def en_az_ms_gecerli(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 3000
 
 
 def olcek_gecerli(v: Any) -> bool:
@@ -261,6 +266,8 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
         s["bolge_altyazi"] = copy.deepcopy(v["bolge_altyazi"])
     if not olcek_gecerli(s["gorunum"].get("ekran_olcek")):
         s["gorunum"]["ekran_olcek"] = v["gorunum"]["ekran_olcek"]
+    if not en_az_ms_gecerli(s["gorunum"].get("en_az_ms")):
+        s["gorunum"]["en_az_ms"] = v["gorunum"]["en_az_ms"]
     if s["gorunum"].get("konum") not in ("alt", "ust"):
         s["gorunum"]["konum"] = v["gorunum"]["konum"]
     if s["erisim"].get("ucretsiz_dakika_gun") is not None and not (

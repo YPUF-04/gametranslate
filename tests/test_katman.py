@@ -24,11 +24,36 @@ def yazi(id_="a1", metin="Merhaba dünya", sure=2000, **ek):
     return {"id": id_, "metin": metin, "asil": "Hello", "tur": "altyazi", "konusan": None, "sure_ms": sure, **ek}
 
 
-def test_yazi_sure_dolunca_kalkar():
+def test_yazi_sure_ms_dolunca_kendiliginden_kalkmaz():
+    # §13.4: silmeyi sunucu (yazi-sil) yapar; istemci kendi sure_ms/en az süre zamanlayıcısıyla gizlemez
     z = zam()
-    z.olay("yazi", yazi(), 0)
-    assert not z.adim(1.9) and z.goruntu(1.9).yazi["metin"] == "Merhaba dünya"
-    assert z.adim(2.1) and z.goruntu(2.1).yazi is None
+    z.olay("yazi", yazi(sure=2000), 0)
+    assert not z.adim(2.1) and z.goruntu(2.1).yazi["metin"] == "Merhaba dünya"
+    assert not z.adim(14.9) and z.goruntu(14.9).yazi is not None
+
+
+def test_guvenlik_zaman_asimi_baglanti_koparsa_kaldirir():
+    z = zam()
+    z.olay("yazi", yazi(sure=2000), 0)
+    assert z.adim(15.1) and z.goruntu(15.1).yazi is None
+    z.olay("yazi", yazi(sure=2000), 20)
+    z.olay("yazi", yazi(sure=2000, devam=True), 30)    # yenileme zaman aşımını uzatır
+    assert not z.adim(44.0) and z.adim(45.1)
+
+
+def test_otomatik_sil_isaretli_deneme_yazisi_sure_ms_sonra_kalkar():
+    z = zam()
+    z.olay("yazi", yazi(sure=3000, otomatik_sil=True), 0)
+    assert not z.adim(2.9) and z.adim(3.1)
+
+
+def test_baska_id_li_yazi_sil_yeni_yaziyi_silmez():
+    z = zam()
+    z.olay("yazi", yazi("a2", "Yeni"), 1.0)
+    z.olay("yazi-sil", {"id": "a1"}, 1.1)      # eskinin gecikmiş silmesi
+    assert not z.adim(1.1) and z.goruntu(1.1).yazi["metin"] == "Yeni"
+    z.olay("yazi-sil", {"id": "a2"}, 2.0)
+    assert z.adim(2.0) and z.goruntu(2.0).yazi is None
 
 
 def test_yazi_sil_hemen_kaldirir():
@@ -52,7 +77,7 @@ def test_devam_yerinde_guncellenir_ve_sure_uzar():
     g = z.goruntu(1.0)
     assert g.yazi["metin"] == "Hello th" and g.onceki is None
     z.olay("yazi", yazi(id_="baska", metin="Hello there", sure=3000), 1.5)    # aynı id
-    assert z.yazi["bitis"] == 4.5 and z.goruntu(1.5).onceki is None
+    assert z.yazi["bitis"] == 1.5 + mantik.GUVENLIK_SN and z.goruntu(1.5).onceki is None
 
 
 def test_yeni_cumle_onceki_satir_2_5_sn():

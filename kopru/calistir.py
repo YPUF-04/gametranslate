@@ -33,7 +33,7 @@ async def demo_dongusu(app: web.Application) -> None:
     while True:
         asil, metin, kisi = ORNEKLER[i % len(ORNEKLER)]
         d.yayin.yayinla("yazi", {"id": f"demo{i}", "metin": metin, "asil": asil,
-                                 "tur": "altyazi", "konusan": kisi, "sure_ms": sure_ms(metin)})
+                                 "tur": "altyazi", "konusan": kisi, "sure_ms": sure_ms(metin), "otomatik_sil": True})
         i += 1
         await asyncio.sleep(sure_ms(metin) / 1000 + 1.5)
 

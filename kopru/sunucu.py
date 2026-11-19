@@ -538,7 +538,8 @@ def _gorunum_gecerli(g: dict[str, Any]) -> bool:
     def sayi(v: Any, lo: float, hi: float) -> bool:
         return isinstance(v, (int, float)) and not isinstance(v, bool) and lo <= v <= hi
     for alan, (lo, hi) in {"yazi_boyutu": (8, 300), "kenar_bosluk": (0, 0.5), "arka_plan": (0, 1),
-                           "ekran_olcek": (ayarlar.EN_KUCUK_OLCEK, ayarlar.EN_BUYUK_OLCEK)}.items():
+                           "ekran_olcek": (ayarlar.EN_KUCUK_OLCEK, ayarlar.EN_BUYUK_OLCEK),
+                           "en_az_ms": (0, 3000)}.items():
         if alan in g and not sayi(g[alan], lo, hi):
             return False
     for alan in ("yazi_rengi", "konusan_rengi"):
@@ -782,7 +783,7 @@ async def api_deneme_yazi(request: web.Request) -> web.Response:
     d.yayin.yayinla("yazi", {
         "id": f"d{int(time.time())}", "metin": metinler.mesaj("deneme_tr", "tr"),
         "asil": metinler.mesaj("deneme_tr", "en"), "tur": "altyazi",
-        "konusan": None, "sure_ms": 4000})
+        "konusan": None, "sure_ms": 4000, "otomatik_sil": True})
     return web.json_response({"tamam": True, "tv_sayisi": d.yayin.istemci_sayisi})
 
 
@@ -1203,7 +1204,7 @@ async def api_katman_dene(request: web.Request) -> web.Response:
     d.yayin.yayinla("yazi", {
         "id": f"k{int(time.time())}", "metin": metinler.mesaj("katman_deneme", "tr"),
         "asil": metinler.mesaj("katman_deneme", "en"), "tur": "altyazi",
-        "konusan": None, "sure_ms": sure, "devam": False})
+        "konusan": None, "sure_ms": sure, "devam": False, "otomatik_sil": True})
     return web.json_response({"tamam": True, "acik": True, "sure_ms": sure})
 
 

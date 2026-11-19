@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator
 
-EN_AZ_MS = 1800
+GUVENLIK_SN = 15.0       # §13.4: sunucu silmeyi karar verir; bağlantı koparsa son güncellemeden bu kadar sonra kalkar
 ONCEKI_SN = 2.5          # §7.2/7: önceki satır küçük ve soluk kalır
 EKRAN_GITTI_SN = 0.0     # §13.2: sunucu öğeyi zaten 600 ms bekleyip listeden çıkarır; burada ek bekleme yok
 BILDIRIM_SN = 1.5        # §13.1: küçük bildirim (toast) bu kadar görünür
@@ -26,14 +26,6 @@ EKRAN_EN_DAR = 0.12          # çok dar kaynakta ("OK" düğmesi) kutu ekranın 
 EKRAN_EN_COK_SATIR = 2       # §12.4
 EKRAN_EN_AZ_BOYUT, EKRAN_EN_COK_BOYUT = 12.0, 22.0   # §12.4: kaynak boyu yoksa yazı boyu aralığı (1080p)
 
-
-
-def okuma_suresi_ms(metin: str) -> int:
-    return min(9000, 800 + len(metin) * 55)
-
-
-def en_az_ms(metin: str) -> int:
-    return max(EN_AZ_MS, okuma_suresi_ms(metin))
 
 
 # ---------- zamanlama durum makinesi ----------
@@ -72,8 +64,9 @@ class Zamanlayici:
         if ad == "yazi":
             return self._yazi(veri, simdi)
         if ad == "yazi-sil":
-            if self.yazi is not None:
-                # §13.2: sunucu "kaynak gitti" kararını (en çok 1,5 sn) vermiştir; en az süre için ek bekleme yok
+            kimlik = veri.get("id")
+            if self.yazi is not None and (not kimlik or kimlik == self.yazi["id"]):
+                # §13.4: silme kararı (t_git + L) sunucudadır; hemen kaldırılır. Başka id'li silme yeni yazıyı silmez.
                 self.yazi["sil_an"] = simdi
             return True
         if ad == "ekran":
@@ -100,15 +93,18 @@ class Zamanlayici:
         metin = str(v.get("metin") or "")
         if not metin.strip():
             return False
+        # §13.4: süreyi sunucu yönetir (yazi-sil). Güvenlik zaman aşımı yalnız bağlantı kopması içindir;
+        # `otomatik_sil: true` (deneme/öz denetim yazısı) sure_ms sonra kalkar.
         sure = v.get("sure_ms")
-        sure = int(sure) if isinstance(sure, (int, float)) and not isinstance(sure, bool) and sure > 0 \
-            else en_az_ms(metin)
-        bitis = simdi + sure / 1000
+        if v.get("otomatik_sil") is True and isinstance(sure, (int, float)) and not isinstance(sure, bool) and sure > 0:
+            bitis = simdi + sure / 1000
+        else:
+            bitis = simdi + GUVENLIK_SN
         y = self.yazi
         ayni = y is not None and (v.get("id") == y["id"] or v.get("devam") is True)
         if ayni:   # yerinde güncelle: zıplama, sönme yok
             y.update(metin=metin, asil=str(v.get("asil") or ""), konusan=v.get("konusan"),
-                     bitis=max(y["bitis"], bitis), sil_an=None)
+                     bitis=bitis, sil_an=None)
             if v.get("id"):
                 y["id"] = v["id"]
             return True
@@ -118,7 +114,7 @@ class Zamanlayici:
             self._onceki = None
         self.yazi = {"id": v.get("id") or f"y{simdi}", "metin": metin, "asil": str(v.get("asil") or ""),
                      "konusan": v.get("konusan"), "tur": v.get("tur", "altyazi"), "ilk": simdi,
-                     "min_bitis": simdi + min(sure, en_az_ms(metin)) / 1000, "bitis": bitis, "sil_an": None}
+                     "bitis": bitis, "sil_an": None}
         return True
 
     def _ekran(self, v: dict[str, Any], simdi: float) -> bool:
