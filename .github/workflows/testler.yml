@@ -22,7 +22,7 @@ jobs:
       - name: Bağımlılıklar
         run: |
           pip install -r requirements.txt
-          pip install -e ".[tv]" pytest pytest-aiohttp
+          pip install -e ".[tv,test]"
       - name: Testler
         run: python -m pytest -q
       - name: Sunucu açılıyor mu

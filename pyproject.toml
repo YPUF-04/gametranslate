@@ -38,7 +38,7 @@ dublaj = [
 ]
 dublaj-kalite = ["librosa"]   # isteğe bağlı: sesi hızlandırırken daha iyi kalite (yoksa numpy WSOLA kullanılır)
 tv = ["paramiko>=3.4,<4"]   # TV'ye tek tuşla kurulum (LG webOS)
-test = ["pytest", "pytest-aiohttp", "pytest-asyncio", "cryptography>=42"]
+test = ["pytest", "pytest-aiohttp", "pytest-asyncio", "cryptography>=42", "numpy"]
 # Yalnız geliştiricinin kod üretme aracı için (uygulama bunu kullanmaz)
 kod = ["cryptography>=42"]
 
