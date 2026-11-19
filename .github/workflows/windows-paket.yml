@@ -61,6 +61,10 @@ jobs:
           --version-file paketleme/windows/surum-bilgisi.txt
           --collect-all ctranslate2
           --collect-all sentencepiece
+          --add-binary "C:/Windows/System32/msvcp140.dll;."
+          --add-binary "C:/Windows/System32/msvcp140_1.dll;."
+          --add-binary "C:/Windows/System32/vcruntime140_1.dll;."
+          --add-binary "C:/Windows/System32/concrt140.dll;."
           --paths .
           --add-data "kopru/web;kopru/web"
           --add-data "tv/paketler;tv/paketler"
@@ -71,6 +75,9 @@ jobs:
           --collect-submodules winrt
           --hidden-import keyring.backends.Windows
           paketleme/baslat.py
+      - name: Pakete giren C++ kütüphaneleri (tanı)
+        shell: bash
+        run: ls dist/AltYaziKoprusu/_internal | grep -iE "msvcp|vcruntime|concrt|sentencepiece|ctranslate|iomp" || true
       - name: Paketlenmiş program açılıyor mu (duman testi)
         shell: bash
         run: |

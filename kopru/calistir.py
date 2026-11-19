@@ -158,7 +158,22 @@ def kapi_sec(kapi: int) -> tuple[str, int | None]:
     return "yok", None
 
 
+def _dll_yollari() -> None:
+    """Paketli Windows programında C++ eklentilerinin (sentencepiece, ctranslate2) DLL'leri bulunsun."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    kok = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    for alt in ("", "sentencepiece", "ctranslate2", "sentencepiece.libs", "ctranslate2.libs"):
+        yol = os.path.join(kok, alt) if alt else kok
+        if os.path.isdir(yol):
+            try:
+                os.add_dll_directory(yol)
+            except OSError:
+                pass
+
+
 def main() -> None:
+    _dll_yollari()
     # Ekran katmanı ayrı süreç olarak aynı programla açılır (paketli .exe'de -m kullanılamaz)
     if len(sys.argv) > 1 and sys.argv[1] == "--katman":
         _konsolu_hazirla()
