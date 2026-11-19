@@ -169,6 +169,9 @@ def guvenli_ac(zip_yolu: Path, hedef: Path) -> None:
         isler: list[tuple[zipfile.ZipInfo, str]] = []
         for g in girdiler:
             ad = _guvenli_ad(g.filename.rstrip("/") if g.is_dir() else g.filename)
+            # Windows'ta zipfile '\\' karakterini sessizce '/' yapar; asıl adla da denetle (her sistemde aynı sonuç)
+            if "\\" in getattr(g, "orig_filename", g.filename):
+                ad = None
             if ad is None:
                 raise ModelHatasi("gecersiz_paket", f"güvensiz yol: {g.filename!r}")
             if (g.external_attr >> 16) & 0o170000 == 0o120000:
