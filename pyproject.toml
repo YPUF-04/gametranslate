@@ -16,7 +16,6 @@ dependencies = [
   "keyring>=24",
   "platformdirs>=4",
   "pillow>=10",
-  "cryptography>=42",
   "mss>=9",
 ]
 
@@ -27,7 +26,9 @@ ocr = ["rapidocr_onnxruntime"]
 yerel = ["argostranslate"]
 ses = ["faster-whisper", "soundcard", "numpy"]
 tv = ["paramiko>=3.4,<4"]   # TV'ye tek tuşla kurulum (LG webOS)
-test = ["pytest", "pytest-aiohttp", "pytest-asyncio"]
+test = ["pytest", "pytest-aiohttp", "pytest-asyncio", "cryptography>=42"]
+# Yalnız geliştiricinin kod üretme aracı için (uygulama bunu kullanmaz)
+kod = ["cryptography>=42"]
 
 [project.scripts]
 altyazikoprusu = "kopru.__main__:main"

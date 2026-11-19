@@ -18,8 +18,7 @@ import tempfile
 from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from .ed25519_dogrula import AcikAnahtar
 
 from . import ayarlar, erisim_anahtar
 
@@ -80,7 +79,7 @@ def gorunum(govde: str) -> str:
 
 # ---------- üretim (yalnız geliştirici aracı kullanır) ----------
 
-def kod_uret(ozel: Ed25519PrivateKey, tur: str, gun: int | None = None, tarih: date | None = None) -> str:
+def kod_uret(ozel: Any, tur: str, gun: int | None = None, tarih: date | None = None) -> str:
     """Tek erişim kodu üretir. `tur`: "sinirsiz" ya da "gun" (gun sayısı gerekir)."""
     if tur not in ("sinirsiz", "gun"):
         raise ValueError("tur")
@@ -98,11 +97,12 @@ def kod_uret(ozel: Ed25519PrivateKey, tur: str, gun: int | None = None, tarih: d
 
 # ---------- doğrulama ----------
 
-def acik_anahtar_oku(b64: str) -> Ed25519PublicKey:
-    return Ed25519PublicKey.from_public_bytes(base64.b64decode(b64))
+def acik_anahtar_oku(b64: str) -> AcikAnahtar:
+    # Kütüphanesiz doğrulayıcı: paketli programlarda şifreleme kütüphanesi gerekmez.
+    return AcikAnahtar(base64.b64decode(b64))
 
 
-def kod_coz(kod: str, bugun: date, acik: Ed25519PublicKey | None = None) -> dict[str, Any]:
+def kod_coz(kod: str, bugun: date, acik: Any = None) -> dict[str, Any]:
     """Kodu doğrular. {"tur","bitis"(YYYY-MM-DD|None),"tarih"} döner; olmazsa KodHatasi."""
     acik = acik or acik_anahtar_oku(erisim_anahtar.ACIK_ANAHTAR)
     s = temizle(kod)
@@ -114,7 +114,10 @@ def kod_coz(kod: str, bugun: date, acik: Ed25519PublicKey | None = None) -> dict
         yuk_bayt, imza = ham[2:2 + uzunluk], ham[2 + uzunluk:]
         if len(yuk_bayt) != uzunluk or len(imza) != 64:
             raise ValueError("uzunluk")
-        acik.verify(imza, yuk_bayt)
+        try:
+            acik.verify(imza, yuk_bayt)
+        except Exception:
+            raise ValueError("imza") from None
         yuk = json.loads(yuk_bayt.decode("utf-8"))
         tur = yuk["s"]
         tarih = date.fromisoformat(yuk["t"])
@@ -123,7 +126,7 @@ def kod_coz(kod: str, bugun: date, acik: Ed25519PublicKey | None = None) -> dict
         gun = yuk["g"]
         if tur != "gun" or isinstance(gun, bool) or not isinstance(gun, int) or not 1 <= gun <= EN_COK_GUN:
             raise ValueError("yuk")
-    except (InvalidSignature, ValueError, KeyError, TypeError, UnicodeDecodeError):
+    except (ValueError, KeyError, TypeError, UnicodeDecodeError):
         raise KodHatasi("gecersiz_kod") from None
     bitis = tarih + timedelta(days=gun)
     if bugun > bitis:
@@ -138,7 +141,7 @@ class Erisim:
 
     def __init__(self, ayar_getir: Callable[[], dict[str, Any]],
                  simdi: Callable[[], datetime] = datetime.now,
-                 acik: Ed25519PublicKey | None = None) -> None:
+                 acik: Any = None) -> None:
         self._ayar = ayar_getir
         self.simdi = simdi
         self._acik = acik
