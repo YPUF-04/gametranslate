@@ -211,7 +211,7 @@ function dilKontrol() {
   const hatalar = [];
   sayfa.on('console', (m) => { if (m.type() === 'error') hatalar.push(m.text()); });
   sayfa.on('pageerror', (e) => hatalar.push(String(e)));
-  const gor = async (ad, tam) => { if (SHOTS) await sayfa.screenshot({ path: path.join(SHOTS, ad), fullPage: !!tam || !!process.env.FULL }); };
+  const gor = async (ad, tam) => { if (SHOTS && tam) await sayfa.waitForFunction(() => !document.querySelector('.tost'), null, { timeout: 8000 }).catch(() => {}); if (SHOTS) await sayfa.screenshot({ path: path.join(SHOTS, ad), fullPage: !!tam || !!process.env.FULL }); };
   const adim = (s) => console.log('  ok -', s);
 
   try {
@@ -517,7 +517,7 @@ function dilKontrol() {
     assert.match(await metin('#dogrula-2'), /7 yazı okudum\./);
     assert.strictEqual(await sayfa.locator('#okuma-katman .okuma-kutu').count(), 7);
     assert.match(await metin('#okunan-liste'), /Where were you last night\?/);
-    await sayfa.waitForTimeout(700);
+    await sayfa.waitForTimeout(1200);
     await gor('adim-2.png', true);
     adim('2. Yazı okuma ("Şimdi yap" ile): 7 yazı kutularla resimde ve listede ✓');
     await sayfa.click('#ileri-2');

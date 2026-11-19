@@ -146,7 +146,7 @@
 "oyun.paket.yukleniyor": "Loading…",
 "oyun.paket.eklendi": "{n} sentences added",
 "ana.oyun": "Your game",
-"ana.ne.durdu": "When you press Start, I read the text on screen and send the translation to your TV.",
+"ana.ne.durdu": "When you press Start, I read the text on screen and show the translation where you chose.",
 "ana.ne.calisiyor": "I am reading and translating the text on screen. Press Stop when you are done.",
 "izin.baslik": "Should I remember this game's translations?",
 "izin.govde": "If I remember, the same sentences are translated instantly and in the same way next time. Everything stays only on this computer and is never sent to anyone. You can delete it any time.",
@@ -232,8 +232,6 @@
 "bolge.yenile": "Refresh the picture",
 "bolge.otomatik": "Let it find text itself (no boxes)",
 "bolge.kaydet": "Save boxes",
-"bolge.kaydedildi": "Saved. From now on I only read these boxes.",
-"bolge.otomatik_tamam": "Okay, I will find the text myself.",
 "bolge.yukleniyor": "Getting the screen picture…",
 "bolge.ipucu": "Drag to draw a box. Drag a corner to resize, the middle to move. Press a box's label to choose what it is. Keyboard: on the picture Enter adds a box, arrows move, Shift+arrows resize, Enter picks the type, Delete removes.",
 "bolge.dolu": "You've drawn {n} boxes, that's the maximum. Remove one to draw another.",
@@ -422,7 +420,6 @@
 "bolge.tamam_otomatik": "Automatic: I'll find the on-screen text myself.",
 "bolge.resim_alt": "Game picture for drawing boxes",
 "bolge.katman_aria": "Game picture. Press Enter to add a box.",
-"bolge.cip_aria": "Box {n}: {tur}. Change type",
 "bolge.pop_baslik": "What's in box {n}?",
 "bolge.tur_kisa.altyazi": "Subtitles",
 "bolge.tur_kisa.ust_yazi": "Quest-info",
@@ -440,5 +437,10 @@
 "hazir.degistir": "Change",
 "kurulum.durum": "Setup status",
 "kurulum.durum.k": "Press a step to redo it.",
-"kurulum.cip_aria": "{ad}: {durum}. Redo"
+"kurulum.cip_aria": "{ad}: {durum}. Redo",
+"bolge.cip_kare": "Box",
+"bolge.cip_degistir": "change type",
+"durum.bu_ekran": "Shown on: this computer's screen",
+"yerel.gerekli_bos": "For offline translation I need to download a language file once. After that it works without internet.",
+"yerel.indir_bir": "Download (once)"
 }

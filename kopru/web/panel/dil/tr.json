@@ -146,7 +146,7 @@
 "oyun.paket.yukleniyor": "Yükleniyor…",
 "oyun.paket.eklendi": "{n} cümle eklendi",
 "ana.oyun": "Oynadığın oyun",
-"ana.ne.durdu": "Başlat'a basınca ekrandaki yazıları okur ve TV'ne Türkçe gönderirim.",
+"ana.ne.durdu": "Başlat'a basınca ekrandaki yazıları okur, Türkçesini seçtiğin yerde gösteririm.",
 "ana.ne.calisiyor": "Ekrandaki yazıları okuyor ve çeviriyorum. Bitirince Durdur'a bas.",
 "izin.baslik": "Bu oyunun çevirilerini hatırlayayım mı?",
 "izin.govde": "Hatırlarsam aynı cümleler bir dahaki sefere anında ve aynı şekilde çevrilir. Her şey sadece bu bilgisayarda kalır, kimseye gönderilmez. İstediğin zaman silebilirsin.",
@@ -232,8 +232,6 @@
 "bolge.yenile": "Görüntüyü yenile",
 "bolge.otomatik": "Otomatik bulsun (kare çizme)",
 "bolge.kaydet": "Kareleri kaydet",
-"bolge.kaydedildi": "Kaydettim. Artık sadece bu kareleri okurum.",
-"bolge.otomatik_tamam": "Tamam, yazıları kendim bulacağım.",
 "bolge.yukleniyor": "Ekran görüntüsü alınıyor…",
 "bolge.ipucu": "Sürükleyerek kare çiz. Köşelerden tutup büyüt, ortadan tutup taşı. Karenin etiketine basıp ne olduğunu seç. Klavyede: resme gelip Enter yeni kare açar, oklar taşır, Shift+oklar boyutlandırır, Enter tür seçtirir, Delete siler.",
 "bolge.dolu": "{n} kare çizdin, daha fazla çizilemez. Birini silersen yenisini çizebilirsin.",
@@ -422,7 +420,6 @@
 "bolge.tamam_otomatik": "Otomatik: ekrandaki yazıları kendim bulacağım.",
 "bolge.resim_alt": "Kare çizmek için oyun görüntüsü",
 "bolge.katman_aria": "Oyun görüntüsü. Yeni kare için Enter'a bas.",
-"bolge.cip_aria": "Kare {n}: {tur}. Türü değiştir",
 "bolge.pop_baslik": "{n}. karede ne var?",
 "bolge.tur_kisa.altyazi": "Altyazı",
 "bolge.tur_kisa.ust_yazi": "Görev-bilgi",
@@ -440,5 +437,10 @@
 "hazir.degistir": "Değiştir",
 "kurulum.durum": "Kurulum durumu",
 "kurulum.durum.k": "Bir adıma basıp yeniden yapabilirsin.",
-"kurulum.cip_aria": "{ad}: {durum}. Yeniden yap"
+"kurulum.cip_aria": "{ad}: {durum}. Yeniden yap",
+"bolge.cip_kare": "Kare",
+"bolge.cip_degistir": "türü değiştir",
+"durum.bu_ekran": "Gösterim: bu bilgisayarın ekranı",
+"yerel.gerekli_bos": "Çevrimdışı çeviri için bir kez bir dil dosyası indirmem gerekiyor. Sonra internetsiz çalışır.",
+"yerel.indir_bir": "İndir (bir kez)"
 }
