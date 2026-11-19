@@ -129,6 +129,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: SURUMLER.md
       - uses: actions/download-artifact@v4
         with:
           name: AltYaziKoprusu-Windows
@@ -141,5 +144,5 @@ jobs:
             yayin/AltYaziKoprusu-Tasinabilir-*.zip
             yayin/SHA256SUMS.txt
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          body_path: SURUMLER.md
           prerelease: ${{ contains(github.ref_name, '-') }}
