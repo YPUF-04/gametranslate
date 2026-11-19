@@ -198,3 +198,44 @@ Ayar: `guncelleme_denetle` (bool, varsayılan `true`). Kapalıyken program kendi
 
 Güncelleme adresleri yalnız `https` ve `github.com`, `api.github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` olabilir (yönlendirmeler dahil her adımda denetlenir).
 LG kurulumu, LG'nin `ares-install` aracını izler: `http://<TV>:9991/webos_rsa` (anahtar), SSH `<TV>:9922` kullanıcı `prisoner`, SFTP `/media/developer/temp/`, `luna-send-pub -i luna://com.webos.appInstallService/dev/install`, ardından `luna://com.webos.applicationManager/launch`.
+
+## 9. Türkçe dublaj — karakterin kendi sesiyle (sürüm 0.4)
+
+Amaç: karakter İngilizce konuşurken, AYNI SESLE Türkçe konuşuyormuş gibi duyulsun.
+
+### 9.1 Akış
+1. **Oyun sesi** (yalnız sistem/oyun sesi; mikrofon ASLA) → konuşma parçalarına bölünür (VAD).
+2. **Konuşmadan yazıya** (yerel Whisper). Ekranda aynı cümlenin altyazısı varsa altyazı metni tercih edilir.
+3. **Çeviri** (mevcut bağlamlı çeviri; dublaj için "söylenebilir, süreye sığar" kısa Türkçe istenir).
+4. **Ses klonlama**: o parçanın KENDİ sesi (3–10 sn) örnek alınır → aynı tonda Türkçe seslendirilir.
+   Örnek ses yalnız bellekte tutulur; diske yazılmaz, hiçbir yere gönderilmez (yerel motorlarda).
+   Aynı konuşmacının daha temiz örnekleri birikirse (benzerlik eşleştirmesiyle) onlar kullanılır.
+5. **Süreye sığdırma**: Türkçe ses orijinal süreden uzunsa en çok 1.25× hızlandırılır; yine sığmazsa kısaltılmış çeviri istenir.
+6. **Çalma**: Türkçe ses çalarken oyunun kendi sesi kısılır (Windows: yalnız oyun/Remote Play uygulamasının sesi; diğerlerinde genel ses) ve bitince yumuşakça geri açılır.
+7. Gecikme hedefi: konuşma bittikten sonra ≤ 2,5 sn (güçlü ekran kartıyla). Altyazı her zaman dublajdan önce görünür.
+
+### 9.2 Ses motorları (`dublaj.motor`)
+| kod | ne | nerede | not |
+|---|---|---|---|
+| `chatterbox` | Chatterbox Multilingual (Resemble AI, MIT, Türkçe dahil 23 dil) | yerel, NVIDIA ekran kartı önerilir | en iyi yerel kalite |
+| `pocket` | Pocket TTS + Türkçe topluluk modeli (`kaanhgunay/pocket-tts-tr`) | yerel, ekran kartı gerekmez | zayıf bilgisayar için |
+| `elevenlabs` | ElevenLabs (kullanıcının kendi anahtarı, ücretli) | bulut | en doğal; ses örneği o servise gider — panel bunu açıkça söyler ve ayrıca onay ister |
+| `kapali` | dublaj yok | — | varsayılan |
+Program bilgisayarı tanır (ekran kartı var mı, bellek) ve uygun motoru önerir. Modeller ilk açılışta, kullanıcı onayıyla indirilir.
+
+### 9.3 Ayarlar
+`dublaj`: `{"motor":"kapali","oyun_sesi_kis":0.25,"hiz_siniri":1.25,"ses_seviyesi":1.0,"cikis":"bilgisayar"|"tv"}`
+`cikis:"tv"`: Türkçe ses TV uygulamasına gönderilir ve orada çalınır (olay `ses`, aşağıda).
+
+### 9.4 Yeni olaylar ve API
+- SSE `ses`: `{"id":"s12","url":"/kopru/ses/s12.wav","sure_ms":2300,"yazi_id":"a17"}` (dosya bellekten sunulur, 60 sn sonra silinir)
+- SSE `ses-dur`: `{}`
+- `GET /kopru/ses/<id>.wav` (yerel ağ; sadece bellekteki geçici ses)
+- `GET /api/dublaj` → `{"motor":"chatterbox","hazir":true,"onerilen":"chatterbox","ekran_karti":"NVIDIA RTX 3060","indirme":{"durum":"bitti","yuzde":100}}`
+- `POST /api/dublaj` → ayarları değiştirir; `POST /api/dublaj/hazirla` → seçili motorun modelini indirir (ilerleme `GET /api/dublaj`'da)
+- `POST /api/dublaj/dene` `{"metin":"Merhaba, nasılsın?"}` → örnek Türkçe ses (hazır bir referans sesle) çalar
+
+### 9.5 Kurallar
+- Mikrofon asla açılmaz; ses dosyası diske yazılmaz; konuşmacı örnekleri oturum bitince silinir.
+- Gerçek kişilerin (ünlü, yayıncı) seslerini taklit eden hazır ses paketi YOKTUR; yalnız oyunun o anki kendi sesi örnek alınır.
+- Dublaj kişisel kullanım içindir; kaydedip yayınlamak oyunun ve seslendirme sanatçılarının haklarına tabidir (belgede yazılır).
