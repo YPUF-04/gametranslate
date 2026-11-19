@@ -290,3 +290,23 @@ Dizin: `https://raw.githubusercontent.com/argosopentech/argospm-index/main/index
 ### 11.5 Ekran öğesi çizimi
 - Yazı boyu kaynak yazının yüksekliğinden hesaplanır (1080p'de 14–30 px, `olcek` ve genel `gorunum.ekran_olcek` ile çarpılır).
 - Kelime ortasından/harf harf ASLA bölünmez; kutu metne göre genişler (en çok ekran genişliğinin %45'i), sığmazsa yazı küçülür (en az 12 px).
+
+## 12. Kendi panelini okumama, cihaza göre yakalama, oyun bilgisi, bağlantı rehberleri (sürüm 0.7)
+
+### 12.1 Asla kendini okuma
+- Windows'ta başlığında marka adı ("AltYazıKöprüsü") geçen tüm görünür pencereler (panelin açık olduğu tarayıcı sekmesi dahil) ve katman penceresi, yakalanan karede siyaha boyanır ve üzerlerine katman çizilmez.
+- `kaynak` tüm ekran (`ekran:N`) ise: bölge yoksa YALNIZ altyazı bandı okunur; `ekrani_cevir` (menü/görev yazıları) yalnız kullanıcı bölge çizdiyse ve yalnız o bölgelerde çalışır.
+
+### 12.2 Cihaza göre kaynak
+`cihaz` → otomatik pencere eşleştirme (başlık içerir, büyük/küçük harf duyarsız):
+- `ps5`: "PS Remote Play", "chiaki"
+- `xbox`: "Xbox"
+- `kart`: "Windowed Projector", "Projektör", "OBS", kart yazılımları ("Elgato", "4K Capture Utility", "RECentral")
+- `pc`: oyun penceresi (kullanıcı seçer; tarayıcılar ve marka penceresi listede alta itilir)
+`GET /api/kaynaklar` her öğeye `onerilen: true|false` ve `tur: "ekran"|"pencere"` ekler; uygun pencere yoksa panel cihaz rehberini gösterir.
+
+### 12.3 Oyun bilgisi hazırlama
+`POST /api/oyun/<kod>/bilgi-hazirla` → seçili çeviri motoruyla (LLM) oyunun adından: kısa açıklama (≤200 karakter), hitap önerisi, 20–80 terimlik sözlük (karakter/yer/eşya/çete adları; çoğu çevrilmez, gerekiyorsa Türkçe karşılığı). Sonuç öneri olarak döner: `{"aciklama","hitap","terimler":[{"asil","ceviri"}]}`; panel kullanıcıya gösterir, "Kaydet" ile sözlüğe ve oyun bilgisine yazılır. Çevrimdışı motorda kullanılamaz (açık mesaj).
+
+### 12.4 Ekran öğesi boyutu
+Varsayılan yazı boyu kaynak satır yüksekliğinin 0.75'i (1080p'de 12–22 px); öğe tek satıra sığmaya çalışır, genişlik metne göre (kaynak genişliğinin en çok 1.6 katı, ekranın en çok %35'i), yalnız boşlukta satır kırılır, en çok 2 satır; sığmazsa yazı küçülür (en az 11 px) ve sonuna "…" konur.
