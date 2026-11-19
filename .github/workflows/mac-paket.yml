@@ -70,6 +70,7 @@ jobs:
           --hidden-import Quartz
           --hidden-import Foundation
           --hidden-import objc
+          --collect-all ocrmac
           paketleme/baslat.py
       - name: Info.plist'i düzelt, lisansları ekle, adlandır
         run: |
@@ -94,6 +95,8 @@ jobs:
           echo "---- günlük ----"; cat duman.log
           kill "$PID" 2>/dev/null || true
           if [ "$ok" != 1 ]; then echo "HATA: 30 sn içinde /kopru/merhaba yanıt vermedi." >&2; exit 1; fi
+      - name: Paketin içinde ekran yazısı okuma çalışıyor mu
+        run: '"dist/AltYazıKöprüsü.app/Contents/MacOS/AltYaziKoprusu" --ozdenetim'
       - name: .dmg üret (UDZO, Uygulamalar kısayoluyla)
         run: |
           bash paketleme/mac/dmg_yap.sh "dist/AltYazıKöprüsü.app" \
