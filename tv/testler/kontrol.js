@@ -37,7 +37,11 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     await p.screenshot({ path: path.join(SHOT, 'tv-html.png') });
     await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 3000 }); ok('sure_ms sonunda gizlendi');
     s.yayinla('yazi', { id: 'a2', metin: 'İkinci', sure_ms: 1500 }); await p.waitForSelector('.ak-yazi-kutu:visible');
-    s.yayinla('yazi-sil'); await bekle(400); assert(await p.isVisible('.ak-yazi-kutu'), 'sure_ms dolmadan kaldırıldı'); ok('yazi-sil, sure_ms dolmadan yazıyı kaldırmaz'); await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 4000 }); ok('yazi-sil sonunda kaldırdı');
+    s.yayinla('yazi-sil'); await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 1500 }); ok('yazi-sil (§13.2): kaynak gitti, en az süre beklenmeden kalkar');
+    s.yayinla('yazi', { id: 'g1', metin: 'Üçüncü', sure_ms: 3000 }); await p.waitForSelector('.ak-yazi-kutu:visible');
+    s.yayinla('katman-gizle'); await bekle(100); assert.strictEqual(await p.isVisible('.ak-yazi-kutu'), false, 'gizli iken görünür'); ok('katman-gizle: yazı gizlendi');
+    s.yayinla('katman-goster'); await bekle(100); assert(await p.isVisible('.ak-yazi-kutu'), 'gösterilince görünmedi'); ok('katman-goster: yazı yeniden görünür');
+    s.yayinla('yazi-sil'); await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 1500 });
     s.yayinla('ekran', { id: 'e1', ogeler: [{ x: 0.1, y: 0.2, g: 0.3, y2: 0.05, metin: 'Ana kampa dön', aciklama: 'Görev: üsse geri git', tur: 'gorev' }, { x: 0.5, y: 0.5, g: 0.2, y2: 0.04, metin: 'Menü', tur: 'menu' }] });
     await p.waitForSelector('.ak-oge'); var r = await p.$$eval('.ak-oge', function (l) { return l.map(function (e) { var b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), e.textContent]; }); });
     assert.strictEqual(r.length, 2); assert(Math.abs(r[0][0] - 192) <= 2 && Math.abs(r[0][1] - 216) <= 2 && r[0][2] <= 0.35 * 1920 + 2, JSON.stringify(r));
