@@ -458,13 +458,23 @@
       es.onopen = function () { deneme = 0; durumDegistir('bagli'); gozcuKur(); };
       es.onerror = function () { yenidenBaglan(); };
       dinle('yazi', function (v) { yaziGoster(v); });
-      dinle('yazi-sil', function () { yaziSil(false); });
+      dinle('yazi-sil', function () { yaziSil(true); });   // §13.2: kaynak gitti kararı sunucuda; en az süre için ek bekleme yok
+      dinle('katman-gizle', function () { gizliAyarla(true); });
+      dinle('katman-goster', function () { gizliAyarla(false); });
       dinle('ekran', function (v) { ekranGoster(v); });
       dinle('ekran-sil', function () { ekranSil(); });
       dinle('ses', function (v) { sesCal(v); });
       dinle('ses-dur', function () { sesDurdur(); });
       dinle('gorunum', function (v) { gorunumUygula(v); });
       dinle('durum', function (v) { bildir('onBilgi', v); });
+    }
+
+    // §13.1: yazılar gizlendi/gösteriliyor (çeviri sürer; yalnız çizim saklanır)
+    function gizliAyarla(g) {
+      var var_ = / ?ak-gizli\b/.test(kok.className);
+      if (g && !var_) { kok.className += ' ak-gizli'; }
+      else if (!g) { kok.className = kok.className.replace(/\s*ak-gizli\b/g, ''); }
+      bildir('onGizli', !!g);
     }
 
     function yeniden() { gorunumUygula(); }
@@ -485,7 +495,7 @@
     if (url) { durumDegistir('baglaniyor'); baglan(); } else { durumDegistir('bagli'); }
 
     return {
-      durdur: durdur, yaziGoster: yaziGoster, yaziSil: function () { yaziSil(false); }, ekranGoster: ekranGoster, ekranSil: ekranSil,
+      durdur: durdur, yaziGoster: yaziGoster, yaziSil: function () { yaziSil(false); }, ekranGoster: ekranGoster, ekranSil: ekranSil, gizliAyarla: gizliAyarla,
       gorunumUygula: gorunumUygula,
       sesCal: sesCal, sesDurdur: sesDurdur,
       durumu: function () { return durum; },

@@ -145,8 +145,8 @@ async def test_en_az_gosterim_suresi_korunur():
     (t_yazi, v), = yalniz(olaylar, "yazi")
     (t_sil, _), = yalniz(olaylar, "yazi-sil")
     assert v["sure_ms"] == 1800
-    assert t_sil - t_yazi >= 1.8 - 1e-9          # en az gösterim doldu
-    assert t_sil - t_yazi < 1.8 + DT + 1e-9      # ve gereksiz uzamadı
+    # §13.2: kaynak gidince (ilk boş kare 2*DT) en çok 1500 ms kalır; en az süre bunu uzatmaz
+    assert t_sil - 2 * DT <= 1.5 + 1e-9
 
 
 async def test_uzun_yazinin_okuma_suresi_korunur():
@@ -156,7 +156,7 @@ async def test_uzun_yazinin_okuma_suresi_korunur():
     (t_yazi, v), = yalniz(olaylar, "yazi")
     (t_sil, _), = yalniz(olaylar, "yazi-sil")
     assert v["sure_ms"] > 1800
-    assert t_sil - t_yazi >= v["sure_ms"] / 1000 - 1e-9
+    assert t_sil - 2 * DT <= 1.5 + 1e-9   # §13.2: uzun okuma süresi bile kaynak gidince en çok 1500 ms
 
 
 async def test_gittikten_sonra_700ms_daha_kalir():
@@ -286,7 +286,7 @@ async def test_bolge_kirpma_koordinatlari_tam_kareye_doner():
         return [Satir("Stay close", 0.25, 0.5, 0.5, 0.4)]    # altyazı bölgesi (512x72)
 
     olaylar, ok = await bolgeli_kos(bolgeler, cevap)
-    assert sorted(ok.boyutlar) == [(320, 72), (512, 72)]       # yalnız bölgeler okundu, tam kare değil
+    assert sorted(set(ok.boyutlar)) == [(320, 72), (512, 72)]       # yalnız bölgeler okundu, tam kare değil
     ekran = [v for o, v in olaylar if o == "ekran"][0]["ogeler"]
     assert len(ekran) == 1
     e = ekran[0]
@@ -360,18 +360,18 @@ async def test_ekran_ogesi_degismeyince_yeniden_gonderilmez():
     assert not yalniz(olaylar, "ekran-sil")
 
 
-async def test_ekran_ogesi_gidince_1sn_sonra_kalkar():
+async def test_ekran_ogesi_gidince_600ms_sonra_kalkar():
     menu = Satir("Continue", 0.45, 0.4, 0.1, 0.04)
     k = ekran_senaryo([menu], 4, 16)
     olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
     (t_sil, _), = yalniz(olaylar, "ekran-sil")
-    gitti = 4 * DT + 2 * DT
-    assert t_sil >= gitti + 1.0 - 1e-9 and t_sil < gitti + 1.0 + DT + 1e-9
+    gitti = 4 * DT + 1 * DT          # 2 ardışık boş karenin ikincisi
+    assert t_sil <= gitti + 0.6 + DT + 1e-9   # §13.2: tek öğe de olsa bölge boş: en geç ~600-800 ms
 
 
 async def test_ekran_tek_kareli_titreme_ogeyi_kaldirmaz():
     menu = Satir("Continue", 0.45, 0.4, 0.1, 0.04)
-    k = [(10, [menu])] * 3 + [(50, [])] * 2 + [(10, [menu])] * 8
+    k = [(10, [menu])] * 3 + [(50, [])] * 1 + [(10, [menu])] * 8
     olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
     assert len(yalniz(olaylar, "ekran")) == 1 and not yalniz(olaylar, "ekran-sil")
 
@@ -386,3 +386,104 @@ async def test_ekran_ogesi_yerinde_guncellenir_ayni_id():
     assert [len(v["ogeler"]) for _, v in e] == [1, 1]           # eskisi yerinde değişti, yan yana ikilenmedi
     assert e[0][1]["ogeler"][0]["id"] == e[1][1]["ogeler"][0]["id"]
     assert e[1][1]["ogeler"][0]["metin"] == "[TR] Collect 4 herbs"
+
+
+# ---------- PROTOKOL 13.2: kaynak yazı gidince çeviri de gitsin ----------
+
+class SabitKareSenaryo:
+    """Kare hiç değişmez (parmak izi aynı); yalnız okunan satırlar zamanla değişir."""
+
+    def __init__(self, satirlar_at, saat):
+        self.satirlar_at = satirlar_at   # t -> satırlar
+        self.saat = saat
+        self.oku_sayisi = 0
+        self.oku_zamanlari = []
+
+    def kare(self):
+        return Image.new("RGB", (64, 36), (10, 10, 10))
+
+    def oku(self, resim):
+        self.oku_sayisi += 1
+        self.oku_zamanlari.append(self.saat["t"])
+        return self.satirlar_at(self.saat["t"])
+
+
+async def _sabit_kos(satirlar_at, sure, ayar):
+    saat = {"t": 0.0}
+    s = SabitKareSenaryo(satirlar_at, saat)
+    y = Yayin()
+    q = y.abone_ol()
+    ayar = {**VARSAYILAN, "ekrani_cevir": False, **ayar}
+    isl = Isleme(s.kare, s, CeviriYoneticisi(SahteMotor(), None, None), y, lambda: ayar, saat=lambda: saat["t"])
+    out = []
+    for _ in range(int(sure / DT)):
+        await isl.adim()
+        while not q.empty():
+            o, v = q.get_nowait()
+            out.append((saat["t"], o, v))
+        saat["t"] += DT
+    return out, s
+
+
+async def test_degismeyen_kare_en_az_saniyede_bir_yeniden_okunur():
+    _, s = await _sabit_kos(lambda t: altyazi("Run!"), 6.0, {})
+    araliklar = [b - a for a, b in zip(s.oku_zamanlari, s.oku_zamanlari[1:])]
+    assert s.oku_sayisi >= 6 and max(araliklar) <= 1.0 + 1e-9
+    assert s.oku_sayisi < 24      # her karede okunmaz (önbellek hâlâ işliyor)
+
+
+async def test_sabit_karede_ekran_ogesi_gidince_kalkar():
+    menu = Satir("Continue", 0.45, 0.4, 0.1, 0.04)
+    gidis = 3.0
+    olaylar, _ = await _sabit_kos(lambda t: [menu] if t < gidis else [], 8.0,
+                                  {"ekrani_cevir": True, "kaynak": "pencere:1"})
+    (t_sil, _), = yalniz(olaylar, "ekran-sil")
+    assert gidis <= t_sil <= gidis + 1.0 + 3 * DT + 1e-9   # en geç 1 sn'lik yeniden okuma + 2 kare
+
+
+async def test_ekran_ogesi_gidince_600ms_icinde_ekran_olayi_onu_cikarir():
+    gorev = Satir("Return to the base camp quickly", 0.02, 0.05, 0.3, 0.04)
+    menu = Satir("Continue", 0.45, 0.4, 0.1, 0.04)
+    k = [(10, [gorev, menu])] * 4 + [(50, [gorev])] * 12          # menü gider, görev kalır
+    olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
+    ekranlar = yalniz(olaylar, "ekran")
+    assert len(ekranlar) == 2 and len(ekranlar[0][1]["ogeler"]) == 2 and len(ekranlar[1][1]["ogeler"]) == 1
+    ilk_bos = 4 * DT
+    assert ekranlar[1][0] - ilk_bos <= 0.6 + 2 * DT + 1e-9        # 2. boş kare + 600 ms (kare aralığı payıyla)
+    assert ekranlar[1][0] - ilk_bos >= 0.6 - 1e-9
+
+
+async def test_bolge_bosalinca_tum_ogeler_silinir():
+    a = Satir("Collect 3 herbs", 0.02, 0.05, 0.3, 0.04)
+    b = Satir("Return to camp", 0.02, 0.15, 0.3, 0.04)
+    k = [(10, [a, b])] * 4 + [(50, [])] * 8
+    olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
+    (t_sil, _), = yalniz(olaylar, "ekran-sil")
+    assert t_sil - 4 * DT <= 2 * DT + 1e-9                        # 2 ardışık boş kare yeter
+
+
+async def test_altyazi_kaynak_gidince_en_cok_1500ms_kalir():
+    for okuma in ("Hi", "We should really head back to the base before it gets dark"):
+        k = [(10, altyazi(okuma))] * 3 + [(50, [])] * 20
+        olaylar = await kos_zamanli(k)
+        (t_sil, _), = yalniz(olaylar, "yazi-sil")
+        assert t_sil - 3 * DT <= 1.5 + 1e-9, okuma
+
+
+async def test_yeniden_oku_her_seyi_siler_ve_hemen_okutur():
+    s = Senaryo([(10, altyazi("Run!"))] * 12)
+    saat = {"t": 0.0}
+    y = Yayin()
+    q = y.abone_ol()
+    ayar = {**VARSAYILAN, "ekrani_cevir": False}
+    isl = Isleme(s.kare, s, CeviriYoneticisi(SahteMotor(), None, None), y, lambda: ayar, saat=lambda: saat["t"])
+    for _ in range(4):
+        await isl.adim()
+        saat["t"] += DT
+    while not q.empty():
+        q.get_nowait()
+    isl.yeniden_oku()
+    adlar = []
+    while not q.empty():
+        adlar.append(q.get_nowait()[0])
+    assert adlar == ["yazi-sil", "ekran-sil"] and isl._izi is None

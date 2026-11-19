@@ -50,6 +50,9 @@
   background: rgba(11, 21, 36, 0.9); color: #FFD166; display: none; font-weight: 600;
   box-shadow: inset 0 0 0 0.05em rgba(255, 209, 102, 0.35), 0 0.2em 0.8em rgba(0, 0, 0, 0.3); }
 
+/* §13.1: yazılar gizli (kısayol): çeviri sürer, çizim görünmez */
+.ak-kok.ak-gizli .ak-yazi, .ak-kok.ak-gizli .ak-ekran { visibility: hidden; }
+
 /* JS dengesi zorlandığında (sınama) CSS dengesi kapalı */
 .ak-kok.ak-js-denge .ak-metin { text-wrap: wrap; }
 

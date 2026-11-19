@@ -12,7 +12,8 @@ from typing import Any, Callable, Iterable, Iterator
 
 EN_AZ_MS = 1800
 ONCEKI_SN = 2.5          # §7.2/7: önceki satır küçük ve soluk kalır
-EKRAN_GITTI_SN = 1.0     # §7.2/8: ekrandan giden öğe 1 sn sonra kalkar
+EKRAN_GITTI_SN = 0.0     # §13.2: sunucu öğeyi zaten 600 ms bekleyip listeden çıkarır; burada ek bekleme yok
+BILDIRIM_SN = 1.5        # §13.1: küçük bildirim (toast) bu kadar görünür
 VARSAYILAN_GORUNUM: dict[str, Any] = {
     "yazi_boyutu": 44, "konum": "alt", "kenar_bosluk": 0.08, "arka_plan": 0.55,
     "yazi_rengi": "#FFFFFF", "konusan_rengi": "#FFD166",
@@ -43,6 +44,8 @@ class Goruntu:
     onceki: str | None
     ogeler: list[dict[str, Any]]
     gorunum: dict[str, Any] = field(default_factory=dict)
+    bildirim: str | None = None
+    gizli: bool = False
 
 
 class Zamanlayici:
@@ -55,6 +58,8 @@ class Zamanlayici:
         self._onceki: tuple[str, float] | None = None
         self._ogeler: dict[str, dict[str, Any]] = {}
         self.kapat = False
+        self.gizli = False                                  # §13.1: katman-gizle / katman-goster
+        self._bildirim: tuple[str, float] | None = None     # (metin, bitiş)
 
     # -- olaylar --
     def olay(self, ad: str, veri: dict[str, Any] | None, simdi: float | None = None) -> bool:
@@ -68,15 +73,24 @@ class Zamanlayici:
             return self._yazi(veri, simdi)
         if ad == "yazi-sil":
             if self.yazi is not None:
-                self.yazi["sil_an"] = max(simdi, self.yazi["min_bitis"])
+                # §13.2: sunucu "kaynak gitti" kararını (en çok 1,5 sn) vermiştir; en az süre için ek bekleme yok
+                self.yazi["sil_an"] = simdi
             return True
         if ad == "ekran":
             return self._ekran(veri, simdi)
         if ad == "ekran-sil":
-            for o in self._ogeler.values():
-                if o["gitti"] is None:
-                    o["gitti"] = simdi
+            degisti = bool(self._ogeler)
+            self._ogeler.clear()   # §13.2: eski öğe tuvalde kalmasın
+            return degisti
+        if ad in ("katman-gizle", "katman-goster"):
+            self.gizli = ad == "katman-gizle"
             return True
+        if ad == "durum":
+            b = veri.get("bildirim")
+            if isinstance(b, str) and b.strip():
+                self._bildirim = (b.strip(), simdi + BILDIRIM_SN)
+                return True
+            return False
         if ad == "katman-kapat":
             self.kapat = True
             return True
@@ -142,6 +156,9 @@ class Zamanlayici:
                   if e["gitti"] is not None and simdi - e["gitti"] >= EKRAN_GITTI_SN]:
             del self._ogeler[k]
             degisti = True
+        if self._bildirim is not None and simdi >= self._bildirim[1]:
+            self._bildirim = None
+            degisti = True
         return degisti
 
     def goruntu(self, simdi: float | None = None) -> Goruntu:
@@ -152,7 +169,10 @@ class Zamanlayici:
         if self.gorunum.get("ekran_cevir", True):
             ogeler = [{**e["oge"], "id": k} for k, e in self._ogeler.items()]
         yazi = dict(self.yazi) if self.yazi else None
-        return Goruntu(yazi, onceki, ogeler, self.gorunum)
+        bildirim = self._bildirim[0] if self._bildirim and simdi < self._bildirim[1] else None
+        if self.gizli:   # §13.1: yazılar gizli (çeviri sürer); yalnız bildirim görünür
+            return Goruntu(None, None, [], self.gorunum, bildirim, True)
+        return Goruntu(yazi, onceki, ogeler, self.gorunum, bildirim, False)
 
 
 # ---------- yerleşim ----------

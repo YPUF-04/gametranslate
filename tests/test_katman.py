@@ -31,12 +31,11 @@ def test_yazi_sure_dolunca_kalkar():
     assert z.adim(2.1) and z.goruntu(2.1).yazi is None
 
 
-def test_yazi_sil_en_az_gosterim_dolana_kadar_bekler():
+def test_yazi_sil_hemen_kaldirir():
     z = zam()
     z.olay("yazi", yazi(sure=5000), 0)
-    z.olay("yazi-sil", {}, 0.5)
-    assert not z.adim(1.0)                 # en az 1800 ms dolmadı
-    assert z.adim(1.9) and z.goruntu(1.9).yazi is None
+    z.olay("yazi-sil", {}, 0.5)            # §13.2: "kaynak gitti" kararı sunucudadır; ek bekleme yok
+    assert z.adim(0.5) and z.goruntu(0.5).yazi is None
 
 
 def test_yazi_sil_sure_dolduysa_hemen():
@@ -83,9 +82,8 @@ def test_ekran_ogeleri_yerinde_guncelle_ve_1sn_sonra_kalk():
     z.olay("ekran", {"ogeler": [o]}, 0)
     z.olay("ekran", {"ogeler": [{**o, "metin": "Ana kampa dön"}]}, 1.0)
     assert [e["metin"] for e in z.goruntu(1.0).ogeler] == ["Ana kampa dön"]
-    z.olay("ekran", {"ogeler": []}, 2.0)
-    assert not z.adim(2.9) and len(z.goruntu(2.9).ogeler) == 1
-    assert z.adim(3.1) and z.goruntu(3.1).ogeler == []
+    z.olay("ekran", {"ogeler": []}, 2.0)   # §13.2: sunucu 600 ms bekleyip çıkarır; katman ek beklemez
+    assert z.adim(2.0) and z.goruntu(2.0).ogeler == []
 
 
 def test_ekran_cevir_kapaliysa_ogeler_cizilmez_ve_ekran_sil():
@@ -95,7 +93,7 @@ def test_ekran_cevir_kapaliysa_ogeler_cizilmez_ve_ekran_sil():
     assert z.goruntu(0).ogeler == []
     z.olay("gorunum", {"ekran_cevir": True}, 0)
     z.olay("ekran-sil", {}, 1)
-    assert z.adim(2.1) and z.goruntu(2.1).ogeler == []
+    assert z.goruntu(1).ogeler == [] and z._ogeler == {}
 
 
 def test_kapat_olayi_ve_bos_yazi():
@@ -332,3 +330,31 @@ def test_gercek_pencere_kisa_duman():
     r = subprocess.run(["xvfb-run", "-a", sys.executable, "-c", kod], capture_output=True, text=True, timeout=60,
                        cwd=os.path.dirname(os.path.dirname(__file__)))
     assert "TAMAM" in r.stdout, r.stderr
+
+
+# ---------- §13.1/§13.2: gizle/göster, bildirim, ekran-sil ----------
+
+def test_katman_gizle_goster_ve_bildirim():
+    z = zam()
+    z.olay("yazi", yazi(), 0)
+    z.olay("ekran", {"ogeler": [{"id": "o1", "metin": "A", "x": 0, "y": 0, "g": .1, "y2": .1}]}, 0)
+    z.olay("katman-gizle", {}, 1)
+    g = z.goruntu(1)
+    assert g.gizli and g.yazi is None and g.ogeler == [] and g.onceki is None
+    z.olay("durum", {"calisiyor": True, "bildirim": "Yazılar gizlendi"}, 1)
+    assert z.goruntu(2.4).bildirim == "Yazılar gizlendi"
+    assert z.adim(2.6) and z.goruntu(2.6).bildirim is None     # 1,5 sn sonra kalkar
+    z.olay("katman-goster", {}, 3)
+    assert not z.goruntu(3).gizli and len(z.goruntu(3).ogeler) == 1
+    assert not z.olay("durum", {"calisiyor": True}, 3)             # bildirimsiz durum çizimi değiştirmez
+
+
+def test_yayin_bildirimi_yeni_baglanana_tekrarlamaz_gizli_durumu_tekrarlar():
+    from kopru.yayin import Yayin
+    y = Yayin()
+    y.yayinla("durum", {"calisiyor": True, "bildirim": "Çeviri başladı"})
+    y.yayinla("katman-gizle", {})
+    acilis = dict(y.acilis_olaylari())
+    assert "bildirim" not in acilis["durum"] and "katman-gizle" in acilis
+    y.yayinla("katman-goster", {})
+    assert "katman-gizle" not in dict(y.acilis_olaylari())

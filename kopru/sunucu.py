@@ -20,6 +20,7 @@ from .ceviri import BILGI, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .ceviri.yonetici import CeviriYoneticisi
 from . import dublaj as dublaj_mod
+from . import kisayol as kisayol_mod
 from .dublaj.temel import DublajHatasi
 from .dublaj.yonetim import DublajYonetici
 from .isleme import Isleme
@@ -73,7 +74,9 @@ class Durum:
                  erisim: erisim_mod.Erisim | None = None,
                  dublaj_fabrikalari: dict[str, Any] | None = None,
                  katman_baslatici: Callable[[list[str]], Any] | None = None,
-                 katman_destek: Callable[[], bool] | None = None) -> None:
+                 katman_destek: Callable[[], bool] | None = None,
+                 kisayol_dinleyici: Callable[[], Any] | None = None,
+                 kisayol_destek: bool | None = None) -> None:
         self.ayar = ayar
         self.erisim = erisim or erisim_mod.Erisim(lambda: self.ayar)
         self.yayin = Yayin()
@@ -103,6 +106,62 @@ class Durum:
         self._okuma_dene_okuyucu: Any = None
         self._kaynak_onbellek: tuple[float, list[dict[str, Any]], str] | None = None
         self.yayin.yayinla("gorunum", ayar["gorunum"])
+        # genel kısayol tuşları (PROTOKOL §13.1): yalnız Windows; testlerde sahte dinleyici verilir
+        self.kisayol = kisayol_mod.Kisayollar(
+            {"baslat_durdur": self.kisayol_baslat_durdur, "gizle_goster": self.kisayol_gizle_goster,
+             "yeniden_oku": self.kisayol_yeniden_oku}, kisayol_dinleyici, kisayol_destek)
+
+    # -- kısayol eylemleri (§13.1) --
+    def bildir(self, kod: str) -> None:
+        """Durum olayına kısa bir `bildirim` metni ekleyip yayınlar (katman 1,5 sn'lik küçük bildirim gösterir)."""
+        self.yayin.yayinla("durum", {**self.durum_olayi(), "bildirim": metinler.mesaj(kod, self.dil)})
+
+    async def baslat_guvenli(self) -> str | None:
+        """Başlatır; hata kodu ("kaynak_yok" | "yakalama_yok" | "okuma_yok") ya da None."""
+        if not self.ayar.get("kaynak"):
+            return "kaynak_yok"
+        if self.calisiyor():
+            return None
+        try:
+            okuyucu = await asyncio.to_thread(self.okuyucu_olustur)
+            self.baslat(okuyucu)
+        except YakalamaHatasi:
+            return "yakalama_yok"
+        except OkumaHatasi:
+            return "okuma_yok"
+        return None
+
+    async def kisayol_baslat_durdur(self) -> None:
+        if self.calisiyor():
+            self.durdur()
+            self.bildir("bildirim_durdu")
+            return
+        if not self.ayar.get("kurulum_tamam") or not self.ayar.get("kaynak"):
+            self.bildir("bildirim_kurulum_gerek")
+            return
+        hata_kodu = await self.baslat_guvenli()
+        self.bildir("bildirim_baslamadi" if hata_kodu else "bildirim_basladi")
+
+    def kisayol_gizle_goster(self) -> None:
+        if self.yayin.katman_gizli:
+            self.yayin.yayinla("katman-goster", {})
+            self.bildir("bildirim_gosteriliyor")
+        else:
+            self.yayin.yayinla("katman-gizle", {})
+            self.bildir("bildirim_gizlendi")
+
+    def kisayol_yeniden_oku(self) -> None:
+        if self.isleme is not None and self.calisiyor():
+            self.isleme.yeniden_oku()
+        else:
+            self.yayin.yayinla("yazi-sil", {})
+            self.yayin.yayinla("ekran-sil", {})
+        self.bildir("bildirim_yeniden_oku")
+
+    def kisayol_bilgisi(self) -> dict[str, Any]:
+        b = self.kisayol.bilgi()
+        b["hata"] = {e: metinler.mesaj(f"kisayol_{k}", self.dil) for e, k in b["hata"].items()}
+        return b
 
     @property
     def dil(self) -> str:
@@ -543,6 +602,8 @@ def _dogrula(k: dict[str, Any]) -> bool:
             return False
         if "dublaj" in k and not dublaj_mod.ayar_gecerli(k["dublaj"]):
             return False
+        if "kisayollar" in k and not kisayol_mod.kisayollar_gecerli(k["kisayollar"]):
+            return False
         b = k.get("bolge_altyazi")
         if b is not None and not (isinstance(b, dict) and
                                   all(isinstance(b.get(f), (int, float)) and 0 <= b[f] <= 1
@@ -580,6 +641,8 @@ async def api_ayarlar_yaz(request: web.Request) -> web.Response:
         d.dublaj.senkronla()
     if "gorunum" in kismi:
         d.yayin.yayinla("gorunum", d.ayar["gorunum"])
+    if "kisayollar" in kismi:
+        d.kisayol.uygula(d.ayar["kisayollar"])   # tuşlar değişti: eskileri bırak, yenileri kaydet
     if {"gosterim", "katman_ekran", "kaynak"} & kismi.keys():
         d.katman.senkronla(kullanici_istegi=True)   # gösterim/ekran değişti: aç, kapat ya da yeni ekrana taşı
     if {"motor", "yedek_motor", "modeller", "aktif_oyun", "kalite", "hafiza_izni"} & kismi.keys():
@@ -683,15 +746,15 @@ async def api_baslat(request: web.Request) -> web.Response:
         return hata("kaynak_yok", 400, request)
     if d.calisiyor():
         return web.json_response({"calisiyor": True})
-    try:
-        # OCR paketlerini içe aktarmak saniyeler sürebilir: olay döngüsü (SSE, panel) donmasın
-        okuyucu = await asyncio.to_thread(d.okuyucu_olustur)
-        d.baslat(okuyucu)
-    except YakalamaHatasi:
-        return hata("yakalama_yok", 400, request)
-    except OkumaHatasi:
-        return hata("okuma_yok", 400, request)
+    # OCR paketlerini içe aktarmak saniyeler sürebilir: olay döngüsü (SSE, panel) donmasın
+    kod = await d.baslat_guvenli()
+    if kod:
+        return hata(kod, 400, request)
     return web.json_response({"calisiyor": True})
+
+
+async def api_kisayollar(request: web.Request) -> web.Response:
+    return web.json_response(request.app[DURUM].kisayol_bilgisi())
 
 
 async def api_durdur(request: web.Request) -> web.Response:
@@ -1299,6 +1362,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/erisim", api_erisim_yaz)
     r.add_post("/api/baslat", api_baslat)
     r.add_post("/api/durdur", api_durdur)
+    r.add_get("/api/kisayollar", api_kisayollar)
     r.add_post("/api/deneme-yazi", api_deneme_yazi)
     r.add_get("/api/kaynaklar", api_kaynaklar)
     r.add_get("/api/kare", api_kare)
@@ -1362,6 +1426,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
 
     async def ac(_: web.Application) -> None:
         await asyncio.to_thread(anahtarlar.isit)
+        durum.kisayol.baslat(asyncio.get_running_loop(), durum.ayar.get("kisayollar") or {})
         app["katman_gorevi"] = asyncio.create_task(katman_dongusu())   # kasa ilk okuması olay döngüsünü tutmasın
         app["durum_gorevi"] = asyncio.create_task(durum_dongusu())
         app["erisim_gorevi"] = asyncio.create_task(erisim_dongusu())
@@ -1371,6 +1436,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
         for t in arka:
             t.cancel()
         await asyncio.gather(*arka, return_exceptions=True)
+        durum.kisayol.durdur()
         await durum.kapat()
         await app[GUNCELLEME].kapat()
     app.on_startup.append(ac)

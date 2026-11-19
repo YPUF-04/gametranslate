@@ -349,6 +349,15 @@ class Katman:
                 self.tuval.create_text(cx, cy, text=s, font=f, fill=g.get("yazi_rengi", "#FFFFFF"), anchor="n")
                 cy += satir_y
             kutular.append((x0, y0, x1, y1))
+        if z.bildirim:   # §13.1: küçük bildirim, üst orta, 1,5 sn
+            f = self.font(max(14, int(24 * (H / 1080))), True)
+            dg = int(f.measure(z.bildirim)) + 36
+            yy = f.metrics("linespace") + 16
+            x0 = (W - dg) // 2
+            y0 = int(H * 0.04)
+            self._yuvarlak(x0, y0, x0 + dg, y0 + yy, 12, self._kutu_rengi({"arka_plan": 0.2}))
+            self.tuval.create_text(W // 2, y0 + 8, text=z.bildirim, font=f, fill="#FFD166", anchor="n")
+            kutular.append((x0, y0, x0 + dg, y0 + yy))
         if not self.saydam:   # Linux: saydam yok; pencereyi yalnız içeriğin kapladığı alana küçült
             self._sigdir(kutular)
 
@@ -366,7 +375,7 @@ class Katman:
     def _imza(self) -> str:
         z = self.zam.goruntu()
         return json.dumps([z.yazi and (z.yazi["id"], z.yazi["metin"], z.yazi["konusan"]), z.onceki,
-                           z.ogeler, z.gorunum], sort_keys=True, default=str)
+                           z.ogeler, z.gorunum, z.bildirim, z.gizli], sort_keys=True, default=str)
 
     def tik(self) -> None:
         degisti = False

@@ -16,6 +16,7 @@ class Yayin:
         self._yazi_bitis = 0.0
         self.son_ekran: dict[str, Any] | None = None
         self.son_durum: dict[str, Any] | None = None
+        self.katman_gizli = False   # §13.1: yazılar gizli mi (yeni bağlanan istemciye de bildirilir)
         self._dinleyiciler: list[Any] = []   # (olay, veri) çağrılan yerel dinleyiciler (ör. dublaj)
 
     @property
@@ -58,7 +59,12 @@ class Yayin:
         elif olay == "ekran-sil":
             self.son_ekran = None
         elif olay == "durum":
-            self.son_durum = veri
+            # "bildirim" tek seferliktir (toast): sonradan bağlanana tekrar gösterilmez
+            self.son_durum = {k: v for k, v in veri.items() if k != "bildirim"}
+        elif olay == "katman-gizle":
+            self.katman_gizli = True
+        elif olay == "katman-goster":
+            self.katman_gizli = False
         for q in list(self._aboneler):
             try:
                 q.put_nowait((olay, veri))
@@ -87,6 +93,8 @@ class Yayin:
             out.append(("yazi", {**self.son_yazi, "sure_ms": max(kalan, 500)}))
         if self.son_ekran is not None:
             out.append(("ekran", self.son_ekran))
+        if self.katman_gizli:
+            out.append(("katman-gizle", {}))
         return out
 
 

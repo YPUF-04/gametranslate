@@ -248,6 +248,18 @@ HATALAR: dict[str, dict[str, str]] = {
 }
 
 DIGER: dict[str, dict[str, str]] = {
+    "bildirim_basladi": {"tr": "Çeviri başladı", "en": "Translation started"},
+    "bildirim_durdu": {"tr": "Çeviri durdu", "en": "Translation stopped"},
+    "bildirim_gizlendi": {"tr": "Yazılar gizlendi", "en": "Text hidden"},
+    "bildirim_gosteriliyor": {"tr": "Yazılar gösteriliyor", "en": "Text shown"},
+    "bildirim_yeniden_oku": {"tr": "Yeniden okunuyor", "en": "Reading again"},
+    "bildirim_kurulum_gerek": {"tr": "Önce kurulumu bitirin", "en": "Finish setup first"},
+    "bildirim_baslamadi": {"tr": "Çeviri başlatılamadı", "en": "Translation could not start"},
+    "kisayol_kullanimda": {"tr": "Bu tuş başka bir programda kullanılıyor.",
+                           "en": "This key is already used by another program."},
+    "kisayol_cakisma": {"tr": "Bu tuş başka bir kısayola verilmiş.",
+                        "en": "This key is already assigned to another shortcut."},
+    "kisayol_gecersiz": {"tr": "Bu tuş birleşimi geçersiz.", "en": "This key combination is not valid."},
     "katman_deneme": {"tr": "Merhaba! Çeviriler burada, oyunun üstünde görünecek.",
                       "en": "Hello! Translations will appear here, on top of the game."},
     "deneme_tr": {"tr": "Merhaba! Bu bir deneme altyazısıdır.", "en": "Hello! This is a test subtitle."},

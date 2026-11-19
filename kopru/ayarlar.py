@@ -52,6 +52,8 @@ VARSAYILAN: dict[str, Any] = {
     "cihaz": None,   # ps5 | xbox | pc | kart
     "tv": None,      # lg | samsung | androidtv | yok
     "gorunum": VARSAYILAN_GORUNUM,
+    # genel kısayol tuşları, yalnız Windows (PROTOKOL §13.1); boş dize = kapalı
+    "kisayollar": {"baslat_durdur": "ctrl+shift+t", "gizle_goster": "ctrl+shift+h", "yeniden_oku": "ctrl+shift+r"},
 }
 
 
@@ -264,6 +266,10 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
     if s["erisim"].get("ucretsiz_dakika_gun") is not None and not (
             isinstance(s["erisim"]["ucretsiz_dakika_gun"], int) and 0 <= s["erisim"]["ucretsiz_dakika_gun"] <= 1440):
         s["erisim"]["ucretsiz_dakika_gun"] = v["erisim"]["ucretsiz_dakika_gun"]
+    from . import kisayol
+    for k, t in list(s["kisayollar"].items()):
+        if not (k in kisayol.EYLEMLER and kisayol.kisayol_gecerli(t)):
+            s["kisayollar"][k] = v["kisayollar"].get(k, "")
     from . import dublaj as dublaj_mod
     d = s["dublaj"]
     for k in list(d):
