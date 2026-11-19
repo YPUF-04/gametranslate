@@ -20,7 +20,9 @@ def _paket_zip(ekstra: dict[str, bytes] | None = None, model: bool = True) -> by
             z.writestr("translate-en_tr-1_5/sentencepiece.model", b"sp")
         z.writestr("translate-en_tr-1_5/stanza/buyuk.bin", b"y" * 500)
         for ad, v in (ekstra or {}).items():
-            z.writestr(ad, v)
+            zi = zipfile.ZipInfo("x")
+            zi.filename = ad   # adı olduğu gibi yaz (Windows'ta ZipInfo '\\'yi '/' yapardı)
+            z.writestr(zi, v)
     return b.getvalue()
 
 
