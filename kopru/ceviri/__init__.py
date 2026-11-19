@@ -8,7 +8,7 @@ from .. import anahtarlar
 from .claude import ClaudeMotoru
 from .deepl import DeepLMotoru
 from .deepseek import DeepSeekMotoru
-from .gemini import GeminiMotoru
+from .gemini import ESKI_MODELLER as ESKI_GEMINI, GeminiMotoru
 from .sahte import SahteMotor
 from .temel import CeviriMotoru
 from .yerel import YerelMotor
@@ -26,19 +26,19 @@ BILGI = [
 KALITE_MODEL = {
     "claude": {"en_iyi": "claude-opus-5-5", "dengeli": "claude-sonnet-5-5",
                "hizli": "claude-haiku-5-5"},
-    "gemini": {"en_iyi": "gemini-2.5-flash", "dengeli": "gemini-2.5-flash",
-               "hizli": "gemini-2.5-flash"},
+    "gemini": {"en_iyi": "gemini-3.8-flash", "dengeli": "gemini-3.8-flash",
+               "hizli": "gemini-3.5-flash-lite"},
     "deepseek": {"en_iyi": "deepseek-chat", "dengeli": "deepseek-chat", "hizli": "deepseek-chat"},
 }
 # Eski sürümler bu değerleri ayar dosyasına varsayılan diye yazdı; seçim sayılmaz.
-ESKI_VARSAYILAN = {"claude": "claude-opus-5-5", "gemini": "gemini-2.5-flash",
-                   "deepseek": "deepseek-chat"}
+ESKI_VARSAYILAN = {"claude": {"claude-opus-5-5"}, "gemini": set(ESKI_GEMINI),
+                   "deepseek": {"deepseek-chat"}}
 
 
 def model_sec(kod: str, ayar: dict[str, Any]) -> str:
     """Açıkça yazılmış `modeller` değeri kalite modunu ezer; yoksa kalite seçer."""
     ozel = (ayar.get("modeller") or {}).get(kod)
-    if isinstance(ozel, str) and ozel.strip() and ozel != ESKI_VARSAYILAN.get(kod):
+    if isinstance(ozel, str) and ozel.strip() and ozel.strip() not in ESKI_VARSAYILAN.get(kod, ()):
         return ozel.strip()
     tablo = KALITE_MODEL.get(kod, {})
     return tablo.get(ayar.get("kalite") or "en_iyi", tablo.get("en_iyi", ""))

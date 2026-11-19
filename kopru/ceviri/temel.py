@@ -10,6 +10,11 @@ class AgHatasi(Exception):
     """Ağ/sunucu sorunu: yönetici yedek motora geçer."""
 
 
+class ModelBulunamadi(AgHatasi):
+    """Servis modeli tanımıyor (HTTP 404): model kapatılmış ya da adı yanlış."""
+    kod = "model_yok"
+
+
 class AnahtarHatasi(Exception):
     """API anahtarı yok ya da geçersiz."""
 

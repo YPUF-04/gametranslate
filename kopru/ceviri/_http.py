@@ -7,7 +7,7 @@ from typing import Any
 
 import aiohttp
 
-from .temel import AgHatasi, AnahtarHatasi, MotorHatasi
+from .temel import AgHatasi, AnahtarHatasi, ModelBulunamadi, MotorHatasi
 
 
 async def post_json(url: str, govde: dict[str, Any], basliklar: dict[str, str],
@@ -24,6 +24,8 @@ async def post_json(url: str, govde: dict[str, Any], basliklar: dict[str, str],
                 if "api_key_invalid" in govde or "api key not valid" in govde:
                     raise AnahtarHatasi(url)
                 raise AgHatasi("HTTP 400")
+            if r.status == 404:
+                raise ModelBulunamadi("HTTP 404")
             if r.status == 429 or r.status >= 500:
                 raise AgHatasi(f"HTTP {r.status}")
             if r.status >= 400:

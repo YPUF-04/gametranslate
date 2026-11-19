@@ -173,7 +173,8 @@ class Durum:
 
     def durum_olayi(self) -> dict[str, Any]:
         motor = self.yonetici.yedek if self.yonetici.yedekte and self.yonetici.yedek else self.yonetici.birincil
-        olay = {"calisiyor": self.calisiyor(), "motor": motor.ad, "yedek": bool(self.yonetici.yedekte)}
+        olay = {"calisiyor": self.calisiyor(), "motor": motor.ad, "yedek": bool(self.yonetici.yedekte),
+                **self.yonetici.durum_ek()}
         if self.erisim.sinir():
             olay["sinir"] = True   # ücretsiz süre doldu, kod yok (panel sakin bir uyarı gösterir)
         return olay
@@ -431,7 +432,7 @@ async def api_durum(request: web.Request) -> web.Response:
         "calisiyor": d.calisiyor(), "motor": _motor_adi(d), "yedekte": d.yonetici.yedekte,
         "tv_sayisi": d.yayin.istemci_sayisi, "son_yazi": y["metin"] if y else "",
         "adresler": lan_adresleri(), "kapi": d.calisan_kapi or d.ayar["kapi"],
-        "sinir": d.erisim.sinir()})
+        "sinir": d.erisim.sinir(), **d.yonetici.durum_ek()})
 
 
 def _ayar_gorunumu(d: Durum) -> dict[str, Any]:
@@ -627,7 +628,10 @@ async def api_dene(request: web.Request) -> web.Response:
     except Exception as e:   # noqa: BLE001 — gerçekten bilinmeyen: genel mesaj + ayrıntı
         log.exception("Çeviri denemesi beklenmedik biçimde başarısız")
         return hata("motor_hatasi", 502, request, _ayrinti(e))
-    return web.json_response({"ceviri": c.metin, "sure_ms": int((time.monotonic() - t0) * 1000)})
+    yanit = {"ceviri": c.metin, "sure_ms": int((time.monotonic() - t0) * 1000)}
+    if getattr(motor, "model", None):
+        yanit["model"] = motor.model   # asıl motorun gerçekten kullandığı model (yedek motor DEĞİL)
+    return web.json_response(yanit)
 
 
 async def api_erisim_al(request: web.Request) -> web.Response:

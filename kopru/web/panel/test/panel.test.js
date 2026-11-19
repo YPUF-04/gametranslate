@@ -510,7 +510,7 @@ function dilKontrol() {
     assert.match(await metin('[data-satir="0"]'), /Çeviriyi nereye yazayım\?[\s\S]*Aynı yerin üstüne[\s\S]*Alttaki altyazı çubuğuna[\s\S]*Kendim seçeyim[\s\S]*Yazı büyüklüğü[\s\S]*%100/);
     assert.ok(await sayfa.isChecked('#bolge-hedef-0-ustune') && await sayfa.isChecked('#bolge-hedef-2-altyazi'), 'varsayılanlar');
     await sayfa.evaluate(() => document.querySelector('#bolge-sahne').scrollIntoView({ block: 'center', behavior: 'instant' }));
-    await sayfa.click('label[for=bolge-hedef-0-kendim]');
+    await sayfa.click('#bolge-hedef-0-kendim');
     await sayfa.waitForSelector('.bolge-hedef[data-hedef="0"]');
     assert.ok(await sayfa.isVisible('#bolge-mod'), 'hedef çizme kipi bildirilir');
     assert.match(await metin('.bolge-hedef[data-hedef="0"] .hedef-etiket'), /1 → hedef/);
@@ -528,7 +528,7 @@ function dilKontrol() {
       return { metin: y.textContent, px: parseFloat(y.style.fontSize), wrap: getComputedStyle(y).wordBreak + '/' + getComputedStyle(y).overflowWrap, dx: Math.abs(r.left - h.left), dy: Math.abs(r.top - h.top) }; });
     assert.match(onizle.metin, /Return to the camp/); assert.ok(onizle.px > 4 && onizle.wrap === 'normal/normal', JSON.stringify(onizle)); assert.ok(onizle.dx < 2 && onizle.dy < 2, 'önizleme hedefin içinde');
     // ikinci kare: alttaki altyazı çubuğu
-    await sayfa.click('label[for=bolge-hedef-2-altyazi]');
+    await sayfa.click('#bolge-hedef-2-altyazi');
     assert.ok(await sayfa.isChecked('#bolge-hedef-2-altyazi'));
     // klavye: hedef kutusu odaklanır, ok tuşu taşır, Enter kaynağa döner
     await sayfa.focus('.bolge-hedef[data-hedef="0"]');
@@ -544,7 +544,6 @@ function dilKontrol() {
     for (const v of Object.values(k2[0].hedef)) assert.strictEqual(v, Math.round(v * 10000) / 10000, '4 hane');
     assert.strictEqual(k2[2].hedef, 'altyazi'); assert.strictEqual(k2[1].hedef, 'ustune'); assert.strictEqual(k2[1].olcek, 1);
     // yeniden yükleyince hedef ve ölçek geri gelir; alanı olmayan eski kayıt varsayılan gösterir
-    st.ayarlar.bolgeler = [{ x: 0.1, y: 0.1, g: 0.2, y2: 0.05, tur: 'altyazi', ad: 'Altyazı' }];
     adim('hedef kutusu (Kendim seçeyim), %80 yazı büyüklüğü, altyazı çubuğu seçimi kaydedildi');
 
     adim('5. Elle 4 kare (kullanıcının çizimi gibi), tür açılır kutusu + Esc, en çok 6, sil, boyutlandır, klavye, normalize JSON');
@@ -649,6 +648,23 @@ function dilKontrol() {
     // son çeviriler + düzelt
     await sayfa.waitForSelector('.ceviri-satir[data-id=a1]', { timeout: 6000 });
     await sayfa.waitForSelector('#oneri-kart:not([hidden])');
+    // kompakt "Son çeviriler": en çok 5 satır, kendi içinde kayan odaklanabilir bölge, "Tümünü göster" en çok 20
+    const eskiCev = st.ceviriler.slice();
+    for (let i = 0; i < 24; i++) st.ceviriler.push({ id: 'x' + i, asil: 'Line ' + i, ceviri: 'Satır ' + i, kaynak: 'motor' });
+    await sayfa.waitForFunction(() => document.querySelectorAll('#son-liste .ceviri-satir').length === 5, null, { timeout: 8000 });
+    assert.strictEqual(await sayfa.getAttribute('#son-liste', 'tabindex'), '0');
+    assert.match(await sayfa.getAttribute('#son-liste', 'aria-label'), /Son çeviriler listesi/);
+    assert.ok(await sayfa.evaluate(() => document.querySelector('#son-liste').getBoundingClientRect().height <= 321));
+    assert.match(await metin('#son-tumu'), /Tümünü göster/);
+    await sayfa.click('#son-tumu');
+    assert.strictEqual(await sayfa.locator('#son-liste .ceviri-satir').count(), 20, 'en çok 20');
+    assert.ok(await sayfa.evaluate(() => { const e = document.querySelector('#son-liste'); return e.scrollHeight > e.clientHeight && e.getBoundingClientRect().height <= 321; }), 'kart kendi içinde kayar');
+    assert.strictEqual(await sayfa.getAttribute('#son-tumu', 'aria-expanded'), 'true');
+    await sayfa.click('#son-tumu');
+    assert.strictEqual(await sayfa.locator('#son-liste .ceviri-satir').count(), 5);
+    st.ceviriler.length = 0; st.ceviriler.push(...eskiCev);
+    await sayfa.waitForFunction(() => document.querySelectorAll('#son-liste .ceviri-satir').length === 2, null, { timeout: 8000 });
+    await sayfa.waitForSelector('#son-tumu', { state: 'hidden' });
     await sayfa.waitForSelector('#guncelleme-bar #guncelle-dugme', { timeout: 8000 });
     assert.match(await sayfa.textContent('#guncelleme-bar'), /Yeni sürüm hazır \(0\.3\.0\)\./);
     await gor('v3-guncelleme.png');
@@ -666,6 +682,9 @@ function dilKontrol() {
     await sayfa.waitForSelector('#bolge-sahne:not([hidden])');
     assert.strictEqual(await sayfa.locator('.bolge').count(), 4);
     assert.ok(await sayfa.isHidden('#bolge-ipucu'), 'ipucu yalnız ilk sefer');
+    assert.ok(await sayfa.isChecked('#bolge-hedef-0-kendim') && await sayfa.isChecked('#bolge-hedef-2-altyazi') && await sayfa.isChecked('#bolge-hedef-1-ustune'), 'kayıtlı hedefler geri gelir');
+    assert.strictEqual(await sayfa.inputValue('#bolge-olcek-0'), '80');
+    assert.strictEqual(await sayfa.locator('.bolge-hedef').count(), 1);
     await sayfa.click('#bolge-otomatik');
     await sayfa.waitForSelector('#dogrula-5:not([hidden])');
     assert.match(await sayfa.textContent('#dogrula-5'), /Otomatik: ekrandaki yazıları kendim bulacağım\./);

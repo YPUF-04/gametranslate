@@ -251,19 +251,25 @@ class Isleme:
         self._sayac[on] += 1
         return f"{on}{self._sayac[on]}"
 
+    def _yedek_ek(self) -> dict[str, Any]:
+        f = getattr(self.yonetici, "durum_ek", None)
+        return f() if callable(f) else {}
+
     def _hata(self, e: Exception) -> None:
         if isinstance(e, ErisimSiniri):   # hata değil: sakin bir "ücretsiz süre doldu" bilgisi
             if self.durum_hatasi != "sinir":
                 self.durum_hatasi = "sinir"
                 self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
-                                             "yedek": bool(self.yonetici.yedekte), "sinir": True})
+                                             "yedek": bool(self.yonetici.yedekte),
+                                         **self._yedek_ek(), "sinir": True})
             return
         kod = {AnahtarHatasi: "anahtar", AgHatasi: "ag", MotorHatasi: "motor"}.get(type(e), "genel")
         if kod != self.durum_hatasi:
             self.durum_hatasi = kod
             log.warning("Çeviri hatası: %s", type(e).__name__)
             self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
-                                         "yedek": bool(self.yonetici.yedekte), "hata": kod})
+                                         "yedek": bool(self.yonetici.yedekte),
+                                         **self._yedek_ek(), "hata": kod})
 
     # -- okuma (otomatik ya da seçili bölgeler) --
     def _oku(self, resim: Any, parcalar: list[tuple[int, dict, Any, tuple]]) -> _Okuma:
@@ -523,7 +529,8 @@ class Isleme:
         if kod != self.durum_hatasi:
             self.durum_hatasi = kod
             self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
-                                         "yedek": bool(self.yonetici.yedekte), "hata": kod})
+                                         "yedek": bool(self.yonetici.yedekte),
+                                         **self._yedek_ek(), "hata": kod})
 
     async def calis(self) -> None:
         try:
@@ -535,7 +542,8 @@ class Isleme:
                         self._adim_hatali = False
                         self.durum_hatasi = None
                         self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
-                                                     "yedek": bool(self.yonetici.yedekte)})
+                                                     "yedek": bool(self.yonetici.yedekte),
+                                         **self._yedek_ek()})
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:

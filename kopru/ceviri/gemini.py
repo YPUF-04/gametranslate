@@ -5,9 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 from . import _http, istem
-from .temel import AnahtarHatasi, Baglam, Ceviri, MotorHatasi
+from .temel import AnahtarHatasi, Baglam, Ceviri, ModelBulunamadi, MotorHatasi
 
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+VARSAYILAN_MODEL = "gemini-3.8-flash"
+# Model "bulunamadı" (404) dönerse sırayla denenir; çalışan hatırlanır.
+YEDEK_MODELLER = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+# Kapatılmış eski modeller: ayar dosyasında kalmışsa seçim sayılmaz, yükseltilir.
+ESKI_MODELLER = frozenset({"gemini-2.5-flash", "gemini-2.0-flash"})
 
 
 class GeminiMotoru:
@@ -18,9 +23,23 @@ class GeminiMotoru:
     ucretsiz = True
     baglam_destekler = True
 
-    def __init__(self, anahtar: str | None, model: str = "gemini-2.5-flash") -> None:
+    def __init__(self, anahtar: str | None, model: str = VARSAYILAN_MODEL) -> None:
         self._anahtar = anahtar
         self.model = model
+
+    async def _gonder(self, govde: dict[str, Any]) -> Any:
+        """İstek; model 404 verirse sıradaki yedek modelle yeniden dener, çalışanı hatırlar."""
+        denenecek = [self.model] + [m for m in YEDEK_MODELLER if m != self.model]
+        son: ModelBulunamadi | None = None
+        for m in denenecek:
+            try:
+                veri = await _http.post_json(URL.format(model=m), govde, {"x-goog-api-key": self._anahtar})
+            except ModelBulunamadi as e:
+                son = e
+                continue
+            self.model = m
+            return veri
+        raise son or ModelBulunamadi("HTTP 404")
 
     async def cevir(self, metinler: list[str], kaynak: str, hedef: str,
                     sozluk: dict[str, str], aciklama: bool = False,
@@ -34,8 +53,7 @@ class GeminiMotoru:
             "contents": [{"role": "user", "parts": [{"text": istem.kullanici_metni(metinler, baglam)}]}],
             "generationConfig": {"responseMimeType": "application/json"},
         }
-        veri = await _http.post_json(URL.format(model=self.model), govde,
-                                     {"x-goog-api-key": self._anahtar})
+        veri = await self._gonder(govde)
         try:
             ham = "".join(p.get("text", "") for p in veri["candidates"][0]["content"]["parts"])
             sonuc, terimler = istem.yaniti_coz_tam(ham, len(metinler), aciklama)

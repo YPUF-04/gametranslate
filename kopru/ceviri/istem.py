@@ -62,6 +62,9 @@ def sabit_istem(kaynak: str, hedef: str, sozluk: dict[str, str], aciklama: bool,
         f"You are a professional video game subtitle translator. Translate on-screen game text "
         f"from {kaynak_s} into {dil_adi(hedef)}. The text comes from screen capture (OCR) of a "
         "game the player is playing right now, so speed, naturalness and fidelity matter.",
+        f"OUTPUT LANGUAGE: every translation MUST be written in {dil_adi(hedef)} ONLY "
+        f"(target language code: {hedef}). Never answer in the source language or any other language, "
+        "except for proper names and unchanged codes.\n\n"
         "RULES\n"
         "1. Translate faithfully. Never add, omit, soften or explain meaning. Do not censor "
         "profanity; do not add notes, quotes, emojis or markdown.\n"

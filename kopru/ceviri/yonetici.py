@@ -12,7 +12,7 @@ from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import Onbellek
 from .istem import SON_SATIR_ADEDI, dublaj_ipucu
-from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri, MotorHatasi
+from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri, ModelBulunamadi, MotorHatasi
 
 log = logging.getLogger("kopru.ceviri")
 YENIDEN_DENEME_SN = 60.0
@@ -37,6 +37,7 @@ class CeviriYoneticisi:
         self.erisim_izni: Callable[[], bool] = lambda: True   # Durum, erişim sayacına bağlar
         self.oyun_bilgisi: dict[str, Any] = {}      # ad, aciklama, hitap, karakterler
         self.yedekte = False
+        self.yedek_neden: dict[str, str] | None = None   # yedeğe geçilme sebebi {"kod","mesaj"} (panel gösterir)
         self._yedek_zamani = 0.0
         self._ucusta: dict[tuple, asyncio.Future] = {}
         self.terimler: dict[str, str] = {}
@@ -45,7 +46,24 @@ class CeviriYoneticisi:
 
     def _durum(self) -> None:
         motor = self.yedek if self.yedekte and self.yedek else self.birincil
-        self._yayinla("durum", {"calisiyor": True, "motor": motor.ad, "yedek": self.yedekte})
+        self._yayinla("durum", {"calisiyor": True, "motor": motor.ad, "yedek": self.yedekte,
+                                **self.durum_ek()})
+
+    def durum_ek(self) -> dict[str, Any]:
+        """Yedekteyken `yedek_neden` (durum olayına/API'ye eklenir); değilken boş."""
+        return {"yedek_neden": dict(self.yedek_neden)} if self.yedekte and self.yedek_neden else {}
+
+    def _neden(self, motor: CeviriMotoru, e: Exception, yedek: CeviriMotoru) -> dict[str, str]:
+        if isinstance(e, ModelBulunamadi):
+            kod, sebep = "model_yok", "model bulunamadı"
+        elif isinstance(e, AgHatasi) and "429" in str(e):
+            kod, sebep = "hiz_siniri", "istek sınırı aşıldı"
+        elif isinstance(e, AgHatasi):
+            kod, sebep = "ag", "ağ ya da sunucu hatası"
+        else:
+            kod, sebep = "yanit", "yanıt okunamadı"
+        hedef = "çevrimdışı" if getattr(yedek, "cevrimdisi", False) else yedek.ad
+        return {"kod": kod, "mesaj": f"{motor.ad} çalışmadı ({sebep}), {hedef} çeviriye geçildi."}
 
     # -- bağlam ve geçmiş --
     def _baglam(self) -> Baglam:
@@ -135,6 +153,7 @@ class CeviriYoneticisi:
             log.warning("Birincil motor çalışmadı (%s), yedeğe geçildi", type(e).__name__)
             kalici = isinstance(e, AgHatasi)   # ağ/hız sınırı: bir süre yedekte kal; bozuk yanıt: yalnız bu istek
             if kalici:
+                self.yedek_neden = self._neden(self.birincil, e, self.yedek)
                 self.yedekte = True
                 self._yedek_zamani = time.monotonic()
                 self._durum()
@@ -147,6 +166,7 @@ class CeviriYoneticisi:
                 raise e from None
         if self.yedekte:
             self.yedekte = False
+            self.yedek_neden = None
             self._durum()
         self._terimleri_isle(baglam.yeni_terimler, metinler)
         return sonuc, getattr(self.birincil, "kod", None)

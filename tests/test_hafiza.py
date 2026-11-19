@@ -332,7 +332,10 @@ def test_kalite_modeli():
     assert m("claude", "en_iyi") == "claude-opus-5-5"
     assert m("claude", "dengeli") == "claude-sonnet-5-5"
     assert m("claude", "hizli") == "claude-haiku-5-5"
-    assert m("gemini", "en_iyi") == m("gemini", "hizli") == "gemini-2.5-flash"
+    assert m("gemini", "en_iyi") == m("gemini", "dengeli") == "gemini-3.8-flash"
+    assert m("gemini", "hizli") == "gemini-3.5-flash-lite"
+    assert m("gemini", "en_iyi", {"gemini": "gemini-2.5-flash"}) == "gemini-3.8-flash"   # kapatılmış eski model yükseltilir
+    assert m("gemini", "en_iyi", {"gemini": "gemini-2.0-flash"}) == "gemini-3.8-flash"
     assert m("claude", "hizli", {"claude": "claude-sonnet-5-5"}) == "claude-sonnet-5-5"   # açık seçim ezer
     # eski ayar dosyasındaki varsayılan değer seçim sayılmaz
     assert m("claude", "hizli", {"claude": "claude-opus-5-5"}) == "claude-haiku-5-5"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import istem
-from .temel import AgHatasi, AnahtarHatasi, Baglam, Ceviri, MotorHatasi
+from .temel import AgHatasi, AnahtarHatasi, Baglam, Ceviri, ModelBulunamadi, MotorHatasi
 
 MODELLER = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
 
@@ -49,6 +49,8 @@ class ClaudeMotoru:
             )
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
             raise AnahtarHatasi("claude") from e
+        except anthropic.NotFoundError as e:
+            raise ModelBulunamadi("HTTP 404") from e
         except anthropic.APIError as e:   # bağlantı, zaman aşımı, 429, 5xx, 400/404 (model yok) ...
             raise AgHatasi(str(type(e).__name__)) from e
         except (TimeoutError, OSError) as e:

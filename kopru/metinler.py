@@ -23,6 +23,9 @@ HATALAR: dict[str, dict[str, str]] = {
     "ag_hatasi": {
         "tr": "Çeviri servisine ulaşılamadı, internet bağlantınızı kontrol edin.",
         "en": "The translation service could not be reached, please check your internet connection."},
+    "model_yok": {
+        "tr": "Çeviri modeli bulunamadı (servis bu modeli kapatmış olabilir), ayarlardan modeli varsayılana alın ya da başka bir motor seçin.",
+        "en": "The translation model was not found (the service may have retired it), reset the model to default in settings or pick another engine."},
     "motor_hatasi": {
         "tr": "Çeviri motoru çalışmadı, başka bir motor seçmeyi deneyin.",
         "en": "The translation engine failed, please try another engine."},
