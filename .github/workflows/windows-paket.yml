@@ -55,6 +55,7 @@ jobs:
       - name: Paketle (PyInstaller)
         run: >
           pyinstaller --noconfirm --name AltYaziKoprusu --onedir
+          --paths .
           --add-data "kopru/web;kopru/web"
           --add-data "tv/paketler;tv/paketler"
           --collect-submodules kopru

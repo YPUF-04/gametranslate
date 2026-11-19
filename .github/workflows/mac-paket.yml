@@ -58,6 +58,7 @@ jobs:
       - name: Paketle (PyInstaller .app)
         run: >
           pyinstaller --noconfirm --windowed --name AltYaziKoprusu
+          --paths .
           --osx-bundle-identifier com.altyazikoprusu.mac
           --add-data "kopru/web:kopru/web"
           --add-data "tv/paketler:tv/paketler"
