@@ -29,22 +29,39 @@
 - **Ekrandaki tüm yazılar** (görev listesi, bilgi kutuları, tabelalar); istersen görevlere kısa açıklama da eklenir
 - **Oyun sesi** (deneysel, varsayılan olarak kapalı): konuşmayı yazıya çevirip çevirir
 
-## 3 dakikada başla (Windows)
+## Kurulum — adım adım (Windows)
 
-1. [**Son sürümü indir**](https://github.com/YPUF-04/gametranslate/releases/latest): `AltYaziKoprusu-Kur-….exe` dosyasını al.
-2. Dosyaya çift tıkla ve **İleri**'lere bas. (Dil Türkçe/İngilizce seçilebilir; yönetici izni gerekmez.)
-3. Mavi bir uyarı çıkarsa: Program imzasız olduğu için Windows **"Windows bilgisayarınızı korudu"** (SmartScreen) der. Bu normaldir. **Ek bilgi**'ye, sonra **Yine de çalıştır**'a bas.
-4. Son sayfada **Programı şimdi başlat** kutusu işaretli kalsın, **Bitir**'e bas.
-5. Tarayıcında panel açılır. Ekrandaki 4 adımı izle: oyunu seç, çeviri motorunu seç, TV'ni bağla, test et.
-6. Panelde büyük **Başlat** düğmesine bas.
+> Hiç bilgisayar bilgisi gerekmez. Her adımda ne yapacağın yazıyor.
 
-Kurulum istemezsen aynı sayfadaki `AltYaziKoprusu-Tasinabilir-….zip` dosyasını da kullanabilirsin (ayıkla, `AltYaziKoprusu.exe`'ye çift tıkla). İndirdiğin dosyanın bozulmadığını `SHA256SUMS.txt` ile doğrulayabilirsin.
+### A) Programı kur (2 dakika)
+1. [**Son sürüm sayfasını aç**](https://github.com/YPUF-04/gametranslate/releases/latest).
+2. Sayfanın altındaki **Assets** bölümünde `AltYaziKoprusu-Kur-….exe` dosyasına tıkla, iner.
+3. İnen dosyaya **çift tıkla**.
+4. Mavi bir pencere çıkarsa (**"Windows bilgisayarınızı korudu"**): **Ek bilgi** → **Yine de çalıştır**. Program imzasız olduğu için bu uyarı normaldir.
+5. **İleri → Kur → Bitir**. Masaüstüne logolu simge gelir, tarayıcında kontrol paneli açılır.
 
-**LG TV'ye kurulum:** TV'de Developer Mode uygulamasını aç, panelde **"TV'ye tek tuşla kur"** kartına TV'nin IP adresini ve ekrandaki kodu yaz, **Kur**'a bas. Ayrıntı: [LG TV kurulumu](docs/kurulum/lg-webos.md).
+### B) Hazırlık (1 dakika)
+- **Oyunun ayarlarında** görüntü modunu **"Pencereli tam ekran"** ya da **"Kenarlıksız"** yap. (Yoksa çeviri oyunun üstünde görünmeyebilir.)
+- **Ücretsiz Gemini anahtarı** (önerilen): [aistudio.google.com](https://aistudio.google.com) → Google hesabınla gir → **Get API key → Create API key** → çıkan yazıyı kopyala.
+  İnternetsiz istersen anahtar gerekmez: kurulumda **Çevrimdışı** seçip **İndir**'e bas (yaklaşık 100 MB, bir kez).
 
-**Güncelleme:** Yeni sürüm çıkınca panelin üstünde "Yeni sürüm hazır" yazısı ve **Güncelle** düğmesi görünür. Program günde en çok bir kez GitHub'a "yeni sürüm var mı?" diye sorar (hiçbir bilgin gönderilmez); istersen Gelişmiş ayarlardan kapatabilirsin.
+### C) Paneldeki 6 adım (oyun açıkken yap)
+| Adım | Ne yapacaksın | Doğru giderse |
+|---|---|---|
+| 1. **Görüntü** | "Bu bilgisayarda"yı seç, listeden **oyunun penceresini** seç | Oyunun resmi görünür ✓ |
+| 2. **Yazı okuma** | Oyunda yazı olan bir ekran açıkken **Ekrandaki yazıları oku** | Yazılar kutu içinde görünür ✓ |
+| 3. **Çeviri** | **Gemini** → anahtarı yapıştır → **Dene** | "Merhaba, nasılsın?" çıkar ✓ |
+| 4. **Nerede göreyim?** | **Bu bilgisayarın ekranında** → **Ekranda dene** | Ekranda deneme yazısı çıkar ✓ |
+| 5. **Neyi çevireyim?** | Fareyle altyazının ve görev yazısının olduğu yerlere **kare çiz** (en çok 6) | Kareler kaydedilir ✓ |
+| 6. **Hazır** | **Başlat** | Oyundaki yazılar Türkçe görünür 🎉 |
 
-Ayrıntılar: [Windows kurulumu](docs/kurulum/windows.md) · [LG TV kurulumu](docs/kurulum/lg-webos.md) · [TV tarayıcısı / OBS](docs/kurulum/tv-tarayici.md)
+**Bir adımda hata mı çıktı?** Hata kutusundaki **"Ayrıntı (bize gönder)"** yazısını aç, ekran görüntüsünü al ve [buradan bildir](https://github.com/YPUF-04/gametranslate/issues/new/choose).
+
+### Güncelleme
+Yeni sürüm çıkınca panelin üstünde **"Yeni sürüm hazır"** ve **Güncelle** düğmesi çıkar: bas, gerisini program yapar. Neler değiştiğini [**Sürüm notları**](SURUMLER.md) sayfasında görebilirsin.
+
+### Mac
+[Son sürüm sayfasından](https://github.com/YPUF-04/gametranslate/releases/latest) `.dmg` dosyasını indir, aç, simgeyi **Uygulamalar**'a sürükle. İlk açılış ve **Ekran Kaydı** izni için: [Mac kurulumu](docs/kurulum/mac.md).
 
 ### Kaynaktan çalıştırma (ileri düzey)
 
