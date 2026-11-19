@@ -333,5 +333,11 @@
 "sihirbaz.ad.cihaz": "Device",
 "sihirbaz.ad.oyun": "Game",
 "sihirbaz.ad.ceviri": "Translation",
-"sihirbaz.ad.test": "Test"
+"sihirbaz.ad.test": "Test",
+"durum.hata.yakalama": "Stopped: could not capture the screen",
+"durum.hata.yakalama.k": "Make sure the game window is open and not minimised, then press Start. If that fails, use \"Run setup again\" to pick the screen again.",
+"durum.hata.genel": "Stopped: something unexpected happened",
+"durum.hata.genel.k": "Press Start once more. If it stops again, close and reopen the program.",
+"ana.baslik": "Home",
+"son.senin": "Your fix"
 }

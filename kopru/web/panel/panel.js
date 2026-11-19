@@ -72,7 +72,8 @@
       return r.text().then(function (txt) {
         var j = null;
         try { j = txt ? JSON.parse(txt) : {}; } catch (e) { j = null; }
-        if (!r.ok || (j && j.hata)) {
+        // hata: HTTP hatası ya da {"hata","mesaj"} biçimli gövde. /api/durum'daki bilgi amaçlı "hata" alanı hata sayılmaz.
+        if (!r.ok || (j && j.hata && j.mesaj && !('calisiyor' in j))) {
           var err = new Error((j && j.mesaj) || t('hata.genel'));
           err.hata = j && j.hata; err.mesaj = j && j.mesaj; throw err;
         }
@@ -579,7 +580,7 @@
 
     ekran.erisim = h('div', { class: 'kart erisim-kart', id: 'erisim-kart' });
     ekran.hero = hero;
-    ana.appendChild(h('section', { class: 'dar' }, [h('div', { id: 'guncelleme-alani' }), hero, sonKart, ekran.onerKutu, ekran.erisim, bolgeKarti(), dublajKarti(), gelismisAlani(), 
+    ana.appendChild(h('section', { class: 'dar' }, [h('h1', { class: 'gizli', text: t('ana.baslik') }), h('div', { id: 'guncelleme-alani' }), hero, sonKart, ekran.onerKutu, ekran.erisim, bolgeKarti(), dublajKarti(), gelismisAlani(), 
       h('div', { class: 'satir', style: 'margin-top:8px' }, [h('button', { type: 'button', class: 'baglanti', id: 'yeniden-kur', text: t('kurulum.yeniden'), onclick: function () {
         S.kurulumBitti = false; S.adim = 1; S.testTamam = false; ls('kurulum', '0'); ciz();
       } })])
@@ -650,7 +651,7 @@
       var satir = h('div', { class: 'ceviri-satir', 'data-id': c.id });
       function normal() {
         satir.textContent = '';
-        satir.appendChild(h('div', { class: 'metin' }, [h('div', { class: 'asil', text: c.asil }), h('div', { class: 'ceviri', text: c.ceviri })]));
+        satir.appendChild(h('div', { class: 'metin' }, [h('div', { class: 'asil', text: c.asil }), h('div', { class: 'ceviri' }, [c.ceviri, c.kaynak === 'kullanici' ? h('span', { class: 'rozet sari senin', text: t('son.senin') }) : null])]));
         satir.appendChild(h('button', { type: 'button', class: 'dugme ikincil kucuk duzelt', text: t('duzelt.dugme'), onclick: duzenle }));
       }
       function duzenle() {
@@ -1014,13 +1015,14 @@
     }
     ekran.buyuk.classList.toggle('dur', !!d.calisiyor);
     if (ekran.hero) ekran.hero.classList.toggle('calisiyor', !!d.calisiyor);
-    ekran.led.className = 'led' + (d.calisiyor ? (d.yedekte ? ' yedek' : ' acik') : '');
-    ekran.durum.textContent = !d.calisiyor ? t('durum.durdu') : (d.yedekte ? t('durum.yedekte') : t('durum.calisiyor'));
+    var sorun = d.hata === 'yakalama' || d.hata === 'genel' ? d.hata : null;   // boru hattı durduysa nedeni
+    ekran.led.className = 'led' + (d.calisiyor ? (d.yedekte ? ' yedek' : ' acik') : (sorun ? ' sorun' : ''));
+    ekran.durum.textContent = !d.calisiyor ? (sorun ? t('durum.hata.' + sorun) : t('durum.durdu')) : (d.yedekte ? t('durum.yedekte') : t('durum.calisiyor'));
     var mot = motorBilgi(d.motor); var tv = t('durum.tv', { n: d.tv_sayisi || 0 });
     ekran.alt.textContent = (mot ? t('durum.motor', { ad: mot.ad }) + ' · ' : '') + tv;
     ekran.ne.textContent = '';
     ekran.ne.appendChild(h('b', { text: t('ne.etiket') + ' ' }));
-    ekran.ne.appendChild(document.createTextNode(t(d.calisiyor ? 'ana.ne.calisiyor' : 'ana.ne.durdu')));
+    ekran.ne.appendChild(document.createTextNode(d.calisiyor ? t('ana.ne.calisiyor') : (sorun ? t('durum.hata.' + sorun + '.k') : t('ana.ne.durdu'))));
     var yeniYazi = d.son_yazi || t('on.bos');
     if (ekran.yazi.textContent !== yeniYazi) {
       ekran.yazi.textContent = yeniYazi;
@@ -1367,7 +1369,7 @@
         h('div', {}, [h('label', { class: 'etiket', for: 'dublaj-kis', text: t('dublaj.kis') }), kis, kisDeger]),
         h('div', {}, [h('label', { class: 'etiket', for: 'dublaj-seviye', text: t('dublaj.seviye') }), sev, sevDeger])
       ]));
-      k.appendChild(h('h4', { text: t('dublaj.cikis') }));
+      k.appendChild(h('h3', { class: 'ara-baslik', text: t('dublaj.cikis') }));
       var cl = h('div', { class: 'liste', role: 'group', 'aria-label': t('dublaj.cikis') });
       ['bilgisayar', 'tv'].forEach(function (c) {
         cl.appendChild(h('button', { type: 'button', class: 'sec', id: 'dublaj-cikis-' + c, 'data-cikis': c, 'aria-pressed': String((a.cikis || 'bilgisayar') === c), onclick: function () { dublajKaydet({ cikis: c }); } }, [
