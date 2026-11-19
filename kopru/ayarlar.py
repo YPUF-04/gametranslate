@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .dublaj import VARSAYILAN as VARSAYILAN_DUBLAJ
+
 VARSAYILAN_GORUNUM: dict[str, Any] = {
     "yazi_boyutu": 44, "konum": "alt", "kenar_bosluk": 0.08, "arka_plan": 0.55,
     "yazi_rengi": "#FFFFFF", "konusan_rengi": "#FFD166",
@@ -35,6 +37,7 @@ VARSAYILAN: dict[str, Any] = {
     "ekrani_cevir": True,
     "kisa_aciklama": True,
     "ses_cevir": False,
+    "dublaj": VARSAYILAN_DUBLAJ,   # Türkçe dublaj (PROTOKOL 9.3); varsayılan KAPALI
     "kapi": 8642,
     "aktif_oyun": "varsayilan",
     "kurulum_tamam": False,

@@ -38,6 +38,7 @@ class Baglam:
     karakterler: list[dict] = field(default_factory=list)   # [{"ad":..,"cinsiyet":"k"|"e"}]
     son_satirlar: list[tuple[str, str]] = field(default_factory=list)  # (asil, ceviri)
     yeni_terimler: list[dict] = field(default_factory=list)  # motor doldurur: [{"asil","ceviri"}]
+    ipucu: str = ""   # dublaj: "söylenebilir, süreye sığan kısa Türkçe" isteği (her istekte değişir)
 
 
 class CeviriMotoru(Protocol):

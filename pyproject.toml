@@ -25,6 +25,18 @@ ocr-mac = ["ocrmac"]
 ocr = ["rapidocr_onnxruntime"]
 yerel = ["argostranslate"]
 ses = ["faster-whisper", "soundcard", "numpy"]
+# Türkçe dublaj (deneysel, PROTOKOL 9). pycaw yalnız Windows'ta (oyun sesini uygulama bazında kısmak için).
+dublaj = [
+  "chatterbox-tts",
+  "pocket-tts",
+  "faster-whisper",
+  "numpy",
+  "soundcard",
+  "sounddevice",
+  "pycaw; sys_platform == 'win32'",
+  "psutil; sys_platform == 'win32'",
+]
+dublaj-kalite = ["librosa"]   # isteğe bağlı: sesi hızlandırırken daha iyi kalite (yoksa numpy WSOLA kullanılır)
 tv = ["paramiko>=3.4,<4"]   # TV'ye tek tuşla kurulum (LG webOS)
 test = ["pytest", "pytest-aiohttp", "pytest-asyncio", "cryptography>=42"]
 # Yalnız geliştiricinin kod üretme aracı için (uygulama bunu kullanmaz)

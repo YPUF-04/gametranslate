@@ -114,12 +114,17 @@ def sabit_istem(kaynak: str, hedef: str, sozluk: dict[str, str], aciklama: bool,
 
 def degisken_baglam(baglam: Baglam | None) -> str:
     """Her istekte değişen kısım: son altyazı satırları (asıl + çeviri)."""
-    if not baglam or not baglam.son_satirlar:
+    if not baglam:
         return ""
-    satirlar = [f"{i}. {_kes(a, 300)}  =>  {_kes(c, 300)}"
-                for i, (a, c) in enumerate(baglam.son_satirlar[-SON_SATIR_ADEDI:], 1)]
-    return ("Recent subtitle lines, oldest first (source => translation), for context only:\n" +
-            "\n".join(satirlar))
+    parcalar = []
+    if baglam.ipucu:
+        parcalar.append(baglam.ipucu)
+    if baglam.son_satirlar:
+        satirlar = [f"{i}. {_kes(a, 300)}  =>  {_kes(c, 300)}"
+                    for i, (a, c) in enumerate(baglam.son_satirlar[-SON_SATIR_ADEDI:], 1)]
+        parcalar.append("Recent subtitle lines, oldest first (source => translation), for context only:\n" +
+                        "\n".join(satirlar))
+    return "\n\n".join(parcalar)
 
 
 def sistem_istemi(kaynak: str, hedef: str, sozluk: dict[str, str], aciklama: bool,
@@ -195,3 +200,17 @@ def yaniti_coz_tam(ham: str, adet: int, aciklama: bool) -> tuple[list[Ceviri], l
 
 def yaniti_coz(ham: str, adet: int, aciklama: bool) -> list[Ceviri]:
     return yaniti_coz_tam(ham, adet, aciklama)[0]
+
+
+def dublaj_ipucu(sure_sn: float, onceki: str | None = None) -> str:
+    """Dublaj için istek: söylenebilir, orijinal süreye sığan kısa Türkçe (PROTOKOL 9.1/3)."""
+    azami = max(8, int(sure_sn * 13))   # konuşma Türkçesi için ~13 karakter/sn
+    p = ("DUBBING MODE: this line will be SPOKEN ALOUD in Turkish by a voice actor, replacing the "
+         f"original speech, which lasts {sure_sn:.1f} seconds. Ignore the subtitle line-length rules above. "
+         f"Write natural, speakable, short Turkish (söylenebilir, orijinal süreye sığan kısa Türkçe) "
+         f"of at most about {azami} characters, without line breaks, stage directions or symbols; "
+         "spell out numbers as words.")
+    if onceki:
+        p += (f' Your previous attempt was too long to say in that time: "{_kes(onceki, 300)}". '
+              "Give a clearly SHORTER version that keeps the core meaning.")
+    return p

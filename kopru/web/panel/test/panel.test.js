@@ -28,12 +28,13 @@ function sahteSunucu() {
   const st = {
     ayarlar: { arayuz_dili: 'tr', hedef_dil: 'tr', motor: 'gemini', yedek_motor: 'yerel', kaynak: 'ekran:1', ekrani_cevir: true,
       kisa_aciklama: true, ses_cevir: false, kapi: 8642, modeller: { gemini: 'gemini-2.5-flash' },
-      gorunum: { yazi_boyutu: 44, konum: 'alt', arka_plan: 0.55 }, hafiza_izni: null, kalite: 'en_iyi', aktif_oyun: null },
+      gorunum: { yazi_boyutu: 44, konum: 'alt', arka_plan: 0.55 }, dublaj: { motor: 'kapali', oyun_sesi_kis: 0.25, hiz_siniri: 1.25, ses_seviyesi: 1, cikis: 'bilgisayar', elevenlabs_onay: false, elevenlabs_klon_onay: false, elevenlabs_ses_kimligi: '', elevenlabs_model: 'eleven_multilingual_v2' }, hafiza_izni: null, kalite: 'en_iyi', aktif_oyun: null },
     oyunlar: [{ kod: 'gta6', ad: 'GTA 6', kayit_sayisi: 1240, terim_sayisi: 35 }, { kod: 'tlou', ad: 'The Last of Us', kayit_sayisi: 0, terim_sayisi: 2 }],
     ceviriler: [{ id: 'a1', asil: 'Where were you last night?', ceviri: 'Dün gece neredeydin?', kaynak: 'motor' }, { id: 'a2', asil: 'Head back to the safehouse.', ceviri: 'Güvenli eve dön.', kaynak: 'motor' }],
     oneriler: [{ asil: 'Vice City', ceviri: 'Vice City' }],
     guncelleme: { ilerleme: 0, asama: 'bosta' }, tvIstekleri: [], tvKuyruk: [], tvSon: { asama: 'bosta', mesaj: '', ayrinti: '' },
     erisim: { kalan_dakika: 12, kod: null, bitis: null, ucretsiz_dakika: 30 }, sinir: false, kodlar: [],
+    dublajHazir: false, dublajIndirme: { durum: 'bosta', yuzde: 0, hata: null }, dublajDene: [],
     bolgePostlari: [], kareIstekleri: 0, kareHata: false, calisiyor: false, anahtarlar: {}, istekler: [], govdeler: {}, sozluk: { oyun: 'varsayilan', terimler: [{ asil: 'Ellie', ceviri: 'Ellie' }] }
   };
   const motorlar = () => [
@@ -108,6 +109,20 @@ function sahteSunucu() {
           return j(st.tvSon);
         }
         case 'GET /api/tv/lg/durum': if (st.tvKuyruk.length) st.tvSon = st.tvKuyruk.shift(); return j(st.tvSon);
+        case 'GET /api/dublaj': {
+          const i = st.dublajIndirme;
+          if (i.durum === 'indiriliyor') { i.yuzde = i.yuzde >= 60 ? 100 : 60; if (i.yuzde === 100) { i.durum = 'bitti'; st.dublajHazir = true; } }
+          return j({ motor: st.ayarlar.dublaj.motor, hazir: st.dublajHazir && st.ayarlar.dublaj.motor !== 'kapali', onerilen: 'chatterbox', ekran_karti: 'NVIDIA GeForce RTX 3060', vram_gb: 12, ram_gb: 16,
+            indirme: i, calisiyor: false, son_hata: null, elevenlabs_anahtar: !!st.anahtarlar.elevenlabs, motorlar: [] });
+        }
+        case 'POST /api/dublaj': {
+          const m = Object.assign({}, st.ayarlar.dublaj, b);
+          if (!m.elevenlabs_onay) { m.elevenlabs_klon_onay = false; if (m.motor === 'elevenlabs') { if (b.motor === 'elevenlabs') return j({ hata: 'dublaj_onay_gerekli', mesaj: 'ElevenLabs için önce onayı işaretleyin.' }, 400); m.motor = 'kapali'; } }
+          if (b.motor && b.motor !== st.ayarlar.dublaj.motor) { st.dublajHazir = false; st.dublajIndirme = { durum: 'bosta', yuzde: 0, hata: null }; }
+          st.ayarlar.dublaj = m; return j({ tamam: true, dublaj: m });
+        }
+        case 'POST /api/dublaj/hazirla': st.dublajIndirme = { durum: 'indiriliyor', yuzde: 10, hata: null }; return j({ motor: st.ayarlar.dublaj.motor, hazir: false, onerilen: 'chatterbox', indirme: st.dublajIndirme });
+        case 'POST /api/dublaj/dene': st.dublajDene.push(b.metin); return j({ tamam: true, sure_ms: 1800, cikis: st.ayarlar.dublaj.cikis });
         case 'GET /api/sozluk': return j(st.sozluk);
         case 'POST /api/sozluk': st.sozluk = b; return j({ tamam: true });
       }
@@ -391,6 +406,60 @@ function dilKontrol() {
     await sayfa.waitForSelector('#oneri-kart[hidden]', { state: 'attached' });
     assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/oneriler']), { asil: 'Vice City', kabul: true });
     adim('öneri kabul edildi');
+    // Türkçe dublaj kartı (PROTOKOL 9)
+    await sayfa.waitForSelector('#dublaj-kart #dublaj-motor-pocket');
+    assert.match(await sayfa.textContent('#dublaj-kart h2'), /Türkçe dublaj \(deneysel\)/);
+    assert.match(await sayfa.textContent('#dublaj-ne'), /Karakterler kendi sesleriyle Türkçe konuşur\. Sadece oyunun sesi dinlenir, mikrofon açılmaz, hiçbir ses kaydedilmez\./);
+    assert.match(await sayfa.textContent('#dublaj-motor-chatterbox'), /Bilgisayarın için önerilen/);
+    assert.match(await sayfa.textContent('#dublaj-motor-chatterbox'), /En iyi kalite, güçlü ekran kartı ister/);
+    assert.doesNotMatch(await sayfa.textContent('#dublaj-motor-pocket'), /önerilen/);
+    assert.match(await sayfa.textContent('#dublaj-motor-pocket'), /Her bilgisayarda çalışır, kalite biraz daha düşük/);
+    assert.match(await sayfa.textContent('#dublaj-motor-elevenlabs'), /En doğal, ücretli; ses örneği ElevenLabs'e gider/);
+    assert.match(await sayfa.textContent('#dublaj-donanim'), /NVIDIA GeForce RTX 3060/);
+    assert.strictEqual(await sayfa.locator('#dublaj-hazirla').count(), 0, 'kapalıyken hazırlık düğmesi yok');
+    adim('dublaj kartı: açıklama, öneri rozeti (donanımdan) ve dürüst notlar görünür');
+    await sayfa.click('#dublaj-motor-pocket');
+    await sayfa.waitForSelector('#dublaj-hazirla');
+    assert.strictEqual(st.ayarlar.dublaj.motor, 'pocket');
+    assert.ok(await sayfa.isDisabled('#dublaj-dene'), 'hazır olmadan Dene kapalı');
+    await sayfa.click('#dublaj-hazirla');
+    await sayfa.waitForFunction(() => /İndiriliyor… %/.test((document.querySelector('#dublaj-durum') || {}).textContent || ''));
+    await sayfa.waitForFunction(() => /Hazır ✓/.test((document.querySelector('#dublaj-durum') || {}).textContent || ''), null, { timeout: 9000 });
+    assert.ok(st.istekler.includes('POST /api/dublaj/hazirla'));
+    adim('dublaj: Hazırla indirme ilerlemesini gösterdi ve "Hazır ✓" oldu');
+    await sayfa.click('#dublaj-dene');
+    await sayfa.waitForSelector('.tost:has-text("Örnek ses çalındı")');
+    assert.deepStrictEqual(st.dublajDene, ['Merhaba, nasılsın?']);
+    await sayfa.evaluate(() => { const k = document.querySelector('#dublaj-kis'); k.value = 50; k.dispatchEvent(new Event('input')); const v = document.querySelector('#dublaj-seviye'); v.value = 150; v.dispatchEvent(new Event('input')); });
+    await sayfa.waitForFunction(() => /%50/.test(document.querySelector('#dublaj-kis-deger').textContent));
+    await sayfa.waitForTimeout(500);
+    assert.strictEqual(st.ayarlar.dublaj.oyun_sesi_kis, 0.5);
+    assert.strictEqual(st.ayarlar.dublaj.ses_seviyesi, 1.5);
+    await sayfa.click('#dublaj-cikis-tv');
+    await sayfa.waitForFunction(() => document.querySelector('#dublaj-cikis-tv').getAttribute('aria-pressed') === 'true');
+    assert.strictEqual(st.ayarlar.dublaj.cikis, 'tv');
+    adim('dublaj: Dene, oyun sesini kıs / dublaj seviyesi kaydırıcıları ve çıkış (TV) kaydedildi');
+    await sayfa.click('#dublaj-motor-elevenlabs');
+    await sayfa.waitForSelector('#dublaj-eleven');
+    assert.strictEqual(st.ayarlar.dublaj.motor, 'pocket', 'onaysız ElevenLabs seçilmemeli');
+    assert.strictEqual(await sayfa.locator('#dublaj-eleven-klon').count(), 0, 'ikinci onay, birincisi olmadan görünmez');
+    await sayfa.fill('#dublaj-eleven-anahtar', 'xi-GIZLI');
+    await sayfa.click('#dublaj-eleven-kaydet');
+    await sayfa.waitForFunction(() => document.querySelector('#dublaj-eleven-anahtar').placeholder.indexOf('Anahtar kayıtlı') === 0);
+    assert.strictEqual(st.anahtarlar.elevenlabs, 'xi-GIZLI');
+    await sayfa.click('#dublaj-eleven-onay', { force: true });
+    await sayfa.waitForSelector('#dublaj-eleven-klon', { state: 'attached' });
+    assert.strictEqual(st.ayarlar.dublaj.motor, 'elevenlabs'); assert.strictEqual(st.ayarlar.dublaj.elevenlabs_onay, true); assert.strictEqual(st.ayarlar.dublaj.elevenlabs_klon_onay, false);
+    await sayfa.click('#dublaj-eleven-klon', { force: true });
+    await sayfa.waitForFunction(() => document.querySelector('#dublaj-eleven-klon').checked);
+    await sayfa.waitForTimeout(100);
+    assert.strictEqual(st.ayarlar.dublaj.elevenlabs_klon_onay, true);
+    await sayfa.waitForTimeout(400);   // kaydın ardından kart yeniden çizilir
+    await sayfa.click('#dublaj-eleven-onay', { force: true });
+    await sayfa.waitForFunction(() => !document.querySelector('#dublaj-eleven-klon'));
+    assert.strictEqual(st.ayarlar.dublaj.motor, 'kapali'); assert.strictEqual(st.ayarlar.dublaj.elevenlabs_klon_onay, false);
+    await gor('3-dublaj.png');
+    adim('dublaj: ElevenLabs ancak onayla seçilir; ikinci onay ayrıdır; onay geri alınınca motor kapanır');
     // gelişmiş ayarlar
     await sayfa.click('#gelismis > summary');
     assert.match(await sayfa.getAttribute('#paket-paylas', 'href'), /\/api\/paket\/rdr3$/);
@@ -430,6 +499,8 @@ function dilKontrol() {
     assert.match(await sayfa.textContent('#erisim-metin'), /Unlimited access is on ✓/);
     assert.match(await sayfa.textContent('#guncelleme-metin'), /The program will restart by itself\./);
     assert.match(await sayfa.textContent('#tv-kart h2'), /Install on the TV in one click/);
+    assert.match(await sayfa.textContent('#dublaj-kart h2'), /Turkish dubbing \(experimental\)/);
+    assert.match(await sayfa.textContent('#dublaj-ne'), /Characters speak Turkish in their own voices\. Only the game's sound is listened to, the microphone is never turned on, and no audio is recorded\./);
     await gor('5-ana-en.png');
     adim('EN diline geçildi ve ayar kaydedildi');
 

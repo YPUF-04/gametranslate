@@ -16,6 +16,7 @@ class Yayin:
         self._yazi_bitis = 0.0
         self.son_ekran: dict[str, Any] | None = None
         self.son_durum: dict[str, Any] | None = None
+        self._dinleyiciler: list[Any] = []   # (olay, veri) çağrılan yerel dinleyiciler (ör. dublaj)
 
     @property
     def istemci_sayisi(self) -> int:
@@ -29,8 +30,22 @@ class Yayin:
     def ayril(self, q: asyncio.Queue) -> None:
         self._aboneler.discard(q)
 
+    def dinle(self, cb: Any) -> None:
+        """Yayınlanan her olayı `cb(olay, veri)` ile de ver (SSE istemcisi olmadan)."""
+        if cb not in self._dinleyiciler:
+            self._dinleyiciler.append(cb)
+
+    def dinlemeyi_birak(self, cb: Any) -> None:
+        if cb in self._dinleyiciler:
+            self._dinleyiciler.remove(cb)
+
     def yayinla(self, olay: str, veri: dict[str, Any] | None = None) -> None:
         veri = veri if veri is not None else {}
+        for cb in list(self._dinleyiciler):
+            try:
+                cb(olay, veri)
+            except Exception:   # dinleyici hatası yayını bozmasın
+                pass
         if olay == "gorunum":
             self.son_gorunum = veri
         elif olay == "yazi":

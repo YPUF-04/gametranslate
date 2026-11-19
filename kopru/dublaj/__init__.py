@@ -11,6 +11,7 @@ from typing import Any
 from .temel import DublajHatasi, SesMotoru
 
 MOTORLAR = ("kapali", "chatterbox", "pocket", "elevenlabs")
+MOTOR_ADLARI = {"chatterbox": "Chatterbox", "pocket": "Pocket TTS", "elevenlabs": "ElevenLabs"}
 CIKISLAR = ("bilgisayar", "tv")
 VARSAYILAN: dict[str, Any] = {
     "motor": "kapali", "oyun_sesi_kis": 0.25, "hiz_siniri": 1.25, "ses_seviyesi": 1.0,
@@ -64,9 +65,26 @@ def motor_olustur(kod: str, ayar: dict[str, Any]) -> SesMotoru:
         from .elevenlabs import ElevenLabsMotoru
         return ElevenLabsMotoru(d.get("elevenlabs_ses_kimligi", ""),
                                 d.get("elevenlabs_model", "eleven_multilingual_v2"),
-                                bool(d.get("elevenlabs_klon_onay")))
+                                klon_onay=bool(d.get("elevenlabs_klon_onay")),
+                                onay=bool(d.get("elevenlabs_onay")))
     raise DublajHatasi("dublaj_motor_yok", kod)
 
 
 __all__ = ["DublajHatasi", "SesMotoru", "MOTORLAR", "CIKISLAR", "VARSAYILAN",
            "ayar_gecerli", "motor_olustur"]
+
+
+def ayar_duzelt(mevcut: dict[str, Any], parca: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """`mevcut` ayara gelen `parca`yı uygular ve gizlilik açısından tutarlı hâle getirir.
+
+    Dönüş: (düzeltilmiş ayar, hata kodu | None). İstek ElevenLabs'i seçiyorsa birinci onay şarttır
+    (yoksa hata). Onay geri alınırsa klon onayı da düşer ve ElevenLabs motoru kapanır (hiçbir şey gitmez).
+    """
+    d = {**mevcut, **parca}
+    if not d.get("elevenlabs_onay"):
+        d["elevenlabs_klon_onay"] = False
+        if d.get("motor") == "elevenlabs":
+            if parca.get("motor") == "elevenlabs":
+                return d, "dublaj_onay_gerekli"
+            d["motor"] = "kapali"
+    return d, None
