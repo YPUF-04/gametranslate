@@ -12,6 +12,8 @@ import sqlite3
 from datetime import date, datetime
 
 import aiohttp
+import sys
+
 import pytest
 from aiohttp import web
 from PIL import Image
@@ -168,6 +170,8 @@ def test_hafiza_disk_hatasinda_ram_ile_devam_eder(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("klasor", ["Ayşe Yılmaz", "oyun #1 %20", "a?b&c", "çğıöşü 100%"])
 def test_hafiza_ozel_karakterli_klasorde_okunur(tmp_path, monkeypatch, klasor):
+    if sys.platform == "win32" and "?" in klasor:
+        pytest.skip("Windows klasör adlarında '?' kullanılamaz")
     """Hata: sqlite URI'si `file:{yol}` kaçışsızdı; '#', '%', '?' içeren kullanıcı klasörlerinde hafıza boş okunuyordu."""
     dizin = tmp_path / klasor
     monkeypatch.setenv("KOPRU_AYAR_DIZINI", str(dizin))
