@@ -212,6 +212,18 @@ DIGER: dict[str, dict[str, str]] = {
     "demo_acik": {"tr": "Deneme modu: örnek altyazılar gönderiliyor.",
                   "en": "Demo mode: sending sample subtitles."},
     "durdu": {"tr": "Kapatıldı.", "en": "Stopped."},
+    "zaten_acik": {"tr": "AltYazıKöprüsü zaten açık; açık olan programın paneli açılıyor: {adres}",
+                   "en": "AltYazıKöprüsü is already running; opening the panel of the running one: {adres}"},
+    "kapi_dolu": {"tr": "{kapi} kapısı başka bir program tarafından kullanılıyor; {yeni} kapısı kullanılacak. "
+                        "TV uygulaması 8642'yi tarar: TV'de bilgisayarın adresini kapı numarasıyla elle yazın "
+                        "(http://<bilgisayar adresi>:{yeni}).",
+                  "en": "Port {kapi} is used by another program; port {yeni} will be used. The TV app scans "
+                        "8642: enter this computer's address with the port number on the TV by hand "
+                        "(http://<computer address>:{yeni})."},
+    "kapi_yok": {"tr": "{kapi} kapısı dolu ve yakında boş kapı bulunamadı. Ayarlardaki kapı numarasını değiştirip "
+                       "yeniden açın.",
+                 "en": "Port {kapi} is busy and no free port was found nearby. Change the port in settings and "
+                       "start again."},
 }
 
 

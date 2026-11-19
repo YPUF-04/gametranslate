@@ -2,6 +2,8 @@
 """Çevrimdışı motor (argostranslate, isteğe bağlı kurulum)."""
 from __future__ import annotations
 
+import importlib
+
 import asyncio
 
 from .. import sozluk as sozluk_mod
@@ -18,9 +20,9 @@ class YerelMotor:
     @staticmethod
     def kurulu_mu() -> bool:
         try:
-            import argostranslate.translate  # noqa: F401
+            importlib.import_module("argostranslate.translate")
             return True
-        except ImportError:
+        except Exception:   # eksik ya da bozuk kurulum (ImportError, DLL/OSError)
             return False
 
     @staticmethod
@@ -43,7 +45,8 @@ class YerelMotor:
 
     async def cevir(self, metinler: list[str], kaynak: str, hedef: str,
                     sozluk: dict[str, str], aciklama: bool = False) -> list[Ceviri]:
-        if not self.kurulu_mu():
+        # ilk içe aktarma saniyeler sürer: olay döngüsü dışında yapılır
+        if not await asyncio.to_thread(self.kurulu_mu):
             raise MotorHatasi("Çevrimdışı çeviri için argostranslate kurulu değil")
         out: list[Ceviri] = []
         for m in metinler:

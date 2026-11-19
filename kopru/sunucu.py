@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import socket
 import time
 from pathlib import Path
@@ -32,6 +33,9 @@ NABIZ_SN = 15.0
 ERISIM_SN = 5.0   # süre sayacı adımı
 DURUM_SN = 20.0  # EventSource yorum satırını görmez; gerçek olay gerekir
 YEREL = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
+YEREL_ADLAR = {"127.0.0.1", "localhost", "[::1]", "::1"}   # Host/Origin'de görünebilecek yerel adlar
+EN_COK_AKIS = 64            # aynı anda en çok bu kadar akış (SSE) istemcisi
+YAZMA_ZAMAN_ASIMI_SN = 15.0  # donmuş istemciye yazma bu süreyi aşarsa bağlantı kapatılır
 DURUM = web.AppKey("durum", object)
 GUNCELLEME = web.AppKey("guncelleme", object)
 LG_KURULUM = web.AppKey("lg_kurulum", object)
@@ -79,6 +83,7 @@ class Durum:
         self._onbellek_kur()
         self.yonetici = self._yonetici_kur()
         self.gorev: asyncio.Task | None = None
+        self.calisan_kapi: int | None = None   # gerçekten dinlenen kapı (8642 doluysa farklı olabilir)
         # Türkçe dublaj (PROTOKOL 9): varsayılan kapalı; yalnız ayar açıksa ve Başlat basılıysa çalışır
         self.dublaj = DublajYonetici(lambda: self.ayar, self.yayin, lambda: self.yonetici,
                                      **(dublaj_fabrikalari or {}))
@@ -137,8 +142,9 @@ class Durum:
         self._onbellek_kur()
         self.yonetici = self._yonetici_kur()
         if self.gorev and not self.gorev.done():
+            okuyucu = self.isleme.okuyucu if self.isleme else None   # modeli yeniden yükleme
             self.durdur()
-            self.baslat()
+            self.baslat(okuyucu)
 
     def duzelt(self, asil: str, ceviri: str) -> bool:
         """Kullanıcı düzeltmesi: hafızaya (kaynak=kullanici); ekrandaysa TV'de hemen güncellenir."""
@@ -177,7 +183,14 @@ class Durum:
     def calisiyor(self) -> bool:
         return bool(self.gorev and not self.gorev.done())
 
-    def baslat(self) -> None:
+    def okuyucu_olustur(self) -> Any:
+        """OCR okuyucusunu seçer. Ağır içe aktarmalar yapabilir: olay döngüsü dışında çağrılır."""
+        if self.okuyucu_fabrika is None:
+            from . import okuma
+            return okuma.sec()
+        return self.okuyucu_fabrika()
+
+    def baslat(self, okuyucu: Any = None) -> None:
         if self.calisiyor():
             return
         if self.kare_fabrika is None:
@@ -186,17 +199,25 @@ class Durum:
             yakalama.kare_al  # erken hata: modül yüklü mü
         else:
             kare = self.kare_fabrika(self.ayar["kaynak"])
-        if self.okuyucu_fabrika is None:
-            from . import okuma
-            okuyucu = okuma.sec()
-        else:
-            okuyucu = self.okuyucu_fabrika()
+        if okuyucu is None:
+            okuyucu = self.okuyucu_olustur()
         isleme = Isleme(kare, okuyucu, self.yonetici, self.yayin, lambda: self.ayar)
         self.isleme = isleme
         self.gorev = asyncio.get_running_loop().create_task(isleme.calis())
+        self.gorev.add_done_callback(self._gorev_bitti)
         self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
                                      "yedek": False})
         self.dublaj.senkronla(True)   # dublaj kapalıysa hiçbir şey yapmaz
+
+    def _gorev_bitti(self, gorev: asyncio.Task) -> None:
+        """Boru hattı kendi kendine ölürse sessizce "çalışıyor" görünmesin."""
+        if gorev.cancelled() or gorev is not self.gorev:
+            return
+        e = gorev.exception()
+        log.error("Boru hattı beklenmedik biçimde durdu: %r", e)
+        self.gorev = None
+        self.yayin.yayinla("durum", {"calisiyor": False, "motor": self.yonetici.birincil.ad,
+                                     "yedek": False, "hata": "genel"})
 
     def durdur(self) -> None:
         self.dublaj.senkronla(False)
@@ -208,14 +229,51 @@ class Durum:
         self.yayin.yayinla("durum", {"calisiyor": False, "motor": self.yonetici.birincil.ad,
                                      "yedek": False})
 
+    async def kapat(self) -> None:
+        """Program kapanırken: bütün arka plan işleri iptal edilir ve beklenir, dosyalar kapanır."""
+        gorev, self.gorev = self.gorev, None
+        if gorev:
+            gorev.cancel()
+        self.dublaj.durdur()
+        gorevler = [t for t in (gorev, self.dublaj._gorev, self.dublaj._hazirla_gorevi) if t]
+        for t in gorevler:
+            t.cancel()
+        if gorevler:
+            await asyncio.gather(*gorevler, return_exceptions=True)
+        self.onbellek.kapat()
+        self.hafiza.kapat()
+        self.oneriler.bitir()
+
 
 # ---------- ara katmanlar ----------
+
+def _ad_yerel_mi(deger: str | None) -> bool:
+    """`Host` / `Origin` içindeki ad bu bilgisayarın yerel adı mı (kapı numarası yok sayılır)."""
+    if not deger:
+        return False
+    d = deger.strip().lower()
+    if "://" in d:
+        d = d.split("://", 1)[1]
+    d = d.split("/", 1)[0]
+    if d.startswith("["):
+        d = d.split("]", 1)[0] + "]"
+    else:
+        d = d.rsplit(":", 1)[0] if d.count(":") == 1 else d
+    return d in YEREL_ADLAR
+
 
 @web.middleware
 async def yerel_katman(request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]):
     yol = request.path
     if yol == "/" or yol.startswith(("/panel/", "/api/")) or yol == "/panel":
         if uzak_adres(request) not in YEREL:
+            return hata("yalniz_yerel", 403, request)
+        # DNS yeniden bağlama ve siteler arası istek (CSRF) koruması: yalnız yerel adla, yalnız
+        # yerel kökenden. (Başka sitedeki bir sayfa tarayıcınız üzerinden ayarları değiştiremez.)
+        if not _ad_yerel_mi(request.headers.get("Host")):
+            return hata("yalniz_yerel", 403, request)
+        koken = request.headers.get("Origin")
+        if koken is not None and not _ad_yerel_mi(koken):
             return hata("yalniz_yerel", 403, request)
     return await handler(request)
 
@@ -231,6 +289,8 @@ async def kopru_katman(request: web.Request, handler: Callable[[web.Request], Aw
         except web.HTTPException as e:
             if e.status == 404:
                 yanit = hata("bulunamadi", 404, request)
+            elif e.status in (400, 413) and request.path.startswith("/api/"):
+                yanit = hata("gecersiz_istek", e.status, request)   # bozuk/çok büyük gövde de JSON olsun
             else:
                 raise
         except Exception:
@@ -257,8 +317,15 @@ async def merhaba(request: web.Request) -> web.Response:
                               "protokol": PROTOKOL, "ad": socket.gethostname().upper()})
 
 
+async def _yaz(r: web.StreamResponse, veri: bytes) -> None:
+    """Donmuş (okumayan) istemci sonsuza dek beklemesin."""
+    await asyncio.wait_for(r.write(veri), YAZMA_ZAMAN_ASIMI_SN)
+
+
 async def akis(request: web.Request) -> web.StreamResponse:
     d: Durum = request.app[DURUM]
+    if d.yayin.istemci_sayisi >= EN_COK_AKIS:
+        return web.json_response({"hata": "cok_istemci"}, status=503, headers={"Retry-After": "5"})
     r = web.StreamResponse(headers={
         "Content-Type": "text/event-stream", "Cache-Control": "no-cache",
         "Connection": "keep-alive", "X-Accel-Buffering": "no",
@@ -269,14 +336,24 @@ async def akis(request: web.Request) -> web.StreamResponse:
         ilk = [(o, v) for o, v in d.yayin.acilis_olaylari() if o != "durum"]
         ilk.insert(1 if ilk and ilk[0][0] == "gorunum" else 0, ("durum", d.durum_olayi()))
         for olay, veri in ilk:
-            await r.write(sse_bicim(olay, veri))
+            await _yaz(r, sse_bicim(olay, veri))
+        dongu = asyncio.get_running_loop()
+        son_yazma = dongu.time()
+        bekleme = min(1.0, NABIZ_SN)   # kopan istemci en geç ~1 sn'de fark edilir (abonelik/bellek sızmaz)
         while True:
             try:
-                olay, veri = await asyncio.wait_for(q.get(), NABIZ_SN)
-                await r.write(sse_bicim(olay, veri))
+                olay, veri = await asyncio.wait_for(q.get(), bekleme)
             except asyncio.TimeoutError:
-                await r.write(b": nabiz\n\n")
-    except (ConnectionResetError, asyncio.CancelledError):
+                if request.transport is None or request.transport.is_closing():
+                    break
+                if dongu.time() - son_yazma >= NABIZ_SN:
+                    await _yaz(r, b": nabiz\n\n")
+                    son_yazma = dongu.time()
+                continue
+            await _yaz(r, sse_bicim(olay, veri))
+            son_yazma = dongu.time()
+    except (ConnectionError, asyncio.CancelledError, asyncio.TimeoutError):
+        # ConnectionError: Windows'ta istemci kopması ConnectionAbortedError (WinError 10053) de olur
         pass
     finally:
         d.yayin.ayril(q)
@@ -288,7 +365,7 @@ def _dosya(yol: Path, kok: Path) -> web.StreamResponse:
         tam = yol.resolve()
         if kok.resolve() in tam.parents and tam.is_file():
             return web.FileResponse(tam, headers={"Cache-Control": "no-cache"})
-    except OSError:
+    except (OSError, ValueError):   # ValueError: yolda NUL baytı gibi geçersiz karakter
         pass
     raise web.HTTPNotFound()
 
@@ -335,7 +412,8 @@ async def api_durum(request: web.Request) -> web.Response:
     return web.json_response({
         "calisiyor": d.calisiyor(), "motor": _motor_adi(d), "yedekte": d.yonetici.yedekte,
         "tv_sayisi": d.yayin.istemci_sayisi, "son_yazi": y["metin"] if y else "",
-        "adresler": lan_adresleri(), "kapi": d.ayar["kapi"], "sinir": d.erisim.sinir()})
+        "adresler": lan_adresleri(), "kapi": d.calisan_kapi or d.ayar["kapi"],
+        "sinir": d.erisim.sinir()})
 
 
 def _ayar_gorunumu(d: Durum) -> dict[str, Any]:
@@ -345,7 +423,27 @@ def _ayar_gorunumu(d: Durum) -> dict[str, Any]:
 
 
 async def api_ayarlar_al(request: web.Request) -> web.Response:
-    return web.json_response(_ayar_gorunumu(request.app[DURUM]))
+    # kasa okuması bloklayabilir (kilitli Anahtar Zinciri): olay döngüsünü tutmasın
+    return web.json_response(await asyncio.to_thread(_ayar_gorunumu, request.app[DURUM]))
+
+
+_RENK = re.compile(r"#[0-9a-fA-F]{6}")
+
+
+def _gorunum_gecerli(g: dict[str, Any]) -> bool:
+    """TV'ye giden görünüm alanlarının türü/aralığı (bilinmeyen alanlar serbest)."""
+    def sayi(v: Any, lo: float, hi: float) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and lo <= v <= hi
+    for alan, (lo, hi) in {"yazi_boyutu": (8, 300), "kenar_bosluk": (0, 0.5), "arka_plan": (0, 1)}.items():
+        if alan in g and not sayi(g[alan], lo, hi):
+            return False
+    for alan in ("yazi_rengi", "konusan_rengi"):
+        if alan in g and not (isinstance(g[alan], str) and _RENK.fullmatch(g[alan])):
+            return False
+    for alan in ("asil_goster", "ekran_cevir", "onceki_goster"):
+        if alan in g and not isinstance(g[alan], bool):
+            return False
+    return True
 
 
 def _dogrula(k: dict[str, Any]) -> bool:
@@ -369,6 +467,11 @@ def _dogrula(k: dict[str, Any]) -> bool:
             return False
         if "kalite" in k and k["kalite"] not in ("en_iyi", "dengeli", "hizli"):
             return False
+        if "kaynak" in k and not (isinstance(k["kaynak"], str) and len(k["kaynak"]) <= 200):
+            return False
+        for alan in ("kaynak_dil", "hedef_dil"):   # istem metnine girer: kısa, harf/tire
+            if alan in k and not (isinstance(k[alan], str) and re.fullmatch(r"[A-Za-z]{2,12}(-[A-Za-z0-9]{1,8})?", k[alan])):
+                return False
         if "aktif_oyun" in k and not (isinstance(k["aktif_oyun"], str) and
                                       0 < len(k["aktif_oyun"].strip()) <= 100):
             return False
@@ -383,6 +486,8 @@ def _dogrula(k: dict[str, Any]) -> bool:
         g = k.get("gorunum")
         if g is not None:
             if not isinstance(g, dict) or g.get("konum", "alt") not in ("alt", "ust"):
+                return False
+            if not _gorunum_gecerli(g):
                 return False
         if "bolgeler" in k and not ayarlar.bolgeler_gecerli(k["bolgeler"]):
             return False
@@ -407,6 +512,8 @@ async def api_ayarlar_yaz(request: web.Request) -> web.Response:
     if "bolgeler" in kismi and ayarlar.bolgeler_gecerli(kismi["bolgeler"]):
         kismi["bolgeler"] = ayarlar.bolgeleri_temizle(kismi["bolgeler"])
     # üst düzey ekrani_cevir ile gorunum.ekran_cevir birlikte tutulur
+    if "gorunum" in kismi and not isinstance(kismi["gorunum"], dict):
+        return hata("gecersiz_ayar", 400, request)
     if "ekrani_cevir" in kismi:
         kismi.setdefault("gorunum", {})["ekran_cevir"] = kismi["ekrani_cevir"]
     elif isinstance(kismi.get("gorunum"), dict) and "ekran_cevir" in kismi["gorunum"]:
@@ -428,10 +535,13 @@ async def api_ayarlar_yaz(request: web.Request) -> web.Response:
     return web.json_response({"tamam": True})
 
 
+def _motor_listesi() -> list[dict[str, Any]]:
+    return [{"kod": k, "ad": ad, "anahtar_gerekli": ag, "anahtar_kayitli": anahtarlar.kayitli_mi(k) if ag else False,
+             "cevrimdisi": cd, "ucretsiz": uc} for k, ad, ag, cd, uc in BILGI]
+
+
 async def api_motorlar(request: web.Request) -> web.Response:
-    return web.json_response([
-        {"kod": k, "ad": ad, "anahtar_gerekli": ag, "anahtar_kayitli": anahtarlar.kayitli_mi(k) if ag else False,
-         "cevrimdisi": cd, "ucretsiz": uc} for k, ad, ag, cd, uc in BILGI])
+    return web.json_response(await asyncio.to_thread(_motor_listesi))
 
 
 async def api_anahtar(request: web.Request) -> web.Response:
@@ -441,7 +551,7 @@ async def api_anahtar(request: web.Request) -> web.Response:
     if motor not in anahtarlar.MOTORLAR or not isinstance(anahtar, str):
         return hata("gecersiz_istek", 400, request)
     try:
-        anahtarlar.yaz(motor, anahtar)
+        await asyncio.to_thread(anahtarlar.yaz, motor, anahtar)
     except anahtarlar.KasaHatasi as e:
         kod = "kasa_yok" if str(e) == "kasa_yok" else "kasa_hata"
         return hata(kod, 503, request)
@@ -463,8 +573,11 @@ async def api_dene(request: web.Request) -> web.Response:
     motor = d.motor_fabrika(kod, d.ayar)
     t0 = time.monotonic()
     try:
-        (c,) = await motor.cevir([metin], d.ayar["kaynak_dil"], d.ayar["hedef_dil"],
-                                 d.yonetici.terimler)
+        gelen = await motor.cevir([metin], d.ayar["kaynak_dil"], d.ayar["hedef_dil"],
+                                  d.yonetici.terimler)
+        if len(gelen) != 1:
+            raise MotorHatasi("sayi")
+        c = gelen[0]
     except AnahtarHatasi:
         return hata("anahtar_yok" if not anahtarlar.kayitli_mi(kod) else "anahtar_gecersiz", 400, request)
     except AgHatasi:
@@ -496,8 +609,12 @@ async def api_baslat(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     if not d.ayar.get("kaynak"):
         return hata("kaynak_yok", 400, request)
+    if d.calisiyor():
+        return web.json_response({"calisiyor": True})
     try:
-        d.baslat()
+        # OCR paketlerini içe aktarmak saniyeler sürebilir: olay döngüsü (SSE, panel) donmasın
+        okuyucu = await asyncio.to_thread(d.okuyucu_olustur)
+        d.baslat(okuyucu)
     except YakalamaHatasi:
         return hata("yakalama_yok", 400, request)
     except OkumaHatasi:
@@ -655,7 +772,11 @@ async def api_hafiza_sil(request: web.Request) -> web.Response:
     if kod == d.oyun_kodu:
         d.hafiza.temizle()
     else:
-        hafiza_mod.Hafiza(kod).temizle()
+        h = hafiza_mod.Hafiza(kod)
+        try:
+            h.temizle()
+        finally:
+            h.kapat()
     return web.json_response({"tamam": True})
 
 
@@ -757,7 +878,7 @@ def _dublaj_hata(e: DublajHatasi, request: web.Request) -> web.Response:
 async def api_dublaj_al(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     b = await d.dublaj.bilgi()
-    b["elevenlabs_anahtar"] = anahtarlar.kayitli_mi("elevenlabs")
+    b["elevenlabs_anahtar"] = await asyncio.to_thread(anahtarlar.kayitli_mi, "elevenlabs")
     b["motorlar"] = [{"kod": k, "ad": ad, "yerel": k != "elevenlabs"} for k, ad in
                      dublaj_mod.MOTOR_ADLARI.items()]
     if b.get("son_hata"):
@@ -904,24 +1025,31 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     async def durum_dongusu() -> None:
         while True:
             await asyncio.sleep(DURUM_SN)
-            durum.yayin.yayinla("durum", durum.durum_olayi())
+            try:
+                durum.yayin.yayinla("durum", durum.durum_olayi())
+            except Exception:   # bir hata döngüyü öldürüp durum akışını sessizce kesmesin
+                log.exception("Durum yayını başarısız")
 
     async def erisim_dongusu() -> None:
         while True:
             await asyncio.sleep(ERISIM_SN)
-            durum.erisim_say()
+            try:
+                durum.erisim_say()
+            except Exception:   # sayaç hatası (ör. disk) döngüyü öldürüp süreyi donduramaz
+                log.exception("Erişim sayacı adımı başarısız")
 
     async def ac(_: web.Application) -> None:
+        await asyncio.to_thread(anahtarlar.isit)   # kasa ilk okuması olay döngüsünü tutmasın
         app["durum_gorevi"] = asyncio.create_task(durum_dongusu())
         app["erisim_gorevi"] = asyncio.create_task(erisim_dongusu())
 
     async def kapat(_: web.Application) -> None:
-        app["durum_gorevi"].cancel()
-        app["erisim_gorevi"].cancel()
-        durum.durdur()
-        durum.onbellek.kapat()
-        durum.hafiza.kapat()
-        durum.oneriler.bitir()
+        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi") if k in app]
+        for t in arka:
+            t.cancel()
+        await asyncio.gather(*arka, return_exceptions=True)
+        await durum.kapat()
+        await app[GUNCELLEME].kapat()
     app.on_startup.append(ac)
     app.on_cleanup.append(kapat)
     return app

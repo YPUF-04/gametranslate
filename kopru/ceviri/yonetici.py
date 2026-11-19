@@ -12,10 +12,14 @@ from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import Onbellek
 from .istem import SON_SATIR_ADEDI, dublaj_ipucu
-from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri
+from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri, MotorHatasi
 
 log = logging.getLogger("kopru.ceviri")
 YENIDEN_DENEME_SN = 60.0
+
+
+class _Iptal(Exception):
+    """Dedupe sahibi iptal edildi; bekleyen isteği yeniden yapar (iç kullanım)."""
 
 
 class CeviriYoneticisi:
@@ -77,11 +81,31 @@ class CeviriYoneticisi:
                                    for a, c in self.son_satirlar), maxlen=SON_SATIR_ADEDI)
 
     # -- motor çağrısı --
-    async def _cagir(self, motor: CeviriMotoru, metinler: list[str], kaynak: str, hedef: str,
-                     aciklama: bool, baglam: Baglam) -> list[Ceviri]:
+    async def _cagir_ham(self, motor: CeviriMotoru, metinler: list[str], kaynak: str, hedef: str,
+                         aciklama: bool, baglam: Baglam) -> list[Ceviri]:
         if getattr(motor, "baglam_destekler", False):
             return await motor.cevir(metinler, kaynak, hedef, self.terimler, aciklama, baglam=baglam)
         return await motor.cevir(metinler, kaynak, hedef, self.terimler, aciklama)
+
+    async def _cagir(self, motor: CeviriMotoru, metinler: list[str], kaynak: str, hedef: str,
+                     aciklama: bool, baglam: Baglam) -> list[Ceviri]:
+        """Motoru çağırır; dönen liste istenenle AYNI uzunlukta olmak zorundadır.
+
+        Sayı tutmazsa çeviriler yanlış satıra oturabilir: asla eşlenmez. Çoklu istekte satır
+        satır yeniden denenir; tek satırda MotorHatasi fırlatılır.
+        """
+        sonuc = await self._cagir_ham(motor, metinler, kaynak, hedef, aciklama, baglam)
+        if isinstance(sonuc, list) and len(sonuc) == len(metinler) and all(isinstance(c, Ceviri) for c in sonuc):
+            return sonuc
+        if len(metinler) > 1:
+            log.warning("Motor %d satır istenince %s döndürdü; satır satır deneniyor",
+                        len(metinler), len(sonuc) if isinstance(sonuc, list) else "geçersiz")
+            tek: list[Ceviri] = []
+            for m in metinler:
+                (c,) = await self._cagir(motor, [m], kaynak, hedef, aciklama, baglam)
+                tek.append(c)
+            return tek
+        raise MotorHatasi("Motor yanıtındaki satır sayısı istekle uyuşmuyor")
 
     async def _motorla(self, metinler: list[str], kaynak: str, hedef: str,
                        aciklama: bool, ipucu: str = "") -> tuple[list[Ceviri], str | None]:
@@ -90,17 +114,37 @@ class CeviriYoneticisi:
         baglam.ipucu = ipucu
         # yedekteyken belirli aralıkla birincili yeniden dene
         if self.yedekte and self.yedek and time.monotonic() - self._yedek_zamani < YENIDEN_DENEME_SN:
-            return await self._cagir(self.yedek, metinler, kaynak, hedef, aciklama, baglam), None
+            try:
+                return await self._cagir(self.yedek, metinler, kaynak, hedef, aciklama, baglam), None
+            except MotorHatasi:
+                # yedek de çalışmıyor (ör. kurulu değil): birincil düzelmiş olabilir, yeniden dene
+                self.yedekte = False
+                self._durum()
         try:
-            sonuc = await self._cagir(self.birincil, metinler, kaynak, hedef, aciklama, baglam)
-        except AgHatasi:
+            try:
+                sonuc = await self._cagir(self.birincil, metinler, kaynak, hedef, aciklama, baglam)
+            except MotorHatasi:
+                if getattr(self.birincil, "cevrimdisi", False):
+                    raise
+                # model bozuk/yarım JSON döndürdü (geçici olabilir): bir kez daha dene
+                baglam.yeni_terimler.clear()
+                sonuc = await self._cagir(self.birincil, metinler, kaynak, hedef, aciklama, baglam)
+        except (AgHatasi, MotorHatasi) as e:
             if not self.yedek:
                 raise
-            log.warning("Birincil motor ulaşılamadı, yedeğe geçildi")
-            self.yedekte = True
-            self._yedek_zamani = time.monotonic()
-            self._durum()
-            return await self._cagir(self.yedek, metinler, kaynak, hedef, aciklama, baglam), None
+            log.warning("Birincil motor çalışmadı (%s), yedeğe geçildi", type(e).__name__)
+            kalici = isinstance(e, AgHatasi)   # ağ/hız sınırı: bir süre yedekte kal; bozuk yanıt: yalnız bu istek
+            if kalici:
+                self.yedekte = True
+                self._yedek_zamani = time.monotonic()
+                self._durum()
+            try:
+                return await self._cagir(self.yedek, metinler, kaynak, hedef, aciklama, baglam), None
+            except MotorHatasi:
+                if kalici:
+                    self.yedekte = False   # yedek de yok: panel "yedekte" yazmasın, sonraki istek birincili dener
+                    self._durum()
+                raise e from None
         if self.yedekte:
             self.yedekte = False
             self._durum()
@@ -149,9 +193,15 @@ class CeviriYoneticisi:
             ayri = list(dict.fromkeys(metinler[i] for i in eksik))
             gelen = await self._ucustaki(ayri, kaynak, hedef, aciklama)
             for i in eksik:
-                c = gelen[metinler[i]]
+                c = gelen.get(metinler[i])
+                if c is None:
+                    raise MotorHatasi("Çeviri eşlenemedi")
+                if not c.metin.strip() and metinler[i].strip():
+                    c = Ceviri(metinler[i], c.aciklama)   # motor boş döndü: boş altyazı yerine asıl metin
                 sonuc[i] = c
-        return [s for s in sonuc if s is not None]
+        if any(s is None for s in sonuc):   # asla kayarak eşleme yapma
+            raise MotorHatasi("Çeviri eşlenemedi")
+        return sonuc  # type: ignore[return-value]
 
     async def _ucustaki(self, ayri: list[str], kaynak: str, hedef: str,
                         aciklama: bool) -> dict[str, Ceviri]:
@@ -169,6 +219,8 @@ class CeviriYoneticisi:
         if yeni:
             try:
                 ceviriler, motor_kodu = await self._motorla(yeni, kaynak, hedef, aciklama)
+                if len(ceviriler) != len(yeni):   # savunma: zip sessizce kısaltırdı ve bekleyenler sonsuza dek asılırdı
+                    raise MotorHatasi("Çeviri sayısı uyuşmuyor")
                 for m, c in zip(yeni, ceviriler):
                     c = Ceviri(sozluk_mod.son_kontrol(m, c.metin, self.terimler), c.aciklama)
                     if self.onbellek and c.metin:
@@ -181,12 +233,20 @@ class CeviriYoneticisi:
                     f = self._ucusta.pop((m, kaynak, hedef, aciklama), None)
                     if f and not f.done():
                         if isinstance(e, asyncio.CancelledError):
-                            f.cancel()
+                            # sahibi iptal edildi (ör. atılan önden çeviri): bekleyenler iptal EDİLMEZ,
+                            # kendi isteklerini yeniden yapar
+                            f.set_exception(_Iptal())
                         else:
                             f.set_exception(e)
-                            f.exception()  # "never retrieved" uyarısını önle
+                        f.exception()  # "never retrieved" uyarısını önle
                 raise
-        return {m: await f for m, f in bekleyen.items()}
+        sonuc: dict[str, Ceviri] = {}
+        for m, f in bekleyen.items():
+            try:
+                sonuc[m] = await f
+            except _Iptal:
+                (sonuc[m],) = (await self._ucustaki([m], kaynak, hedef, aciklama)).values()
+        return sonuc
 
     async def dublaj_cevir(self, metin: str, kaynak: str, hedef: str, sure_sn: float,
                            onceki: str | None = None) -> Ceviri:

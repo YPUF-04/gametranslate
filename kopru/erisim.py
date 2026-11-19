@@ -12,9 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import os
 import secrets
-import tempfile
 from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
@@ -146,6 +144,7 @@ class Erisim:
         self.simdi = simdi
         self._acik = acik
         self._son: datetime | None = None
+        self._kod_onbellek: tuple[str, date, dict[str, Any] | None] | None = None
         self._veri = self._oku()
 
     # -- dosya (ayar klasöründe erisim.json) --
@@ -154,22 +153,33 @@ class Erisim:
         return ayarlar.ayar_dizini() / "erisim.json"
 
     def _oku(self) -> dict[str, Any]:
+        yol = self._yol()
         try:
-            v = json.loads(self._yol().read_text(encoding="utf-8"))
-            if isinstance(v, dict):
-                return {"kullanilan": dict(v.get("kullanilan") or {}), "kod": v.get("kod") or None}
-        except (OSError, ValueError, TypeError, AttributeError):
-            pass
-        return {"kullanilan": {}, "kod": None}
+            v = json.loads(yol.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {"kullanilan": {}, "kod": None}
+        except (OSError, ValueError):
+            ayarlar.bozuk_yedekle(yol)
+            return {"kullanilan": {}, "kod": None}
+        if not isinstance(v, dict):
+            ayarlar.bozuk_yedekle(yol)
+            return {"kullanilan": {}, "kod": None}
+        kullanilan: dict[str, float] = {}
+        ham = v.get("kullanilan")
+        for g, sn in (ham.items() if isinstance(ham, dict) else ()):
+            try:
+                date.fromisoformat(str(g))
+                sn = float(sn)
+            except (ValueError, TypeError):
+                continue
+            if sn == sn and 0 <= sn < 1e9:   # NaN/eksi/sonsuz değerler atılır
+                kullanilan[str(g)] = sn
+        kod = v.get("kod")
+        return {"kullanilan": kullanilan, "kod": kod if isinstance(kod, str) and kod else None}
 
     def _yaz(self) -> None:
-        dizin = ayarlar.ayar_dizini()
         try:
-            dizin.mkdir(parents=True, exist_ok=True)
-            fd, gecici = tempfile.mkstemp(dir=dizin, suffix=".tmp")
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(self._veri, f, ensure_ascii=False)
-            os.replace(gecici, self._yol())
+            ayarlar.atomik_yaz(self._yol(), json.dumps(self._veri, ensure_ascii=False))
         except OSError:
             log.warning("Erişim bilgisi yazılamadı")
 
@@ -206,10 +216,15 @@ class Erisim:
         kod = self._veri.get("kod")
         if not kod:
             return None
+        bugun = self.bugun()
+        if self._kod_onbellek is not None and self._kod_onbellek[:2] == (kod, bugun):
+            return self._kod_onbellek[2]   # imza doğrulaması saf Python ve yavaş: gün başına bir kez
         try:
-            return kod_coz(kod, self.bugun(), self._acik)
+            bilgi = kod_coz(kod, bugun, self._acik)
         except KodHatasi:
-            return None
+            bilgi = None
+        self._kod_onbellek = (kod, bugun, bilgi)
+        return bilgi
 
     def kod_gir(self, kod: str) -> dict[str, Any]:
         bilgi = kod_coz(kod, self.bugun(), self._acik)   # KodHatasi yukarı gider

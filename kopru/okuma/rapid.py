@@ -2,6 +2,8 @@
 """Her yerde çalışan yedek OCR (rapidocr_onnxruntime)."""
 from __future__ import annotations
 
+import importlib
+
 from typing import Any
 
 from . import Satir
@@ -9,9 +11,9 @@ from . import Satir
 
 def kullanilabilir() -> bool:
     try:
-        import rapidocr_onnxruntime  # noqa: F401
+        importlib.import_module("rapidocr_onnxruntime")
         return True
-    except ImportError:
+    except Exception:   # eksik ya da bozuk kurulum (ImportError, DLL/OSError)
         return False
 
 

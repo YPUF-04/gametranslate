@@ -18,6 +18,7 @@ from .ayarlar import bolgeleri_temizle
 from .ceviri.temel import AgHatasi, AnahtarHatasi, ErisimSiniri, MotorHatasi
 from .onbellek import normallestir
 from .okuma import Satir
+from .yakalama import YakalamaHatasi
 
 log = logging.getLogger("kopru.isleme")
 
@@ -29,6 +30,10 @@ KAYIP_KARE = 3             # 7.2/2: bu kadar kare üst üste görünmezse "gitti
 GITTI_SONRA_SN = 0.7       # 7.2/3: süre dolmuşsa gittikten sonra bu kadar daha kalır
 EKRAN_GITTI_SN = 1.0       # 7.2/8: ekran öğesi gidince bu kadar sonra kalkar
 EN_KUCUK_OCR_YUKSEKLIK = 48  # daha küçük bölge okumadan önce büyütülür
+EN_COK_ALTYAZI_KARAKTER = 600   # bundan uzun "altyazı" okuma gürültüsüdür; bütçeyi yakmasın
+EN_COK_OGE_KARAKTER = 300
+EN_COK_OGE = 24               # bir karede çevrilecek en çok ekran öğesi
+HATA_LOG_SN = 60.0            # aynı hata günlüğe en çok dakikada bir
 _KONUSAN = re.compile(r"^([A-ZÇĞİÖŞÜ][\w'. -]{0,24}):\s+(\S.*)$", re.UNICODE)
 
 
@@ -214,6 +219,8 @@ class Isleme:
         self.durum_hatasi: str | None = None
         self._spek: asyncio.Task | None = None   # önden başlatılmış çeviri (6.4)
         self._spek_aday = ""
+        self._son_hata_logu = -1e9
+        self._adim_hatali = False
 
     # -- önden (speculative) çeviri --
     def _spek_iptal(self) -> None:
@@ -271,15 +278,20 @@ class Isleme:
         return o
 
     # -- bir adım --
-    async def adim(self) -> None:
-        resim = await asyncio.to_thread(self.kare_kaynagi)
-        ayar = self.ayar()
-        bolgeler = bolgeleri_temizle(ayar.get("bolgeler"))
+    def _kare_hazirla(self, bolgeler: list[dict[str, Any]]) -> tuple[Any, list, bytes]:
+        """İş parçacığında: kare al + bölgeleri kes + parmak izi (4K karede PIL işi olay döngüsünü tutmasın)."""
+        resim = self.kare_kaynagi()
         parcalar = [(i, b, *kirp(resim, b)) for i, b in enumerate(bolgeler)]
         if parcalar:
             izi = b"".join(parmak_izi(p[2]) for p in parcalar)
         else:
             izi = parmak_izi(resim)
+        return resim, parcalar, izi
+
+    async def adim(self) -> None:
+        ayar = self.ayar()
+        bolgeler = bolgeleri_temizle(ayar.get("bolgeler"))
+        resim, parcalar, izi = await asyncio.to_thread(self._kare_hazirla, bolgeler)
         anahtar = tuple((b["x"], b["y"], b["g"], b["y2"], b["tur"]) for b in bolgeler)
         if self._izi is None or anahtar != self._bolge_anahtari or fark(izi, self._izi) > DEGISIM_ESIGI:
             self._okuma = await asyncio.to_thread(self._oku, resim, parcalar)
@@ -317,6 +329,8 @@ class Isleme:
         a, simdi = self._y, self.saat()
         sirali = sorted(satirlar, key=lambda s: (round(s.y, 2), s.x))
         metin = " ".join(s.metin for s in sirali).strip()
+        if len(metin) > EN_COK_ALTYAZI_KARAKTER:
+            metin = ""     # ekranın yazı dolu bir yerine denk gelindi (menü/harita): altyazı sayılmaz
         aday = normallestir(metin)
         if aday:
             a.kayip, a.gitti = 0, None
@@ -373,7 +387,9 @@ class Isleme:
                 c = await gorev           # önden başlamıştı: yalnız kalanı bekler
             else:
                 (c,) = await self.yonetici.cevir([govde], ayar["kaynak_dil"], ayar["hedef_dil"])
-        except (AgHatasi, AnahtarHatasi, ErisimSiniri, MotorHatasi) as e:
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:   # bilinen motor hataları ve beklenmeyenler: başarısız önden çeviri tekrar kullanılmaz
             self._spek_iptal()
             self._hata(e)
             return
@@ -409,6 +425,7 @@ class Isleme:
         simdi = self.saat()
         kullanilan: set[str] = set()
         yeniler: list[tuple[str | None, Satir, str]] = []
+        gelen = [(t, o) for t, o in gelen if len(o.metin) <= EN_COK_OGE_KARAKTER][:EN_COK_OGE]
         for tur_ip, o in gelen:
             n = normallestir(o.metin)
             e = self._oge_bul(n, o, kullanilan)
@@ -424,7 +441,9 @@ class Isleme:
         if kesin:
             try:
                 sonuc = await self._ekran_cevir(kesin, ayar)
-            except (AgHatasi, AnahtarHatasi, ErisimSiniri, MotorHatasi) as e:
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
                 self._hata(e)
                 self._oge_adaylari = [(n, o) for _, o, n in yeniler]
                 return
@@ -490,14 +509,38 @@ class Isleme:
         self.yayin.yayinla("ekran", {"id": self._yeni_id("e"), "ogeler": liste})
 
     # -- döngü --
-    async def calis(self) -> None:
-        while True:
-            t0 = time.monotonic()
-            try:
-                await self.adim()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
+    def _adim_hatasi(self, e: Exception) -> None:
+        """Yakalama/OCR hatası: günlüğü doldurmadan (dakikada bir) ve panel "hata" görsün diye bildirir."""
+        kod = "yakalama" if isinstance(e, YakalamaHatasi) else "genel"
+        simdi = time.monotonic()
+        if kod != self.durum_hatasi or simdi - self._son_hata_logu >= HATA_LOG_SN:
+            self._son_hata_logu = simdi
+            if isinstance(e, YakalamaHatasi):
+                log.warning("Ekran yakalanamadı: %s", e)
+            else:
                 log.exception("Boru hattı adımı başarısız")
-                await asyncio.sleep(1.0)
-            await asyncio.sleep(max(0.0, ARALIK_SN - (time.monotonic() - t0)))
+        self._adim_hatali = True
+        if kod != self.durum_hatasi:
+            self.durum_hatasi = kod
+            self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
+                                         "yedek": bool(self.yonetici.yedekte), "hata": kod})
+
+    async def calis(self) -> None:
+        try:
+            while True:
+                t0 = time.monotonic()
+                try:
+                    await self.adim()
+                    if self._adim_hatali:   # yakalama/OCR düzeldi
+                        self._adim_hatali = False
+                        self.durum_hatasi = None
+                        self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
+                                                     "yedek": bool(self.yonetici.yedekte)})
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    self._adim_hatasi(e)
+                    await asyncio.sleep(1.0)
+                await asyncio.sleep(max(0.0, ARALIK_SN - (time.monotonic() - t0)))
+        finally:
+            self._spek_iptal()   # durdurulunca önden çeviri boşuna sürmesin

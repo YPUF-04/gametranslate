@@ -9,6 +9,8 @@ Referans ses bir torch tensörü olarak verilir: DİSKE HİÇBİR ŞEY YAZILMAZ.
 """
 from __future__ import annotations
 
+import importlib
+
 import asyncio
 import hashlib
 import logging
@@ -50,7 +52,7 @@ class PocketMotoru:
         if self._model is not None:
             return
         try:
-            import torch  # noqa: F401
+            importlib.import_module("torch")
             from pocket_tts import TTSModel
         except ImportError as e:
             raise DublajHatasi("dublaj_paket_yok", "pocket-tts") from e

@@ -13,6 +13,8 @@ sistem geçici klasörü) kısa ömürlü `NamedTemporaryFile`; `prepare_conditi
 """
 from __future__ import annotations
 
+import importlib
+
 import asyncio
 import hashlib
 import io
@@ -61,7 +63,7 @@ class ChatterboxMotoru:
         if self._model is not None:
             return
         try:
-            import torch  # noqa: F401
+            importlib.import_module("torch")
             from chatterbox.mtl_tts import ChatterboxMultilingualTTS
         except ImportError as e:
             raise DublajHatasi("dublaj_paket_yok", "chatterbox-tts") from e

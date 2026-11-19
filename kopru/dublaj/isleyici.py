@@ -20,6 +20,7 @@ from ..ceviri.temel import AgHatasi, AnahtarHatasi, ErisimSiniri, MotorHatasi
 from ..isleme import sure_ms
 from ..onbellek import normallestir
 from . import dsp
+from ..ses import SesHatasi
 from .temel import DublajHatasi
 
 log = logging.getLogger("kopru.dublaj")
@@ -181,6 +182,8 @@ class Isleyici:
             self.yayin.yayinla("yazi", {"id": yazi_id, "metin": tr, "asil": kaynak_metin, "tur": "konusma",
                                         "konusan": None, "sure_ms": sure_ms(tr)})
         self._yapilan_yazilar.add(yazi_id)
+        if len(self._yapilan_yazilar) > 200:   # sınırsız büyümesin: yalnız hâlâ eşleşebilecekler kalır
+            self._yapilan_yazilar &= {k for _, k, _, _ in self._yazilar}
         # 6) çal
         cikis = self.cikis_getir(d.get("cikis", "bilgisayar"))
         bas = self.saat()
@@ -212,9 +215,9 @@ class Isleyici:
                 self.son_hata = None
             except asyncio.CancelledError:
                 raise
-            except DublajHatasi as e:
+            except (DublajHatasi, SesHatasi) as e:
                 self.son_hata = e.kod
-                log.warning("Dublaj hatası: %s %s", e.kod, e.ayrinti)
+                log.warning("Dublaj hatası: %s %s", e.kod, getattr(e, "ayrinti", ""))
             except ErisimSiniri:
                 self.son_hata = "ucretsiz_bitti"
             except (AgHatasi, AnahtarHatasi, MotorHatasi) as e:

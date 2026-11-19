@@ -9,15 +9,13 @@ import zipfile
 import aiohttp
 import pytest
 
-from kopru import ayarlar, hafiza as hafiza_mod, oyunlar, paket, sozluk, sunucu
+from kopru import oyunlar, paket, sozluk, sunucu
 from kopru.ceviri import istem, model_sec, motor_olustur
 from kopru.ceviri.claude import ClaudeMotoru
 from kopru.ceviri.temel import Baglam, Ceviri
 from kopru.ceviri.yonetici import CeviriYoneticisi
 from kopru.hafiza import Hafiza, OneriDeposu
 from kopru.isleme import Isleme
-from kopru.okuma import Satir
-from kopru.onbellek import Onbellek
 from kopru.ayarlar import VARSAYILAN
 from kopru.yayin import Yayin
 from tests.conftest import sahte_fabrika
