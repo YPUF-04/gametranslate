@@ -11,7 +11,7 @@ from typing import Any, Callable
 from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import Onbellek
-from .istem import SON_SATIR_ADEDI
+from .istem import SON_SATIR_ADEDI, dublaj_ipucu
 from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri
 
 log = logging.getLogger("kopru.ceviri")
@@ -84,9 +84,10 @@ class CeviriYoneticisi:
         return await motor.cevir(metinler, kaynak, hedef, self.terimler, aciklama)
 
     async def _motorla(self, metinler: list[str], kaynak: str, hedef: str,
-                       aciklama: bool) -> tuple[list[Ceviri], str | None]:
+                       aciklama: bool, ipucu: str = "") -> tuple[list[Ceviri], str | None]:
         """(sonuç, motor kodu); yedek motor kullanıldıysa kod None (hafızaya yazılmaz)."""
         baglam = self._baglam()
+        baglam.ipucu = ipucu
         # yedekteyken belirli aralıkla birincili yeniden dene
         if self.yedekte and self.yedek and time.monotonic() - self._yedek_zamani < YENIDEN_DENEME_SN:
             return await self._cagir(self.yedek, metinler, kaynak, hedef, aciklama, baglam), None
@@ -186,3 +187,17 @@ class CeviriYoneticisi:
                             f.exception()  # "never retrieved" uyarısını önle
                 raise
         return {m: await f for m, f in bekleyen.items()}
+
+    async def dublaj_cevir(self, metin: str, kaynak: str, hedef: str, sure_sn: float,
+                           onceki: str | None = None) -> Ceviri:
+        """Dublaj için kısa, söylenebilir çeviri (PROTOKOL 9.1/3).
+
+        Altyazı çevirisinden FARKLIDIR; bu yüzden hafıza/önbellek ne okunur ne yazılır.
+        `onceki`: önceki denemenin metni (süreye sığmadıysa "daha kısa" istenir).
+        """
+        if not self.erisim_izni():
+            raise ErisimSiniri()
+        ipucu = dublaj_ipucu(max(0.5, sure_sn), onceki)
+        sonuc, _ = await self._motorla([metin], kaynak, hedef, False, ipucu)
+        c = sonuc[0]
+        return Ceviri(sozluk_mod.son_kontrol(metin, " ".join(c.metin.split()), self.terimler), None)

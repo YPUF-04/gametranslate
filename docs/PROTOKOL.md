@@ -226,6 +226,8 @@ Program bilgisayarı tanır (ekran kartı var mı, bellek) ve uygun motoru öner
 ### 9.3 Ayarlar
 `dublaj`: `{"motor":"kapali","oyun_sesi_kis":0.25,"hiz_siniri":1.25,"ses_seviyesi":1.0,"cikis":"bilgisayar"|"tv"}`
 `cikis:"tv"`: Türkçe ses TV uygulamasına gönderilir ve orada çalınır (olay `ses`, aşağıda).
+Ek alanlar (ElevenLabs, çift onay): `elevenlabs_onay` (bool; **metin** ElevenLabs'e gider, onay yoksa motor seçilemez), `elevenlabs_klon_onay` (bool; ayrıca ses **örneği** yüklenir, birinci onay yoksa kendiliğinden `false` olur), `elevenlabs_ses_kimligi` (klon onayı yoksa kullanılan hazır ses), `elevenlabs_model` (`eleven_multilingual_v2`). Anahtar yalnız kasadadır (`POST /api/anahtar` `motor:"elevenlabs"`). Onay geri alınırsa motor `kapali` olur; onaysız `motor:"elevenlabs"` isteği `400 dublaj_onay_gerekli` döner.
+Doğrulama: `oyun_sesi_kis` 0–1 (oyun sesinin kalacağı kesir), `ses_seviyesi` 0–2, `hiz_siniri` 1.0–1.5.
 
 ### 9.4 Yeni olaylar ve API
 - SSE `ses`: `{"id":"s12","url":"/kopru/ses/s12.wav","sure_ms":2300,"yazi_id":"a17"}` (dosya bellekten sunulur, 60 sn sonra silinir)

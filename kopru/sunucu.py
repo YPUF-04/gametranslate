@@ -16,6 +16,9 @@ from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, erisim as erisim_mod, gunce
 from .ceviri import BILGI, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .ceviri.yonetici import CeviriYoneticisi
+from . import dublaj as dublaj_mod
+from .dublaj.temel import DublajHatasi
+from .dublaj.yonetim import DublajYonetici
 from .isleme import Isleme
 from .okuma import OkumaHatasi
 from .onbellek import Onbellek, normallestir
@@ -58,7 +61,8 @@ class Durum:
     def __init__(self, ayar: dict[str, Any], motor_fabrika: Callable[[str, dict], Any] = motor_olustur,
                  kare_fabrika: Callable[[str], Callable[[], Any]] | None = None,
                  okuyucu_fabrika: Callable[[], Any] | None = None,
-                 erisim: erisim_mod.Erisim | None = None) -> None:
+                 erisim: erisim_mod.Erisim | None = None,
+                 dublaj_fabrikalari: dict[str, Any] | None = None) -> None:
         self.ayar = ayar
         self.erisim = erisim or erisim_mod.Erisim(lambda: self.ayar)
         self.yayin = Yayin()
@@ -75,6 +79,9 @@ class Durum:
         self._onbellek_kur()
         self.yonetici = self._yonetici_kur()
         self.gorev: asyncio.Task | None = None
+        # Türkçe dublaj (PROTOKOL 9): varsayılan kapalı; yalnız ayar açıksa ve Başlat basılıysa çalışır
+        self.dublaj = DublajYonetici(lambda: self.ayar, self.yayin, lambda: self.yonetici,
+                                     **(dublaj_fabrikalari or {}))
         self.yayin.yayinla("gorunum", ayar["gorunum"])
 
     @property
@@ -189,8 +196,10 @@ class Durum:
         self.gorev = asyncio.get_running_loop().create_task(isleme.calis())
         self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
                                      "yedek": False})
+        self.dublaj.senkronla(True)   # dublaj kapalıysa hiçbir şey yapmaz
 
     def durdur(self) -> None:
+        self.dublaj.senkronla(False)
         if self.gorev:
             self.gorev.cancel()
             self.gorev = None
@@ -377,6 +386,8 @@ def _dogrula(k: dict[str, Any]) -> bool:
                 return False
         if "bolgeler" in k and not ayarlar.bolgeler_gecerli(k["bolgeler"]):
             return False
+        if "dublaj" in k and not dublaj_mod.ayar_gecerli(k["dublaj"]):
+            return False
         b = k.get("bolge_altyazi")
         if b is not None and not (isinstance(b, dict) and
                                   all(isinstance(b.get(f), (int, float)) and 0 <= b[f] <= 1
@@ -402,7 +413,14 @@ async def api_ayarlar_yaz(request: web.Request) -> web.Response:
         kismi["ekrani_cevir"] = kismi["gorunum"]["ekran_cevir"]
     if not _dogrula(kismi):
         return hata("gecersiz_ayar", 400, request)
+    if "dublaj" in kismi:
+        duzgun, kod = dublaj_mod.ayar_duzelt(d.ayar["dublaj"], kismi["dublaj"])
+        if kod:
+            return hata(kod, 400, request)
+        kismi["dublaj"] = duzgun
     d.ayar = ayarlar.guncelle(d.ayar, kismi)
+    if "dublaj" in kismi:
+        d.dublaj.senkronla()
     if "gorunum" in kismi:
         d.yayin.yayinla("gorunum", d.ayar["gorunum"])
     if {"motor", "yedek_motor", "modeller", "aktif_oyun", "kalite", "hafiza_izni"} & kismi.keys():
@@ -724,6 +742,75 @@ async def api_oneriler_yaz(request: web.Request) -> web.Response:
     return web.json_response({"tamam": True})
 
 
+# ---------- Türkçe dublaj (PROTOKOL 9.4) ----------
+
+DUBLAJ_DURUMLARI = {"dublaj_hazir_degil": 409, "dublaj_paket_yok": 400, "dublaj_motor_yok": 400,
+                    "dublaj_onay_gerekli": 400, "dublaj_eleven_anahtar_yok": 400,
+                    "dublaj_eleven_onay_yok": 400, "dublaj_eleven_klon_onay_yok": 400,
+                    "dublaj_eleven_ses_yok": 400, "dublaj_eleven_anahtar_gecersiz": 400}
+
+
+def _dublaj_hata(e: DublajHatasi, request: web.Request) -> web.Response:
+    return hata(e.kod, DUBLAJ_DURUMLARI.get(e.kod, 502), request)
+
+
+async def api_dublaj_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    b = await d.dublaj.bilgi()
+    b["elevenlabs_anahtar"] = anahtarlar.kayitli_mi("elevenlabs")
+    b["motorlar"] = [{"kod": k, "ad": ad, "yerel": k != "elevenlabs"} for k, ad in
+                     dublaj_mod.MOTOR_ADLARI.items()]
+    if b.get("son_hata"):
+        b["son_hata_mesaj"] = metinler.mesaj(b["son_hata"], d.dil)
+    if b["indirme"].get("hata"):
+        b["indirme"]["mesaj"] = metinler.mesaj(b["indirme"]["hata"], d.dil)
+    return web.json_response(b)
+
+
+async def api_dublaj_yaz(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    parca = v.get("dublaj", v) if isinstance(v.get("dublaj", v), dict) else {}
+    if not parca or not dublaj_mod.ayar_gecerli(parca):
+        return hata("gecersiz_ayar", 400, request)
+    duzgun, kod = dublaj_mod.ayar_duzelt(d.ayar["dublaj"], parca)
+    if kod:
+        return hata(kod, 400, request)
+    d.ayar = ayarlar.guncelle(d.ayar, {"dublaj": duzgun})
+    d.dublaj.senkronla()
+    return web.json_response({"tamam": True, "dublaj": d.ayar["dublaj"]})
+
+
+async def api_dublaj_hazirla(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    if d.dublaj.motor() is None:
+        return hata("dublaj_motor_yok", 400, request)
+    d.dublaj.hazirla_baslat()
+    await asyncio.sleep(0)   # ElevenLabs gibi anında biten hazırlıklar ilk yanıtta görünsün
+    return web.json_response(await d.dublaj.bilgi())
+
+
+async def api_dublaj_dene(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    metin = v.get("metin", "Merhaba, nasılsın?")
+    if not isinstance(metin, str) or not metin.strip() or len(metin) > 300:
+        return hata("gecersiz_istek", 400, request)
+    try:
+        return web.json_response(await d.dublaj.dene(metin.strip()))
+    except DublajHatasi as e:
+        return _dublaj_hata(e, request)
+
+
+async def kopru_ses(request: web.Request) -> web.Response:
+    """TV için dublaj sesi: yalnız bellekten, 60 sn sonra 404 (PROTOKOL 9.4)."""
+    d: Durum = request.app[DURUM]
+    veri = d.dublaj.depo.al(request.match_info["kimlik"])
+    if veri is None:
+        raise web.HTTPNotFound()
+    return web.Response(body=veri, content_type="audio/wav", headers={"Cache-Control": "no-store"})
+
+
 # ---------- güncelleme ve TV kurulumu ----------
 
 async def api_guncelleme_al(request: web.Request) -> web.Response:
@@ -771,6 +858,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r = app.router
     r.add_get("/kopru/merhaba", merhaba)
     r.add_get("/kopru/akis", akis)
+    r.add_get("/kopru/ses/{kimlik}.wav", kopru_ses)
     r.add_get("/", panel_ana)
     r.add_get("/panel/{yol:.+}", panel_dosya)
     r.add_get("/tv", tv_sayfa)
@@ -808,6 +896,10 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_get("/api/tv/lg/durum", api_tv_lg_durum)
     r.add_get("/api/oneriler", api_oneriler_al)
     r.add_post("/api/oneriler", api_oneriler_yaz)
+    r.add_get("/api/dublaj", api_dublaj_al)
+    r.add_post("/api/dublaj", api_dublaj_yaz)
+    r.add_post("/api/dublaj/hazirla", api_dublaj_hazirla)
+    r.add_post("/api/dublaj/dene", api_dublaj_dene)
 
     async def durum_dongusu() -> None:
         while True:

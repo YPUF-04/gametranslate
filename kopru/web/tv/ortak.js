@@ -59,6 +59,7 @@
     var ayrilanlar = [];        // solmakta olan kutular
     var ogeHarita = {};         // ekran öğeleri: anahtar -> {el, imza}
     var denge = !cssDengeli() || !!sec.dengeJs;   // true: dengeyi JS kurar
+    var sesNesne = null;        // Türkçe dublaj sesi (PROTOKOL 9.4): çalan <audio>
 
     kok.className = (kok.className ? kok.className + ' ' : '') + 'ak-kok';
     kok.innerHTML = '';
@@ -305,6 +306,25 @@
       for (k in ogeHarita) { if (ogeHarita.hasOwnProperty(k) && !kullanilan[k]) { ogeKaldir(k); } }
     }
 
+    // ---------- Türkçe dublaj sesi (olay `ses` / `ses-dur`) ----------
+    function taban() { var m = /^(https?:\/\/[^\/]+)/.exec(url || ''); return m ? m[1] : ''; }   // PC adresi (TV uygulaması file:// kökenlidir)
+    function sesDurdur() {
+      var a = sesNesne;
+      sesNesne = null;
+      if (a) { try { a.pause(); } catch (x) { /* yok say */ } try { a.removeAttribute('src'); } catch (y) { /* yok say */ } }
+    }
+    function sesCal(v) {
+      var a, p;
+      if (!v || typeof v.url !== 'string' || v.url.charAt(0) !== '/') { return; }   // yalnız PC'nin kendi yolu
+      sesDurdur();                                    // öncekini kes: iki ses üst üste binmesin
+      a = new pencere.Audio(taban() + v.url);
+      a.onended = function () { if (sesNesne === a) { sesNesne = null; } };
+      sesNesne = a;
+      try { p = a.play(); if (p && p.catch) { p.catch(function () { if (sesNesne === a) { sesNesne = null; } bildir('onSesHata', v); }); } }
+      catch (x) { sesNesne = null; bildir('onSesHata', v); }
+      bildir('onSes', v);
+    }
+
     function olayVeri(ev) { var v = null; try { v = JSON.parse(ev.data); } catch (x) { v = null; } return v; }
 
     function gozcuKur() {
@@ -339,6 +359,8 @@
       dinle('yazi-sil', function () { yaziSil(false); });
       dinle('ekran', function (v) { ekranGoster(v); });
       dinle('ekran-sil', function () { ekranSil(); });
+      dinle('ses', function (v) { sesCal(v); });
+      dinle('ses-dur', function () { sesDurdur(); });
       dinle('gorunum', function (v) { gorunumUygula(v); });
       dinle('durum', function (v) { bildir('onBilgi', v); });
     }
@@ -347,7 +369,7 @@
     pencere.addEventListener('resize', yeniden, false);
 
     function durdur() {
-      durduruldu = true; kapat();
+      durduruldu = true; kapat(); sesDurdur();
       if (bekle) { pencere.clearTimeout(bekle); } if (gozcu) { pencere.clearTimeout(gozcu); }
       if (gizle) { pencere.clearTimeout(gizle); gizle = null; }
       if (silBekle) { pencere.clearTimeout(silBekle); silBekle = null; }
@@ -363,6 +385,7 @@
     return {
       durdur: durdur, yaziGoster: yaziGoster, yaziSil: function () { yaziSil(false); }, ekranGoster: ekranGoster, ekranSil: ekranSil,
       gorunumUygula: gorunumUygula,
+      sesCal: sesCal, sesDurdur: sesDurdur,
       durumu: function () { return durum; },
       sonYazi: function () { return sonYazi; }
     };

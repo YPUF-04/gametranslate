@@ -144,6 +144,62 @@ HATALAR: dict[str, dict[str, str]] = {
     "ucretsiz_bitti": {
         "tr": "Bugünkü ücretsiz süre doldu. Erişim kodunu girin ya da yarın devam edin.",
         "en": "Today's free time is used up. Enter an access code or continue tomorrow."},
+    "dublaj_motor_yok": {
+        "tr": "Önce dublaj için bir ses motoru seçin (Chatterbox, Pocket veya ElevenLabs), sonra tekrar deneyin.",
+        "en": "First pick a voice engine for dubbing (Chatterbox, Pocket or ElevenLabs), then try again."},
+    "dublaj_paket_yok": {
+        "tr": "Dublaj için gereken ek paket kurulu değil. Komut satırında şunu çalıştırıp programı yeniden açın: "
+              "pip install \"altyazikoprusu[dublaj]\"",
+        "en": "The extra package needed for dubbing is not installed. Run this in a terminal and reopen the "
+              "program: pip install \"altyazikoprusu[dublaj]\""},
+    "dublaj_hazir_degil": {
+        "tr": "Ses motoru henüz hazır değil, lütfen önce \"Hazırla\" düğmesine basın ve bitmesini bekleyin.",
+        "en": "The voice engine is not ready yet, please press \"Prepare\" first and wait until it finishes."},
+    "dublaj_indirme_hata": {
+        "tr": "Ses modeli indirilemedi, internet bağlantınızı kontrol edip \"Hazırla\" düğmesine tekrar basın.",
+        "en": "The voice model could not be downloaded, please check your internet connection and press \"Prepare\" again."},
+    "dublaj_yukleme_hata": {
+        "tr": "Ses modeli yüklenemedi, bellek yetmemiş olabilir; daha hafif olan Pocket motorunu deneyin.",
+        "en": "The voice model could not be loaded, memory may be too low; try the lighter Pocket engine."},
+    "dublaj_uretim_hata": {
+        "tr": "Ses üretilemedi, birkaç saniye sonra tekrar deneyin; sürerse Pocket motorunu seçin.",
+        "en": "The voice could not be generated, try again in a few seconds; if it keeps failing pick the Pocket engine."},
+    "dublaj_cikis_yok": {
+        "tr": "Ses çalınamadı, hoparlör ya da kulaklığın bağlı ve varsayılan çıkış olduğunu kontrol edin.",
+        "en": "The sound could not be played, check that your speakers or headphones are connected and set as default."},
+    "dublaj_ses_kaynagi": {
+        "tr": "Oyunun sesi dinlenemedi, varsayılan ses çıkışını kontrol edin; mikrofon hiçbir zaman kullanılmaz.",
+        "en": "The game audio could not be listened to, check the default sound output; the microphone is never used."},
+    "dublaj_macos_ses": {
+        "tr": "macOS'ta oyun sesini dinlemek için BlackHole gibi bir sanal ses aygıtı kurup sistem çıkışı yapın.",
+        "en": "On macOS, install a virtual audio device such as BlackHole and set it as the system output to listen to game audio."},
+    "dublaj_onay_gerekli": {
+        "tr": "ElevenLabs için önce \"ses örneği ElevenLabs'e gider\" onayını işaretleyin.",
+        "en": "For ElevenLabs, first tick the consent that the voice sample goes to ElevenLabs."},
+    "dublaj_eleven_anahtar_yok": {
+        "tr": "ElevenLabs anahtarı kayıtlı değil, lütfen kendi ElevenLabs anahtarınızı girin.",
+        "en": "No ElevenLabs key is saved, please enter your own ElevenLabs key."},
+    "dublaj_eleven_anahtar_gecersiz": {
+        "tr": "ElevenLabs anahtarı kabul edilmedi, anahtarı kontrol edip yeniden girin.",
+        "en": "The ElevenLabs key was not accepted, please check it and enter it again."},
+    "dublaj_eleven_onay_yok": {
+        "tr": "ElevenLabs için gerekli onay verilmemiş, kullanmak için paneldeki onay kutusunu işaretleyin.",
+        "en": "The consent needed for ElevenLabs was not given, tick the consent box in the panel to use it."},
+    "dublaj_eleven_klon_onay_yok": {
+        "tr": "Ses klonlama için ikinci onay verilmemiş, ses örneği gönderilmedi; panelden onaylayın ya da hazır bir ses seçin.",
+        "en": "The second consent for voice cloning was not given, no voice sample was sent; confirm it in the panel or choose a ready-made voice."},
+    "dublaj_eleven_ses_yok": {
+        "tr": "ElevenLabs için bir ses seçilmemiş, ses kimliğini (voice id) yazın ya da ses klonlamayı onaylayın.",
+        "en": "No ElevenLabs voice is chosen, enter a voice ID or confirm voice cloning."},
+    "dublaj_eleven_kota": {
+        "tr": "ElevenLabs kullanım hakkınız dolmuş, hesabınızı kontrol edin ya da yerel bir motor seçin.",
+        "en": "Your ElevenLabs quota is used up, check your account or pick a local engine."},
+    "dublaj_eleven_ag": {
+        "tr": "ElevenLabs'e ulaşılamadı, internet bağlantınızı kontrol edin.",
+        "en": "ElevenLabs could not be reached, please check your internet connection."},
+    "dublaj_eleven_hata": {
+        "tr": "ElevenLabs isteği başarısız oldu, ses kimliğini ve hesabınızı kontrol edip tekrar deneyin.",
+        "en": "The ElevenLabs request failed, check the voice ID and your account and try again."},
     "sunucu_hatasi": {
         "tr": "Beklenmeyen bir sorun oluştu, programı yeniden başlatmayı deneyin.",
         "en": "Something unexpected went wrong, please try restarting the program."},

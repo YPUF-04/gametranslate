@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 SERVIS = "AltyaziKoprusu"
-MOTORLAR = ("claude", "gemini", "deepseek", "deepl")
+MOTORLAR = ("claude", "gemini", "deepseek", "deepl", "elevenlabs")   # son: dublaj ses servisi (çeviri motoru değil)
 
 
 class KasaHatasi(Exception):
