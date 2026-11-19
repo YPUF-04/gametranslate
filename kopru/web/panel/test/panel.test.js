@@ -63,7 +63,7 @@ function sahteSunucu() {
     guncelleme: { ilerleme: 0, asama: 'bosta' }, tvIstekleri: [], tvKuyruk: [], tvSon: { asama: 'bosta', mesaj: '', ayrinti: '' },
     erisim: { kalan_dakika: 12, kod: null, bitis: null, ucretsiz_dakika: 30 }, sinir: false, kodlar: [],
     dublajHazir: false, dublajIndirme: { durum: 'bosta', yuzde: 0, hata: null }, dublajDene: [],
-    okumaMod: 'iyi', okumaIstekleri: 0,
+    okumaMod: 'iyi', okumaIstekleri: 0, kaynakCihazlar: [], kartVar: false, uyari: null, bilgiMod: 'ok',
     yerel: { hazir: false, boyut_mb: 95, indirme: { durum: 'yok', yuzde: 0, mesaj: null } }, yerelHazirla: 0, yerelDene: 0, yerelAdim: 0,
     katman: { destek: true, acik: false, ekran: 1, ekranlar: [{ no: 1, ad: 'Ekran 1 (1920×1080)' }, { no: 2, ad: 'Ekran 2 (2560×1440)' }] }, katmanDene: [],
     bolgePostlari: [], kareIstekleri: 0, kareHata: false, calisiyor: false, anahtarlar: {}, istekler: [], govdeler: {}, sozluk: { oyun: 'varsayilan', terimler: [{ asil: 'Ellie', ceviri: 'Ellie' }] }
@@ -97,10 +97,18 @@ function sahteSunucu() {
         s.writeHead(200, { 'Content-Type': TURLER[path.extname(tam)] || 'application/octet-stream' });
         return s.end(fs.readFileSync(tam));
       }
+      const bm = url.pathname.match(/^\/api\/oyun\/([a-z0-9_]+)\/bilgi-(hazirla|kaydet)$/);
+      if (bm && q.method === 'POST') {
+        if (bm[2] === 'kaydet') return j({ tamam: true, terim_sayisi: (b.terimler || []).length });
+        if (st.bilgiMod === 'cevrimdisi') return j({ hata: 'cevrimdisi_motor', mesaj: 'Çevrimdışı motor oyun bilgisi hazırlayamaz. İnternetli bir motor seç ve tekrar dene.', ayrinti: 'MotorHatasi: yerel motor LLM değil' }, 409);
+        return setTimeout(() => j({ aciklama: 'Fütüristik bir şehirde geçen aksiyon rol yapma oyunu.', hitap: 'siz', terimler: [
+          { asil: 'Night City', ceviri: 'Night City' }, { asil: 'Johnny Silverhand', ceviri: 'Johnny Silverhand' },
+          { asil: 'Cyberpsycho', ceviri: 'Siberpsikopat' }, { asil: 'Nomad', ceviri: 'Göçebe' }] }), 700);
+      }
       switch (q.method + ' ' + url.pathname) {
         case 'GET /api/durum':
           return j({ calisiyor: st.calisiyor, motor: st.ayarlar.motor, yedekte: false, tv_sayisi: st.calisiyor ? 1 : 0,
-            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir });
+            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir, uyari: st.uyari || null });
         case 'GET /api/ayarlar': return j(Object.assign({ claude: false, gemini: !!st.anahtarlar.gemini }, st.ayarlar));
         case 'POST /api/ayarlar': if (b.bolgeler) st.bolgePostlari.push(b.bolgeler); Object.assign(st.ayarlar, b, b.gorunum ? { gorunum: Object.assign({}, st.ayarlar.gorunum, b.gorunum) } : {}); return j({ tamam: true });
         case 'GET /api/kare': st.kareIstekleri++; if (st.kareHata) return j({ hata: 'yakalama_yok', mesaj: 'Ekran görüntüsü alınamadı. Oyunun penceresini küçültmeyin ve "Görüntüyü yenile"ye basın.', ayrinti: 'YakalamaHatasi: DXGI_ERROR_ACCESS_LOST (pencere:123)' }, 400); s.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); return s.end(KARE);
@@ -138,7 +146,13 @@ function sahteSunucu() {
         case 'POST /api/baslat': st.calisiyor = true; return j({ tamam: true });
         case 'POST /api/durdur': st.calisiyor = false; return j({ tamam: true });
         case 'POST /api/deneme-yazi': st.sonYazi = 'Merhaba, bu bir deneme altyazısı'; return j({ tamam: true });
-        case 'GET /api/kaynaklar': return j([{ kod: 'ekran:1', ad: 'Ekran 1 (1920×1080)' }, { kod: 'pencere:123', ad: 'PS Remote Play' }]);
+        case 'GET /api/kaynaklar': {   // PROTOKOL 12.2: cihaza göre "onerilen" + "tur"
+          const cihaz = url.searchParams.get('cihaz') || st.ayarlar.cihaz;
+          st.kaynakCihazlar.push(cihaz);
+          const l = [{ kod: 'ekran:1', ad: 'Ekran 1 (1920×1080)', tur: 'ekran', onerilen: false }, { kod: 'pencere:123', ad: 'PS Remote Play', tur: 'pencere', onerilen: cihaz === 'ps5' }];
+          if (cihaz === 'kart' && st.kartVar) l.push({ kod: 'pencere:777', ad: 'Windowed Projector (Kaynak) - Video Capture Device', tur: 'pencere', onerilen: true });
+          return j(l);
+        }
         case 'GET /api/oyunlar': return j(st.oyunlar);
         case 'POST /api/oyunlar': { const kod = b.ad.toLowerCase().replace(/[^a-z0-9]/g, ''); st.oyunlar.push({ kod, ad: b.ad, kayit_sayisi: 0, terim_sayisi: 0 }); return j({ kod }); }
         case 'POST /api/oyun-sec': st.ayarlar.aktif_oyun = b.kod; return j({ tamam: true });
@@ -198,6 +212,20 @@ function dilKontrol() {
   const eksik = [];
   for (const m of js.matchAll(/\b(?:t|ne|adimlar|bolum)\('([a-z0-9_]+(?:\.[a-z0-9_]+)+)'/g)) if (!(m[1] in tr)) eksik.push(m[1]);
   assert.deepStrictEqual(eksik, [], 'panel.js içinde tr.json\'da olmayan anahtar: ' + eksik.join(', '));
+  // rehberler: her kimlik için başlık, "Bu ne işe yarar?", 3–6 adım (başlık + açıklama) ve 2–3 çözüm satırı; tr ve en
+  const REHBER = { pc: 3, ps5: 5, xbox: 4, kart: 5, bilgisayar: 3, lg: 4, samsung: 5, android: 5, apple: 4, hdmi: 4 };
+  const kaynak = fs.readFileSync(path.join(PANEL, 'panel.js'), 'utf8').match(/var REHBER = \{([\s\S]*?)\n  \};/)[1];
+  for (const [id, n] of Object.entries(REHBER)) {
+    assert.ok(n >= 3 && n <= 6);
+    const m = kaynak.match(new RegExp(id + ": \\{ ik: '[a-z0-9]+', adim: \\[([^\\]]*)\\]"));
+    assert.ok(m && m[1].split(',').length === n, id + ' rehberinin adım sayısı ' + n + ' olmalı (panel.js)');
+    for (const [kod, d] of [['tr', tr], ['en', en]]) {
+      for (const k of ['baslik', 'ne', 'sorun']) assert.ok(d['rg.' + id + '.' + k], kod + ' rg.' + id + '.' + k);
+      for (let i = 1; i <= n; i++) { assert.ok(d['rg.' + id + '.s' + i], kod + ' s' + i); assert.ok(d['rg.' + id + '.s' + i + '.k'], kod + ' s' + i + '.k'); }
+      assert.ok(!d['rg.' + id + '.s' + (n + 1)], kod + ' fazladan adım');
+      const sorun = d['rg.' + id + '.sorun'].split('\n').length; assert.ok(sorun >= 2 && sorun <= 3, id + ' çözüm sayısı 2-3');
+    }
+  }
 }
 
 (async () => {
@@ -246,10 +274,60 @@ function dilKontrol() {
     assert.match(await metin('#dogrula-1'), /Çalıştı[\s\S]*Oyun görüntüsünü görüyorum\./);
     await sayfa.click('[data-kaynak="pencere:123"]');
     await sayfa.waitForFunction(() => document.querySelector('#dogrula-1') && !document.querySelector('#dogrula-1').hidden && document.querySelector('[data-kaynak="pencere:123"]').getAttribute('aria-pressed') === 'true');
+    for (let i = 0; i < 40 && st.ayarlar.kaynak !== 'pencere:123'; i++) await sayfa.waitForTimeout(50);
+    await sayfa.waitForTimeout(150);
+    await sayfa.waitForSelector('#dogrula-1:not([hidden])');
     assert.strictEqual(st.ayarlar.kaynak, 'pencere:123'); assert.strictEqual(st.ayarlar.cihaz, 'pc');
     assert.ok(!(await sayfa.isDisabled('#ileri-1')));
     await gor('adim-1.png', true);
     adim('1. Görüntü: cihaz → pencere → önizleme ✓; hata özel mesaj + Ayrıntı ile');
+    // --- cihaz rehberleri: "Nasıl yapılır?" aç/kapat, 3–6 numaralı adım, "Bu ne işe yarar?"
+    for (const [k, n, ara] of [['pc', 3, /Pencereli tam ekran/], ['ps5', 5, /playstation\.com/], ['xbox', 4, /Xbox uygulamasını aç/], ['kart', 5, /Pencereli Projektör \(Kaynak\)/]]) {
+      assert.strictEqual(await sayfa.getAttribute('#rehber-ac-' + k, 'aria-expanded'), 'false');
+      await sayfa.click('#rehber-ac-' + k);
+      await sayfa.waitForSelector('#cihaz-rehber-kart[data-rehber=' + k + ']');
+      assert.strictEqual(await sayfa.getAttribute('#rehber-ac-' + k, 'aria-expanded'), 'true');
+      assert.strictEqual(await sayfa.locator('#cihaz-rehber-kart .rehber-adim').count(), n, k + ' adım sayısı');
+      assert.strictEqual(await sayfa.locator('#cihaz-rehber-kart .rehber-adim svg').count(), n, k + ': her adımda simge');
+      assert.match(await metin('#cihaz-rehber-kart'), /Bu ne işe yarar\?/);
+      assert.match(await metin('#cihaz-rehber-kart'), ara);
+      const sl = await sayfa.locator('#cihaz-rehber-kart .rehber-sorun li').count(); assert.ok(sl >= 2 && sl <= 3);
+      if (k === 'ps5') { await sayfa.click('#cihaz-rehber-kart .rehber-sorun > summary'); await gor('rehber-ps5.png', true); }
+    }
+    await sayfa.click('#rehber-ac-ps5');
+    await sayfa.click('#rehber-kapat');
+    assert.strictEqual(await sayfa.locator('#cihaz-rehber-kart').count(), 0, 'Kapat rehberi kapatır');
+    assert.strictEqual(await sayfa.getAttribute('#rehber-ac-ps5', 'aria-expanded'), 'false');
+    // --- kart: uygun pencere yok → o cihazın rehberi satır içinde; "Listeyi yenile" ile bulununca kendiliğinden seçilir
+    await sayfa.click('[data-cihaz=kart]');
+    await sayfa.waitForSelector('#kaynak-rehber');
+    assert.match(await metin('#kaynak-rehber'), /Yakalama kartı penceresini bulamadım[\s\S]*Pencereli Projektör/);
+    assert.strictEqual(await sayfa.locator('#kaynak-rehber .rehber-adim').count(), 5);
+    assert.ok(st.kaynakCihazlar.includes('kart'), 'cihaz seçilince /api/kaynaklar o cihazla çağrıldı');
+    st.kartVar = true;
+    await sayfa.click('#rehber-yenile');
+    await sayfa.waitForSelector('[data-kaynak="pencere:777"][aria-pressed=true]');
+    assert.match(await metin('[data-kaynak="pencere:777"]'), /Önerilen/);
+    assert.strictEqual(await sayfa.locator('#kaynak-rehber').count(), 0, 'pencere bulununca rehber kalkar');
+    assert.strictEqual(JSON.parse(st.govdeler['POST /api/ayarlar']).kaynak, 'pencere:777');
+    // --- ps5: önerilen pencere kendiliğinden seçilir, rozet görünür; tüm ekran seçilirse nazik uyarı
+    await sayfa.click('[data-cihaz=ps5]');
+    await sayfa.waitForSelector('[data-kaynak="pencere:123"][aria-pressed=true]');
+    assert.match(await metin('[data-kaynak="pencere:123"]'), /PS Remote Play[\s\S]*Önerilen/);
+    assert.strictEqual(await sayfa.locator('#ekran-uyari').count(), 0);
+    assert.strictEqual(await sayfa.locator('[data-kaynak]').first().getAttribute('data-kaynak'), 'pencere:123', 'önerilen başta');
+    await sayfa.click('[data-kaynak="ekran:1"]');
+    await sayfa.waitForSelector('#ekran-uyari');
+    assert.match(await metin('#ekran-uyari'), /Tüm ekranı seçtin; PS Remote Play penceresini seçersen yalnız oyunu okurum ve panelin yazılarını karıştırmam\./);
+    await sayfa.click('#oneri-sec');
+    await sayfa.waitForSelector('[data-kaynak="pencere:123"][aria-pressed=true]');
+    assert.strictEqual(await sayfa.locator('#ekran-uyari').count(), 0);
+    await sayfa.waitForSelector('#dogrula-1:not([hidden])');
+    await sayfa.click('[data-cihaz=pc]');
+    await sayfa.click('[data-kaynak="pencere:123"]');
+    await sayfa.waitForFunction(() => document.querySelector('#dogrula-1') && !document.querySelector('#dogrula-1').hidden);
+    assert.strictEqual(st.ayarlar.cihaz, 'pc');
+    adim('1. Görüntü: "Nasıl yapılır?" 4 cihaz rehberi aç/kapa, kartta rehber + yenile → otomatik, ps5 önerilen otomatik, tam ekran uyarısı');
     await sayfa.click('#ileri-1');
 
     // ================= 2. YAZI OKUMA (önce 0 yazı, sonra atla) =================
@@ -332,7 +410,12 @@ function dilKontrol() {
     assert.strictEqual(await sayfa.getAttribute('#gosterim-bilgisayar', 'aria-pressed'), 'true', 'varsayılan: bu bilgisayar');
     assert.match(await metin('#gosterim-bilgisayar'), /Bu bilgisayarın ekranında \(oyunun üstünde\)[\s\S]*Önerilen/);
     assert.strictEqual(await sayfa.locator('[data-gosterim]').count(), 3, 'Samsung/Android eşit kare değil');
-    assert.match(await metin('#yakinda'), /Samsung ve Android TV uygulamaları yakında/);
+    assert.match(await metin('#yakinda'), /Bağlantı rehberleri/);
+    await sayfa.click('#rehber-bolum > summary');
+    assert.strictEqual(await sayfa.locator('#rehber-bolum .rehber-kart').count(), 6, 'aşama 4: 6 ekran rehberi');
+    await sayfa.click('#rehber-lg > summary');
+    assert.ok(await sayfa.isVisible('#rehber-lg-ac'), 'LG rehberi: kurulum kartına gitme düğmesi');
+    await sayfa.click('#rehber-bolum > summary');
     await sayfa.waitForSelector('[data-ekran="2"]');
     await sayfa.click('[data-ekran="2"]');
     await sayfa.waitForTimeout(120);
@@ -587,6 +670,48 @@ function dilKontrol() {
     assert.strictEqual(st.ayarlar.hafiza_izni, true);
     assert.strictEqual(st.ayarlar.kurulum_tamam, true);
     adim('Başlat → izin penceresi: Evet → hafiza_izni=true, kurulum_tamam=true');
+    // --- /api/durum uyari.mesaj ana ekranda nazik bir bant olarak
+    assert.ok(!(await sayfa.isVisible('#uyari-banner')));
+    st.uyari = { mesaj: 'Tüm ekranı okuyorum. PS Remote Play penceresini seçersen daha temiz sonuç alırsın.' };
+    await sayfa.waitForSelector('#uyari-banner:not([hidden])', { timeout: 6000 });
+    assert.match(await metin('#uyari-banner'), /PS Remote Play penceresini seçersen/);
+    st.uyari = null;
+    await sayfa.waitForSelector('#uyari-banner', { state: 'hidden', timeout: 6000 });
+    adim('ana ekran: durum.uyari.mesaj bandı görünür, kalkınca gizlenir');
+    // --- Bağlantı rehberleri: 6 ekran rehberi, hepsi açılır
+    await sayfa.click('#rehber-link');
+    await sayfa.waitForSelector('#rehber-ekran');
+    assert.match(await metin('h1'), /Bağlantı rehberleri/);
+    assert.strictEqual(await sayfa.locator('#rehber-ekran details.rehber-kart').count(), 6);
+    const REH = { bilgisayar: [3, /Kenarlıksız/], lg: [4, /Developer Mode/], samsung: [5, /Küçük bir gecikme[\s\S]*Win \+ K/], android: [5, /Android \/ Google TV[\s\S]*Win \+ K/], apple: [4, /Windows'ta yerleşik AirPlay yok[\s\S]*HDMI/], hdmi: [4, /HDMI kablosunu tak/] };
+    for (const [id, [n, ara]] of Object.entries(REH)) {
+      assert.ok(!(await sayfa.isVisible('#rehber-' + id + ' .rehber-adim')), id + ' kapalı başlar');
+      await sayfa.click('#rehber-' + id + ' > summary');
+      await sayfa.waitForSelector('#rehber-' + id + ' .rehber-adim');
+      assert.strictEqual(await sayfa.locator('#rehber-' + id + ' .rehber-adim').count(), n, id + ' adım sayısı');
+      assert.match(await metin('#rehber-' + id), ara);
+      assert.match(await metin('#rehber-' + id), /Bu ne işe yarar\?[\s\S]*Sorun mu var\?/);
+      const sl = await sayfa.locator('#rehber-' + id + ' .rehber-sorun li').count(); assert.ok(sl >= 2 && sl <= 3, id + ' sorun satırı');
+    }
+    assert.match(await metin('#rehber-samsung .rehber-adres'), /http:\/\/192\.168\.1\.20:8642\/tv/);
+    assert.ok(await sayfa.isVisible('#rehber-lg #tv-kart'), 'LG rehberinde mevcut TV kurulum kartı');
+    assert.ok(await sayfa.isVisible('#rehber-apple .rehber-adres'));
+    // ekran görüntüsü için yalnız birkaç rehber açık
+    for (const id of ['lg', 'android', 'apple', 'hdmi']) await sayfa.click('#rehber-' + id + ' > summary');
+    await sayfa.click('#rehber-samsung .rehber-sorun > summary');
+    await gor('rehber-baglanti.png', true);
+    await sayfa.click('#rehber-samsung > summary');
+    await sayfa.click('#rehber-bilgisayar > summary');
+    await sayfa.click('#rehber-geri');
+    await sayfa.waitForSelector('#baslat-durdur');
+    // Görünüm menüsünden de açılır
+    await sayfa.click('#tercih-ac');
+    await sayfa.click('#rehber-menu');
+    await sayfa.waitForSelector('#rehber-ekran');
+    assert.ok(!(await sayfa.isVisible('#tercih .tercih-pano')), 'menü kapanır');
+    await sayfa.click('#rehber-geri');
+    await sayfa.waitForSelector('#baslat-durdur');
+    adim('Bağlantı rehberleri: ana ekran bağlantısı ve Görünüm menüsü; 6 rehber açılır (adımlar, Sorun mu var?, adres, LG kartı); geri');
     // kurulum durumu: 5 adım, tıklayınca o adım yeniden
     assert.strictEqual(await sayfa.locator('#kurulum-durumu .kurulum-cip.tamam').count(), 5);
     await sayfa.click('#kurulum-adim-4');
@@ -608,6 +733,35 @@ function dilKontrol() {
     await sayfa.click('#oyun-ekle');
     await sayfa.waitForSelector('[data-oyun=cyberpunk][aria-pressed=true]');
     assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/oyunlar']), { ad: 'Cyberpunk', aciklama: 'Fütüristik şehirde aksiyon', hitap: 'siz' });
+    // --- oyun bilgisi: çevrimdışı motor → sunucu mesajı + Gemini önerisi; sonra hazırla → ilerleme → incele → düzelt → kaydet
+    assert.strictEqual(st.ayarlar.motor, 'yerel');
+    st.bilgiMod = 'cevrimdisi';
+    assert.match(await metin('#bilgi-kart'), /karakter, yer ve eşya adlarını öğrenirim; çevirilerde bu adlar bozulmaz/);
+    await sayfa.click('#bilgi-hazirla');
+    await sayfa.waitForSelector('#bilgi-hata');
+    assert.match(await metin('#bilgi-hata-mesaj'), /Çevrimdışı motor oyun bilgisi hazırlayamaz\./);
+    assert.match(await metin('#bilgi-gemini'), /Gemini/);
+    assert.ok(await sayfa.isVisible('#bilgi-motor'));
+    st.bilgiMod = 'ok';
+    await sayfa.click('#bilgi-tekrar-dene');
+    await sayfa.waitForSelector('#bilgi-ilerleme');
+    assert.match(await metin('#bilgi-bekle'), /"Cyberpunk" için isimleri araştırıyorum[\s\S]*10–30 saniye/);
+    await sayfa.waitForSelector('#bilgi-terimler');
+    assert.strictEqual(await sayfa.inputValue('#bilgi-aciklama'), 'Fütüristik bir şehirde geçen aksiyon rol yapma oyunu.');
+    assert.strictEqual(await sayfa.getAttribute('[data-bilgi-hitap=siz]', 'aria-pressed'), 'true');
+    assert.strictEqual(await sayfa.locator('.bilgi-terim').count(), 4);
+    assert.match(await metin('#bilgi-sayac'), /4 \/ 4 terim seçili/);
+    await sayfa.fill('.bilgi-terim:nth-child(3) .bilgi-ceviri', 'Siber Sapık');
+    await sayfa.uncheck('.bilgi-terim:nth-child(4) .bilgi-sec');
+    assert.match(await metin('#bilgi-sayac'), /3 \/ 4 terim seçili/);
+    await sayfa.click('[data-bilgi-hitap=sen]');
+    await gor('oyun-bilgi.png', true);
+    await sayfa.click('#bilgi-kaydet');
+    await sayfa.waitForSelector('#bilgi-kaydedildi');
+    assert.match(await metin('#bilgi-kaydedildi'), /3 terim öğrenildi/);
+    assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/oyun/cyberpunk/bilgi-kaydet']), { aciklama: 'Fütüristik bir şehirde geçen aksiyon rol yapma oyunu.', hitap: 'sen',
+      terimler: [{ asil: 'Night City', ceviri: 'Night City' }, { asil: 'Johnny Silverhand', ceviri: 'Johnny Silverhand' }, { asil: 'Cyberpsycho', ceviri: 'Siber Sapık' }] });
+    adim('oyun bilgisi: çevrimdışı motorda sunucu mesajı + Gemini önerisi; hazırla → ilerleme → düzenle/işaret kaldır → kaydet gövdesi');
     await sayfa.click('#paket-ac');
     await sayfa.setInputFiles('#paket-dosya', { name: 'rdr3.akpaket', mimeType: 'application/zip', buffer: Buffer.from('PKfake') });
     await sayfa.waitForFunction(() => /812 cümle eklendi/.test(document.querySelector('#paket-sonuc').textContent));
@@ -806,6 +960,15 @@ function dilKontrol() {
     assert.match(await sayfa.textContent('#tv-kart h2'), /Install on the TV in one click/);
     assert.match(await sayfa.textContent('#dublaj-kart h2'), /Turkish dubbing \(experimental\)/);
     assert.match(await sayfa.textContent('#dublaj-ne'), /Characters speak Turkish in their own voices\. Only the game's sound is listened to, the microphone is never turned on, and no audio is recorded\./);
+    assert.match(await sayfa.textContent('#rehber-link'), /Connection guides/);
+    await sayfa.click('#rehber-link');
+    await sayfa.waitForSelector('#rehber-ekran');
+    assert.match(await sayfa.textContent('h1'), /Connection guides/);
+    await sayfa.click('#rehber-apple > summary');
+    assert.match(await sayfa.textContent('#rehber-apple'), /What is this for\?[\s\S]*no built-in AirPlay[\s\S]*Something wrong\?/);
+    assert.doesNotMatch(await sayfa.textContent('#rehber-ekran'), /Nasıl yapılır|Sorun mu var/);
+    await sayfa.click('#rehber-geri');
+    await sayfa.waitForSelector('#baslat-durdur');
     await gor('5-ana-en.png');
     adim('EN diline geçildi ve ayar kaydedildi');
 

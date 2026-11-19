@@ -40,21 +40,35 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     s.yayinla('yazi-sil'); await bekle(400); assert(await p.isVisible('.ak-yazi-kutu'), 'sure_ms dolmadan kaldırıldı'); ok('yazi-sil, sure_ms dolmadan yazıyı kaldırmaz'); await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 4000 }); ok('yazi-sil sonunda kaldırdı');
     s.yayinla('ekran', { id: 'e1', ogeler: [{ x: 0.1, y: 0.2, g: 0.3, y2: 0.05, metin: 'Ana kampa dön', aciklama: 'Görev: üsse geri git', tur: 'gorev' }, { x: 0.5, y: 0.5, g: 0.2, y2: 0.04, metin: 'Menü', tur: 'menu' }] });
     await p.waitForSelector('.ak-oge'); var r = await p.$$eval('.ak-oge', function (l) { return l.map(function (e) { var b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), e.textContent]; }); });
-    assert.strictEqual(r.length, 2); assert(Math.abs(r[0][0] - 192) <= 2 && Math.abs(r[0][1] - 216) <= 2 && r[0][2] <= 0.45 * 1920 + 2, JSON.stringify(r));
+    assert.strictEqual(r.length, 2); assert(Math.abs(r[0][0] - 192) <= 2 && Math.abs(r[0][1] - 216) <= 2 && r[0][2] <= 0.35 * 1920 + 2, JSON.stringify(r));
     assert(Math.abs(r[1][0] - 960) <= 2 && Math.abs(r[1][1] - 540) <= 2); assert(r[0][3].indexOf('üsse geri git') >= 0); ok('ekran öğeleri normalize konumda + açıklama');
     await p.screenshot({ path: path.join(SHOT, 'tv-html-ekran.png') });
     s.yayinla('ekran-sil'); await p.waitForFunction(function () { return !document.querySelector('.ak-oge'); }); ok('ekran-sil çalışıyor');
-    // PROTOKOL 11.5: hedef kutusu + boyut_px; kelime ortasından bölünmez; genişlik <= %45; ekran dışına taşmaz
+    // PROTOKOL 12.4: hedef kutusu + boyut_px; tek satır; en çok 2 satır, yalnız boşlukta; genişlik <= %35; ekran içinde; normal ağırlık
+    var uzun = 'Bu çok uzun bir görev açıklaması olup kutu genişleyip sonra kelime sınırlarında alt satıra geçmelidir ve hâlâ sığmazsa kısaltılmalıdır. Bu çok uzun bir görev açıklaması olup kutu genişleyip sonra kelime sınırlarında alt satıra geçmelidir ve hâlâ sığmazsa kısaltılmalıdır';
+    var orta = 'Return to the base camp before sunset and talk to the guard captain';
     s.yayinla('ekran', { id: 'e9', ogeler: [
-      { id: 'h1', x: 0.1, y: 0.2, g: 0.02, y2: 0.03, metin: 'Parti: Hazır', tur: 'menu', hedef: { x: 0.6, y: 0.3, g: 0.2, y2: 0.05 }, boyut_px: 24 },
-      { id: 'h2', x: 0.1, y: 0.5, g: 0.02, y2: 0.03, metin: 'Bu çok uzun bir görev açıklaması olup kutu genişleyip sonra kelime sınırlarında alt satıra geçmelidir', tur: 'gorev', hedef: { x: 0.9, y: 0.9, g: 0.05, y2: 0.03 }, boyut_px: 30 }] });
+      { id: 'h1', x: 0.1, y: 0.2, g: 0.02, y2: 0.03, metin: 'Parti: Hazır', tur: 'menu', hedef: { x: 0.6, y: 0.3, g: 0.2, y2: 0.05 }, boyut_px: 18 },
+      { id: 'h2', x: 0.1, y: 0.5, g: 0.2, y2: 0.03, metin: uzun, tur: 'gorev', hedef: { x: 0.9, y: 0.9, g: 0.05, y2: 0.03 }, boyut_px: 22 },
+      { id: 'h3', x: 0.1, y: 0.7, g: 0.3, y2: 0.03, metin: 'Ana kampa dön', tur: 'menu', boyut_px: 16 },
+      { id: 'h4', x: 0.1, y: 0.35, g: 0.12, y2: 0.03, metin: orta, tur: 'menu', boyut_px: 16 }] });
     await p.waitForSelector('.ak-oge'); await bekle(400);
     var hr = await p.$$eval('.ak-oge', function (l) { return l.map(function (e) {
-      var b = e.getBoundingClientRect(), t = e.querySelector('.ak-oge-metin'), w = t.textContent.split(' '), bolundu = false, n = t.firstChild, i, rg = document.createRange(), pos = 0, k;
-      for (i = 0; i < w.length; i++) { rg.setStart(n, pos); rg.setEnd(n, pos + w[i].length); k = rg.getClientRects(); var ust = {}; for (var j = 0; j < k.length; j++) { ust[Math.round(k[j].top)] = 1; } if (Object.keys(ust).length > 1) { bolundu = true; } pos += w[i].length + 1; }
-      return { l: b.left, t: b.top, w: b.width, r: b.right, b: b.bottom, f: parseFloat(getComputedStyle(e).fontSize), bolundu: bolundu }; }); });
-    assert(Math.abs(hr[0].l - 1152) <= 2 && Math.abs(hr[0].t - 324) <= 2, JSON.stringify(hr)); assert(Math.abs(hr[0].f - 24) <= 0.6, JSON.stringify(hr));
-    assert(hr[0].w < 0.45 * 1920 && !hr[0].bolundu && !hr[1].bolundu, JSON.stringify(hr)); assert(hr[1].w <= 0.45 * 1920 + 2 && hr[1].r <= 1920 + 1 && hr[1].b <= 1080 + 1 && hr[1].f >= 12, JSON.stringify(hr)); ok('ekran öğesi hedef + boyut_px, kelime bölünmez, ≤%45, ekran içinde');
+      var b = e.getBoundingClientRect(), t = e.querySelector('.ak-oge-metin'), cs = getComputedStyle(e);
+      var satirlar = []; for (var c = t.firstChild; c; c = c.nextSibling) { if (c.nodeType === 3) { satirlar.push(c.textContent); } }
+      return { l: b.left, t: b.top, w: b.width, r: b.right, b: b.bottom, f: parseFloat(cs.fontSize), fw: cs.fontWeight, satirlar: satirlar }; }); });
+    assert(Math.abs(hr[0].l - 1152) <= 2 && Math.abs(hr[0].t - 324) <= 2, JSON.stringify(hr)); assert(Math.abs(hr[0].f - 18) <= 0.6, JSON.stringify(hr));
+    assert.strictEqual(hr[0].satirlar.length, 1, JSON.stringify(hr[0])); assert.strictEqual(hr[0].fw, '400', 'ekran öğesi normal ağırlıkta olmalı');
+    assert(hr[0].w < 0.35 * 1920, JSON.stringify(hr[0]));
+    var sozcukTamMi = function (satirlar, metin) { var ks = metin.split(' '), i = 0; return satirlar.every(function (sat) { var son = sat.charAt(sat.length - 1) === '\u2026'; var w = (son ? sat.slice(0, -1) : sat).split(' ').filter(Boolean); return w.every(function (k, j) { var ok2 = ks[i + j] === k || (son && j === w.length - 1 && ks[i + j] && ks[i + j].indexOf(k) === 0); return ok2; }) && (i += w.length, true); }); };
+    assert(hr[1].satirlar.length <= 2 && hr[1].w <= 0.35 * 1920 + 2 && hr[1].r <= 1920 + 1 && hr[1].b <= 1080 + 1 && hr[1].f >= 11 - 0.2, JSON.stringify(hr[1]));
+    assert(sozcukTamMi(hr[1].satirlar, uzun) && hr[1].satirlar.join('').indexOf('\u2026') > 0, 'uzun metin: boşlukta kırıldı, sonu "…" ile bitti: ' + JSON.stringify(hr[1].satirlar));
+    assert.strictEqual(hr[2].satirlar.length, 1, JSON.stringify(hr[2])); assert(Math.abs(hr[2].f - 16) <= 0.6);
+    assert(hr[3].satirlar.length <= 2 && hr[3].w <= 0.35 * 1920 + 2 && sozcukTamMi(hr[3].satirlar, orta), JSON.stringify(hr[3]));
+    hr[3].satirlar.forEach(function (x) { assert(x.split(' ').length >= 2, 'tek kelimelik satır yığılması: ' + JSON.stringify(hr[3].satirlar)); });
+    ok('ekran öğesi: normal ağırlık, tek satır, ≤2 satır boşlukta, ≤%35, ekran içinde, uzunsa "…"');
+    var yb = await p.evaluate(function () { return window.AKOverlay.yerlesimBul('Return to the base camp quickly', function (t, px) { return t.length * px * 0.55; }, 400, 16, 11); });
+    assert(yb.satirlar.length <= 2 && yb.px >= 11, JSON.stringify(yb)); ok('AKOverlay.yerlesimBul saf düzen: ≤2 satır, ≥11 px');
     s.yayinla('ekran-sil'); await p.waitForFunction(function () { return !document.querySelector('.ak-oge'); });
     s.yayinla('yazi', { id: 'a3', metin: 'Boyut', sure_ms: 60000 }); await p.waitForSelector('.ak-yazi-kutu:visible');
     var f1 = await p.$eval('.ak-yazi', function (e) { return parseFloat(getComputedStyle(e).fontSize); });
