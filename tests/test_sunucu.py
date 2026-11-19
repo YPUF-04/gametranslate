@@ -189,7 +189,8 @@ async def test_ayar_bolgeler_dogrulanir(istemci):
     b = {"x": 0.1, "y": 0.7, "g": 0.8, "y2": 0.2, "tur": "altyazi", "ad": "Altyazı", "fazla": 1}
     assert (await istemci.post("/api/ayarlar", json={"bolgeler": [b]})).status == 200
     kayit = (await (await istemci.get("/api/ayarlar")).json())["bolgeler"]
-    assert kayit == [{"x": 0.1, "y": 0.7, "g": 0.8, "y2": 0.2, "tur": "altyazi", "ad": "Altyazı"}]
+    assert kayit == [{"x": 0.1, "y": 0.7, "g": 0.8, "y2": 0.2, "tur": "altyazi", "ad": "Altyazı",
+                      "hedef": "altyazi", "olcek": 1.0}]
     assert (await istemci.post("/api/ayarlar", json={"bolgeler": [b] * 7})).status == 400
     assert (await istemci.post("/api/ayarlar", json={"bolgeler": [b] * 6})).status == 200
     assert (await istemci.post("/api/ayarlar", json={"bolgeler": [{**b, "tur": "menu"}]})).status == 400

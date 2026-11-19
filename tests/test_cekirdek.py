@@ -91,7 +91,9 @@ async def test_yonetici_yedege_gecer(tmp_path):
     (c,) = await y.cevir(["hello"])
     assert c.metin == "Y:hello"
     assert y.yedekte
-    assert ("durum", {"calisiyor": True, "motor": "Yedek", "yedek": True}) in olaylar
+    durum = [v for o, v in olaylar if o == "durum"][-1]
+    assert (durum["calisiyor"], durum["motor"], durum["yedek"]) == (True, "Yedek", True)
+    assert durum["yedek_neden"]["kod"] == "ag"
     (c2,) = await y.cevir(["hello"])  # önbellekten
     assert c2.metin == "Y:hello"
 

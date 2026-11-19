@@ -544,6 +544,7 @@ function dilKontrol() {
     for (const v of Object.values(k2[0].hedef)) assert.strictEqual(v, Math.round(v * 10000) / 10000, '4 hane');
     assert.strictEqual(k2[2].hedef, 'altyazi'); assert.strictEqual(k2[1].hedef, 'ustune'); assert.strictEqual(k2[1].olcek, 1);
     // yeniden yükleyince hedef ve ölçek geri gelir; alanı olmayan eski kayıt varsayılan gösterir
+    if (SHOTS) { await sayfa.focus('.bolge[data-bolge="0"]'); await sayfa.evaluate(() => document.querySelector('#bolge-rehber').scrollIntoView({ block: 'start', behavior: 'instant' })); await sayfa.waitForTimeout(150); await sayfa.screenshot({ path: path.join(SHOTS, 'hedef-editor.png') }); }
     adim('hedef kutusu (Kendim seçeyim), %80 yazı büyüklüğü, altyazı çubuğu seçimi kaydedildi');
 
     adim('5. Elle 4 kare (kullanıcının çizimi gibi), tür açılır kutusu + Esc, en çok 6, sil, boyutlandır, klavye, normalize JSON');
@@ -780,6 +781,9 @@ function dilKontrol() {
     await sayfa.click('#sil-evet');
     await sayfa.waitForFunction(() => /Hafıza silindi/.test(document.body.textContent));
     assert.ok(st.silindi);
+    await sayfa.fill('#ekran-olcek-ayar', '120');
+    await sayfa.waitForTimeout(500);
+    assert.strictEqual(st.ayarlar.gorunum.ekran_olcek, 1.2, 'ayarlarda ekran ölçeği kaydedildi');
     adim('ayarlarda kalite, paylaş bağlantısı ve hafıza silme çalıştı');
     await sayfa.click('#ses-cevir', { force: true });
     await sayfa.waitForSelector('#ses-not:not([hidden])');
