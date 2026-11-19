@@ -452,7 +452,8 @@ def _gorunum_gecerli(g: dict[str, Any]) -> bool:
     """TV'ye giden görünüm alanlarının türü/aralığı (bilinmeyen alanlar serbest)."""
     def sayi(v: Any, lo: float, hi: float) -> bool:
         return isinstance(v, (int, float)) and not isinstance(v, bool) and lo <= v <= hi
-    for alan, (lo, hi) in {"yazi_boyutu": (8, 300), "kenar_bosluk": (0, 0.5), "arka_plan": (0, 1)}.items():
+    for alan, (lo, hi) in {"yazi_boyutu": (8, 300), "kenar_bosluk": (0, 0.5), "arka_plan": (0, 1),
+                           "ekran_olcek": (ayarlar.EN_KUCUK_OLCEK, ayarlar.EN_BUYUK_OLCEK)}.items():
         if alan in g and not sayi(g[alan], lo, hi):
             return False
     for alan in ("yazi_rengi", "konusan_rengi"):

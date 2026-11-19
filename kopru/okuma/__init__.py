@@ -18,6 +18,7 @@ class Satir:
     y: float
     g: float   # genişlik
     y2: float  # yükseklik
+    satir: int = 1   # birleştirilmiş öğede kaç okuma satırından oluştuğu (yazı boyu hesabı için)
 
 
 class Okuyucu(Protocol):

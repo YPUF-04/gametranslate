@@ -21,6 +21,7 @@ VARSAYILAN_GORUNUM: dict[str, Any] = {
     "yazi_boyutu": 44, "konum": "alt", "kenar_bosluk": 0.08, "arka_plan": 0.55,
     "yazi_rengi": "#FFFFFF", "konusan_rengi": "#FFD166",
     "asil_goster": False, "ekran_cevir": True, "onceki_goster": True,
+    "ekran_olcek": 1.0,   # ekran öğelerinin genel yazı çarpanı, 0.6-2.0 (PROTOKOL 11.4)
 }
 
 VARSAYILAN: dict[str, Any] = {
@@ -61,10 +62,37 @@ EN_COK_BOLGE = 6
 EN_KUCUK_GENISLIK = 0.03
 EN_KUCUK_YUKSEKLIK = 0.02
 _BOLGE_AD = {"altyazi": "Altyazı", "ust_yazi": "Üstteki yazılar", "diger": "Diğer"}
+HEDEF_ADLARI = ("ustune", "altyazi")
+EN_KUCUK_OLCEK, EN_BUYUK_OLCEK = 0.6, 2.0
 
 
 def _oran(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1
+
+
+def olcek_gecerli(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and EN_KUCUK_OLCEK <= v <= EN_BUYUK_OLCEK
+
+
+def _kutu_gecerli(b: Any) -> bool:
+    if not isinstance(b, dict) or not all(_oran(b.get(f)) for f in ("x", "y", "g", "y2")):
+        return False
+    if b["g"] < EN_KUCUK_GENISLIK or b["y2"] < EN_KUCUK_YUKSEKLIK:
+        return False
+    return b["x"] + b["g"] <= 1.0001 and b["y"] + b["y2"] <= 1.0001
+
+
+def hedef_gecerli(h: Any) -> bool:
+    """Bölge hedefi (PROTOKOL 11.4): yok | "ustune" | "altyazi" | kullanıcının çizdiği {x,y,g,y2} kutusu."""
+    if h is None:
+        return True
+    if isinstance(h, str):
+        return h in HEDEF_ADLARI
+    return _kutu_gecerli(h)
+
+
+def varsayilan_hedef(tur: str) -> str:
+    return "altyazi" if tur == "altyazi" else "ustune"
 
 
 def bolge_gecerli(b: Any) -> bool:
@@ -78,7 +106,11 @@ def bolge_gecerli(b: Any) -> bool:
     if b.get("tur") not in BOLGE_TURLERI:
         return False
     ad = b.get("ad", "")
-    return isinstance(ad, str) and len(ad) <= 30
+    if not (isinstance(ad, str) and len(ad) <= 30):
+        return False
+    if "hedef" in b and not hedef_gecerli(b["hedef"]):
+        return False
+    return "olcek" not in b or b["olcek"] is None or olcek_gecerli(b["olcek"])
 
 
 def bolgeler_gecerli(v: Any) -> bool:
@@ -92,8 +124,15 @@ def bolgeleri_temizle(v: Any) -> list[dict[str, Any]]:
     out = []
     for b in v[:EN_COK_BOLGE]:
         if bolge_gecerli(b):
+            h = b.get("hedef")
+            if isinstance(h, dict):
+                h = {f: float(h[f]) for f in ("x", "y", "g", "y2")}
+            elif h is None:
+                h = varsayilan_hedef(b["tur"])
+            olcek = b.get("olcek")
             out.append({"x": float(b["x"]), "y": float(b["y"]), "g": float(b["g"]), "y2": float(b["y2"]),
-                        "tur": b["tur"], "ad": b.get("ad") or _BOLGE_AD[b["tur"]]})
+                        "tur": b["tur"], "ad": b.get("ad") or _BOLGE_AD[b["tur"]], "hedef": h,
+                        "olcek": float(olcek) if olcek is not None else 1.0})
     return out
 
 
@@ -218,6 +257,8 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
     b = s["bolge_altyazi"]
     if not all(_oran(b.get(f)) for f in ("x", "y", "g", "y2")):
         s["bolge_altyazi"] = copy.deepcopy(v["bolge_altyazi"])
+    if not olcek_gecerli(s["gorunum"].get("ekran_olcek")):
+        s["gorunum"]["ekran_olcek"] = v["gorunum"]["ekran_olcek"]
     if s["gorunum"].get("konum") not in ("alt", "ust"):
         s["gorunum"]["konum"] = v["gorunum"]["konum"]
     if s["erisim"].get("ucretsiz_dakika_gun") is not None and not (

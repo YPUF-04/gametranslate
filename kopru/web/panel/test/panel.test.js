@@ -102,7 +102,7 @@ function sahteSunucu() {
           return j({ calisiyor: st.calisiyor, motor: st.ayarlar.motor, yedekte: false, tv_sayisi: st.calisiyor ? 1 : 0,
             son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir });
         case 'GET /api/ayarlar': return j(Object.assign({ claude: false, gemini: !!st.anahtarlar.gemini }, st.ayarlar));
-        case 'POST /api/ayarlar': if (b.bolgeler) st.bolgePostlari.push(b.bolgeler); Object.assign(st.ayarlar, b); return j({ tamam: true });
+        case 'POST /api/ayarlar': if (b.bolgeler) st.bolgePostlari.push(b.bolgeler); Object.assign(st.ayarlar, b, b.gorunum ? { gorunum: Object.assign({}, st.ayarlar.gorunum, b.gorunum) } : {}); return j({ tamam: true });
         case 'GET /api/kare': st.kareIstekleri++; if (st.kareHata) return j({ hata: 'yakalama_yok', mesaj: 'Ekran görüntüsü alınamadı. Oyunun penceresini küçültmeyin ve "Görüntüyü yenile"ye basın.', ayrinti: 'YakalamaHatasi: DXGI_ERROR_ACCESS_LOST (pencere:123)' }, 400); s.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); return s.end(KARE);
         case 'GET /api/okuma-dene':
           st.okumaIstekleri++;
@@ -394,6 +394,13 @@ function dilKontrol() {
     await sayfa.waitForSelector('#dogrula-4:not([hidden])');
     assert.match(await metin('#dogrula-4'), /Yazıyı bu bilgisayarın ekranında gördün\./);
     await gor('adim-4.png', true);
+    // genel "Ekrandaki yazıların büyüklüğü" (4. aşama): gorunum.ekran_olcek
+    assert.match(await metin('#ekran-olcek-kart'), /Ekrandaki yazıların büyüklüğü[\s\S]*Yazılar fazla büyük\/küçük görünüyorsa buradan ayarla\./);
+    await sayfa.fill('#ekran-olcek', '70');
+    await sayfa.waitForFunction(() => document.querySelector('#ekran-olcek-deger').textContent === '%70');
+    await sayfa.waitForTimeout(500);
+    assert.strictEqual(st.ayarlar.gorunum.ekran_olcek, 0.7, 'gorunum.ekran_olcek kaydedildi');
+    assert.strictEqual(st.ayarlar.gorunum.yazi_boyutu, 44, 'diğer görünüm ayarları korunur');
     await sayfa.click('#ileri-4');
     await sayfa.waitForTimeout(100);
     assert.strictEqual(st.ayarlar.gosterim, 'bilgisayar'); assert.strictEqual(st.ayarlar.katman_ekran, 2);
@@ -487,7 +494,8 @@ function dilKontrol() {
     yakin(kayit[2].x, 0.24, 'x3'); yakin(kayit[2].y, 0.77, 'y3'); yakin(kayit[2].g, 0.54, 'g3'); yakin(kayit[2].y2, 0.17, 'y23');
     assert.deepStrictEqual(kayit.map((b) => b.tur), ['ust_yazi', 'ust_yazi', 'altyazi', 'diger']);
     assert.deepStrictEqual(kayit.map((b) => b.ad), ['Görev-bilgi', 'Görev-bilgi', 'Altyazı', 'Diğer']);
-    for (const b of kayit) { assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.g <= 1.0001 && b.y + b.y2 <= 1.0001); assert.deepStrictEqual(Object.keys(b).sort(), ['ad', 'g', 'tur', 'x', 'y', 'y2']); }
+    for (const b of kayit) { assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.g <= 1.0001 && b.y + b.y2 <= 1.0001); assert.deepStrictEqual(Object.keys(b).sort(), ['ad', 'g', 'hedef', 'olcek', 'tur', 'x', 'y', 'y2']); assert.ok(b.hedef === 'ustune' || b.hedef === 'altyazi'); assert.strictEqual(b.olcek, 1); }
+    assert.deepStrictEqual(kayit.map((b) => b.hedef), ['ustune', 'ustune', 'altyazi', 'ustune'], 'varsayılan hedef türe göre');
     await sayfa.click('.bolge[data-bolge="2"]', { position: { x: 200, y: 40 } });
     await sayfa.evaluate(() => window.scrollTo(0, 0));
     await gor('adim-5.png', true);
@@ -497,6 +505,48 @@ function dilKontrol() {
     assert.match(await metin('#bolge-hata-mesaj'), /Ekran görüntüsü alınamadı/);
     st.kareHata = false; await sayfa.click('#bolge-hata-tekrar'); await sayfa.waitForSelector('#bolge-sahne:not([hidden])');
     assert.strictEqual(await sayfa.locator('.bolge').count(), 4, 'yenileyince kareler kaybolmaz');
+    // ---- hedef kutusu + yazı büyüklüğü ----
+    assert.match(await metin('#bolge-rehber'), /Kareyi okunacak yazının etrafına çiz\. Sonra çevirinin nereye yazılacağını seç: aynı yere, alttaki çubuğa ya da kendin bir yer çiz\.[\s\S]*Oyundaki sayıları \(puan, para\) kare içine alma; onları çevirmem\./);
+    assert.match(await metin('[data-satir="0"]'), /Çeviriyi nereye yazayım\?[\s\S]*Aynı yerin üstüne[\s\S]*Alttaki altyazı çubuğuna[\s\S]*Kendim seçeyim[\s\S]*Yazı büyüklüğü[\s\S]*%100/);
+    assert.ok(await sayfa.isChecked('#bolge-hedef-0-ustune') && await sayfa.isChecked('#bolge-hedef-2-altyazi'), 'varsayılanlar');
+    await sayfa.evaluate(() => document.querySelector('#bolge-sahne').scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await sayfa.click('label[for=bolge-hedef-0-kendim]');
+    await sayfa.waitForSelector('.bolge-hedef[data-hedef="0"]');
+    assert.ok(await sayfa.isVisible('#bolge-mod'), 'hedef çizme kipi bildirilir');
+    assert.match(await metin('.bolge-hedef[data-hedef="0"] .hedef-etiket'), /1 → hedef/);
+    assert.ok(await sayfa.evaluate(() => getComputedStyle(document.querySelector('.bolge-hedef')).borderStyle === 'dashed'), 'hedef kesik çizgili');
+    assert.strictEqual(await sayfa.locator('.bolge-baglanti line').count(), 1, 'bağlantı çizgisi');
+    await sayfa.evaluate(() => document.querySelector('#bolge-sahne').scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await fare(0.42, 0.45, 0.66, 0.55);    // ikinci kutu = hedef
+    assert.ok(await sayfa.isHidden('#bolge-mod'), 'çizim bitince kip kapanır');
+    assert.strictEqual(await sayfa.locator('.bolge').count(), 4, 'hedef çizmek yeni kaynak kare açmaz');
+    // slider %80 (klavye erişilebilir aralık girdisi)
+    await sayfa.fill('#bolge-olcek-0', '80');
+    assert.strictEqual(await metin('#bolge-olcek-deger-0'), '%80');
+    // önizleme: hedefte örnek yazı (OCR metni), kelime ortasından bölünmez
+    const onizle = await sayfa.evaluate(() => { const e = document.querySelector('.bolge-onizle'), y = e.firstChild, r = e.getBoundingClientRect(), h = document.querySelector('.bolge-hedef[data-hedef="0"]').getBoundingClientRect();
+      return { metin: y.textContent, px: parseFloat(y.style.fontSize), wrap: getComputedStyle(y).wordBreak + '/' + getComputedStyle(y).overflowWrap, dx: Math.abs(r.left - h.left), dy: Math.abs(r.top - h.top) }; });
+    assert.match(onizle.metin, /Return to the camp/); assert.ok(onizle.px > 4 && onizle.wrap === 'normal/normal', JSON.stringify(onizle)); assert.ok(onizle.dx < 2 && onizle.dy < 2, 'önizleme hedefin içinde');
+    // ikinci kare: alttaki altyazı çubuğu
+    await sayfa.click('label[for=bolge-hedef-2-altyazi]');
+    assert.ok(await sayfa.isChecked('#bolge-hedef-2-altyazi'));
+    // klavye: hedef kutusu odaklanır, ok tuşu taşır, Enter kaynağa döner
+    await sayfa.focus('.bolge-hedef[data-hedef="0"]');
+    const solOnce = await sayfa.evaluate(() => parseFloat(document.querySelector('.bolge-hedef').style.left));
+    await sayfa.keyboard.press('ArrowRight');
+    assert.ok(await sayfa.evaluate(() => parseFloat(document.querySelector('.bolge-hedef').style.left)) > solOnce, 'hedef klavyeyle taşınır');
+    await sayfa.click('#bolge-kaydet');
+    await sayfa.waitForSelector('#dogrula-5:not([hidden])');
+    const k2 = st.bolgePostlari[st.bolgePostlari.length - 1];
+    assert.strictEqual(k2[0].olcek, 0.8);
+    assert.ok(k2[0].hedef && typeof k2[0].hedef === 'object' && Object.keys(k2[0].hedef).sort().join() === 'g,x,y,y2', JSON.stringify(k2[0].hedef));
+    yakin(k2[0].hedef.x, 0.43, 'hx'); yakin(k2[0].hedef.y, 0.45, 'hy'); yakin(k2[0].hedef.g, 0.24, 'hg'); yakin(k2[0].hedef.y2, 0.1, 'hy2');
+    for (const v of Object.values(k2[0].hedef)) assert.strictEqual(v, Math.round(v * 10000) / 10000, '4 hane');
+    assert.strictEqual(k2[2].hedef, 'altyazi'); assert.strictEqual(k2[1].hedef, 'ustune'); assert.strictEqual(k2[1].olcek, 1);
+    // yeniden yükleyince hedef ve ölçek geri gelir; alanı olmayan eski kayıt varsayılan gösterir
+    st.ayarlar.bolgeler = [{ x: 0.1, y: 0.1, g: 0.2, y2: 0.05, tur: 'altyazi', ad: 'Altyazı' }];
+    adim('hedef kutusu (Kendim seçeyim), %80 yazı büyüklüğü, altyazı çubuğu seçimi kaydedildi');
+
     adim('5. Elle 4 kare (kullanıcının çizimi gibi), tür açılır kutusu + Esc, en çok 6, sil, boyutlandır, klavye, normalize JSON');
     await sayfa.click('#ileri-5');
 

@@ -16,8 +16,11 @@ EKRAN_GITTI_SN = 1.0     # §7.2/8: ekrandan giden öğe 1 sn sonra kalkar
 VARSAYILAN_GORUNUM: dict[str, Any] = {
     "yazi_boyutu": 44, "konum": "alt", "kenar_bosluk": 0.08, "arka_plan": 0.55,
     "yazi_rengi": "#FFFFFF", "konusan_rengi": "#FFD166",
-    "asil_goster": False, "ekran_cevir": True, "onceki_goster": True,
+    "asil_goster": False, "ekran_cevir": True, "onceki_goster": True, "ekran_olcek": 1.0,
 }
+EKRAN_EN_AZ_PX = 12          # §11.5: ekran öğesi yazısı bundan küçülmez (1080p'ye göre)
+EKRAN_EN_GENIS = 0.45        # §11.5: kutu en çok ekran genişliğinin %45'i kadar genişler
+
 
 
 def okuma_suresi_ms(metin: str) -> int:
@@ -187,6 +190,79 @@ def altyazi_kutusu(w: int, h: int, gorunum: dict[str, Any], metin_g: float, meti
     return int(x0), int(y0), int(x0 + kg), int(y0 + ky)
 
 
+def kelime_sar(metin: str, olc: Callable[[str], float], azami: float) -> list[str]:
+    """Yalnız boşluklarda satır kırar (kelime ortasından / harf harf ASLA). Azami genişlikten uzun
+    tek bir kelime kendi satırında taşar; çağıran yazıyı küçültür."""
+    satirlar: list[str] = []
+    cur = ""
+    for k in metin.split():
+        deneme = f"{cur} {k}" if cur else k
+        if cur and olc(deneme) > azami:
+            satirlar.append(cur)
+            cur = k
+        else:
+            cur = deneme
+    if cur:
+        satirlar.append(cur)
+    return satirlar
+
+
+def ekran_ogesi_yerlesim(metin: str, aciklama: str, olc: Callable[[str, int], float], boyut_px: float,
+                         hedef: tuple[float, float, float, float], w: int, h: int,
+                         dolgu: int = 8, en_cok_satir: int = 4) -> dict[str, Any]:
+    """Ekran öğesinin yerleşimi (saf, Tk'sız). `olc(metin, px)` yazının piksel genişliği.
+    `boyut_px` 1080p'ye göre yazı boyu; `hedef` 0-1 oranlı (x, y, g, y2) kutu (sol-üst köşe kullanılır).
+    Kutu metne göre genişler (en çok ekranın %45'i), sığmazsa yazı küçülür (en az 12 px*h/1080);
+    satırlar yalnız boşlukta kırılır. Dönen: {"x","y","g","y2","px","satirlar","aciklama_satirlar","aciklama_px"}."""
+    olcek = h / 1080.0
+    px = max(EKRAN_EN_AZ_PX * olcek, float(boyut_px) * olcek)
+    taban_px = max(1, int(round(EKRAN_EN_AZ_PX * olcek)))
+    metin = " ".join((metin or "").split())
+    aciklama = " ".join((aciklama or "").split())
+    azami_kutu = w * EKRAN_EN_GENIS
+    ic = max(1.0, azami_kutu - 2 * dolgu)
+    p = max(taban_px, int(round(px)))
+    while True:
+        o = lambda t, p=p: olc(t, p)   # noqa: E731
+        ap = max(taban_px, int(round(p * 0.64)))
+        satirlar = kelime_sar(metin, o, ic)
+        asatirlar = kelime_sar(aciklama, lambda t, ap=ap: olc(t, ap), ic) if aciklama else []
+        en_uzun_kelime = max((o(k) for k in metin.split()), default=0.0)
+        tasar = en_uzun_kelime > ic or len(satirlar) > en_cok_satir
+        if not tasar or p <= taban_px:
+            break
+        p = max(taban_px, int(p * 0.92) if int(p * 0.92) < p else p - 1)
+    govde_g = max([o(s) for s in satirlar] + [olc(s, ap) for s in asatirlar] + [1.0])
+    kg = govde_g + 2 * dolgu
+    satir_y = p * 1.25
+    kh = len(satirlar) * satir_y + len(asatirlar) * ap * 1.25 + 2 * dolgu * 0.6
+    x = _sinirla(float(hedef[0]), 0, 1) * w
+    y = _sinirla(float(hedef[1]), 0, 1) * h
+    x = max(0.0, min(x, w - kg))        # ekran dışına taşmaz
+    y = max(0.0, min(y, h - kh))
+    return {"x": int(x), "y": int(y), "g": int(kg + 0.999), "y2": int(kh + 0.999), "px": p,
+            "satirlar": satirlar, "aciklama_satirlar": asatirlar, "aciklama_px": ap, "dolgu": dolgu,
+            "satir_y": satir_y}
+
+
+def ekran_ogesi_hazirla(o: dict[str, Any]) -> dict[str, Any]:
+    """Ekran öğesini çizime hazırlar. Konum: `hedef` kutusu varsa orası, yoksa kaynak kutusu (0-1 oran).
+    Yazı boyu: `boyut_px` (1080p'ye göre; sunucu hesaplar) ya da yoksa kutu yüksekliğinden."""
+    def sayi(d: dict[str, Any], k: str, vars_: float) -> float:
+        v = d.get(k, vars_)
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else vars_
+    hd = o["hedef"] if isinstance(o.get("hedef"), dict) else o
+    x, y = _sinirla(sayi(hd, "x", 0), 0, 1), _sinirla(sayi(hd, "y", 0), 0, 1)
+    y2 = _sinirla(sayi(o, "y2", 0.04), 0.01, 1.0)
+    bp = o.get("boyut_px")
+    if isinstance(bp, (int, float)) and not isinstance(bp, bool) and bp > 0:
+        boyut = float(bp)
+    else:
+        boyut = _sinirla(round(y2 * 1080 * 0.62), 14, 30)
+    return {"x": x, "y": y, "boyut_px": boyut, "metin": str(o.get("metin") or ""),
+            "aciklama": str(o.get("aciklama") or ""), "tur": o.get("tur", "diger")}
+
+
 def ekran_ogesi_px(o: dict[str, Any], w: int, h: int) -> dict[str, Any]:
     """Normalize ekran öğesini piksele çevirir (ekran içinde kalır); yazı boyutu kutu yüksekliğinden."""
     def oran(k: str, vars_: float) -> float:
@@ -199,6 +275,21 @@ def ekran_ogesi_px(o: dict[str, Any], w: int, h: int) -> dict[str, Any]:
             "yazi_px": int(_sinirla(round(y2 * h * 0.62), 13, 40)),
             "metin": str(o.get("metin") or ""), "aciklama": str(o.get("aciklama") or ""),
             "tur": o.get("tur", "diger")}
+
+
+# ---------- pencereye konumlanma ----------
+
+def pencere_monitoru(kutu: dict[str, int] | None, no: int = 1) -> Monitor | None:
+    """Pencerenin iç dikdörtgeninden (ekran koordinatlı) katman geometrisi; yoksa None."""
+    if not kutu:
+        return None
+    try:
+        g, y = int(kutu["width"]), int(kutu["height"])
+        if g < 2 or y < 2:
+            return None
+        return Monitor(no, int(kutu["left"]), int(kutu["top"]), g, y, False)
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 # ---------- monitör geometrisi ----------
