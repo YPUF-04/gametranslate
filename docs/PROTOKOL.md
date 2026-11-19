@@ -241,3 +241,29 @@ Doğrulama: `oyun_sesi_kis` 0–1 (oyun sesinin kalacağı kesir), `ses_seviyesi
 - Mikrofon asla açılmaz; ses dosyası diske yazılmaz; konuşmacı örnekleri oturum bitince silinir.
 - Gerçek kişilerin (ünlü, yayıncı) seslerini taklit eden hazır ses paketi YOKTUR; yalnız oyunun o anki kendi sesi örnek alınır.
 - Dublaj kişisel kullanım içindir; kaydedip yayınlamak oyunun ve seslendirme sanatçılarının haklarına tabidir (belgede yazılır).
+
+## 10. Adım adım kurulum, bilgisayar ekranında gösterim, sağlam çevrimdışı motor (sürüm 0.5)
+
+### 10.1 Sihirbaz sırası (her adımda "✓ çalıştı" denetimi; geçmeden sonraki açılmaz, "Atla" hep var)
+1. **Görüntü**: cihaz → kaynak (ekran/pencere) → önizleme (`/api/kare`) ✓
+2. **Yazı okuma**: önizlemedeki yazılar okunur (`/api/okuma-dene`) ve resim üstünde kutularla gösterilir ✓
+3. **Çeviri**: motor seçimi → (gerekirse anahtar / çevrimdışı dil dosyası indirme) → `/api/dene` ✓
+4. **Nerede göreyim?**: `gosterim` = `"bilgisayar"` (bu ekranda oyunun üstünde) | `"tv"` (LG uygulaması) | `"tarayici"` (başka cihazın tarayıcısı/OBS) → deneme altyazısı ✓
+5. **Neyi çevireyim?** (EN SON): tam genişlikte oyun görüntüsü üzerinde serbestçe kare çizme, en çok **6** kare
+6. **Hazır** → Başlat
+
+### 10.2 Yeni API (yalnız yerel)
+- `GET /api/okuma-dene` → `{"satirlar":[{"metin":"Press X","x":0.1,"y":0.8,"g":0.2,"y2":0.04}],"sure_ms":120,"okuyucu":"windows"}`; hata: `yakalama_yok`/`okuma_yok`/`kaynak_yok`
+- `GET /api/motor/yerel` → `{"hazir":false,"boyut_mb":95,"indirme":{"durum":"yok"|"iniyor"|"bitti"|"hata","yuzde":0,"mesaj":null}}`
+- `POST /api/motor/yerel/hazirla` → dil dosyasını indirir (kaynak→hedef, varsayılan en→tr); ilerleme yukarıdaki GET'te
+- `GET /api/ekran-katmani` → `{"destek":true,"acik":false,"ekran":1,"ekranlar":[{"no":1,"ad":"Ekran 1 (1920×1080)"}]}`
+- `POST /api/ekran-katmani/dene` → bilgisayar ekranında 4 sn deneme altyazısı gösterir
+- Ayarlar: `gosterim` ("bilgisayar"|"tv"|"tarayici", varsayılan "bilgisayar"), `katman_ekran` (1..n), `bolgeler` en çok 6.
+
+### 10.3 Bilgisayar ekranında gösterim (ekran katmanı)
+Oyunun üstünde, her zaman en önde, tıklamaları geçiren (oyunu engellemeyen), saydam pencere.
+Aynı `yazi`/`ekran`/`gorunum` olaylarını ve §7.2 akıcılık kurallarını kullanır. Tam ekran (exclusive fullscreen) oyunlarda görünmeyebilir → rehber "Pencereli tam ekran / Kenarlıksız" ayarını önerir.
+
+### 10.4 Çevrimdışı motor
+argostranslate yerine doğrudan Argos dil dosyası (`.argosmodel` = CTranslate2 modeli + SentencePiece) indirilir ve `ctranslate2` + `sentencepiece` ile çalıştırılır (torch/stanza gerekmez, pakete sığar).
+Dizin: `https://raw.githubusercontent.com/argosopentech/argospm-index/main/index.json` (en→tr örneği: `https://argos-net.com/v1/translate-en_tr-1_5.argosmodel`). İndirme yalnız kullanıcı "İndir"e basınca; ayar dizinine `modeller/argos/<from>_<to>/` olarak açılır.
