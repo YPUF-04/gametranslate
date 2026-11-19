@@ -80,6 +80,17 @@ jobs:
         run: |
           ls dist/AltYaziKoprusu/_internal | grep -iE "msvcp|vcruntime|concrt|sentencepiece|ctranslate|iomp" || true
           ls -la dist/AltYaziKoprusu/_internal/sentencepiece.libs dist/AltYaziKoprusu/_internal/sentencepiece || true
+          pip install pefile >/dev/null
+          python -c "
+          import pefile, glob, os
+          kok = 'dist/AltYaziKoprusu/_internal'
+          var = {f.lower() for f in os.listdir(kok)} | {f.lower() for f in os.listdir(kok + '/sentencepiece.libs')}
+          for pyd in glob.glob(kok + '/sentencepiece/*.pyd') + glob.glob(kok + '/ctranslate2/*.pyd'):
+              pe = pefile.PE(pyd)
+              for d in pe.DIRECTORY_ENTRY_IMPORT:
+                  ad = d.dll.decode()
+                  print(os.path.basename(pyd), '->', ad, 'VAR' if ad.lower() in var else 'YOK(sistemde olmalı)')
+          " || true
       - name: Paketlenmiş program açılıyor mu (duman testi)
         shell: bash
         run: |
