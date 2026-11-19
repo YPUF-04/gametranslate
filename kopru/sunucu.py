@@ -15,6 +15,7 @@ from aiohttp import web
 
 from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, erisim as erisim_mod, guncelleme as guncelleme_mod, hafiza as hafiza_mod,
                metinler, oyunlar, paket as paket_mod, sozluk as sozluk_mod)
+from . import oyun_bilgisi
 from .ceviri import BILGI, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .ceviri.yonetici import CeviriYoneticisi
@@ -35,6 +36,7 @@ NABIZ_SN = 15.0
 KATMAN_SN = 2.0   # ekran katmanı süreç denetimi
 ERISIM_SN = 5.0   # süre sayacı adımı
 DURUM_SN = 20.0  # EventSource yorum satırını görmez; gerçek olay gerekir
+KAYNAK_ONBELLEK_SN = 3.0   # pencere listesi (uyarı için) en çok bu sıklıkta yenilenir
 YEREL = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
 YEREL_ADLAR = {"127.0.0.1", "localhost", "[::1]", "::1"}   # Host/Origin'de görünebilecek yerel adlar
 EN_COK_AKIS = 64            # aynı anda en çok bu kadar akış (SSE) istemcisi
@@ -99,6 +101,7 @@ class Durum:
         self.yerel_indirme: dict[str, Any] = {"durum": "yok", "yuzde": 0, "mesaj": None, "ayrinti": None}
         self._yerel_gorev: asyncio.Task | None = None
         self._okuma_dene_okuyucu: Any = None
+        self._kaynak_onbellek: tuple[float, list[dict[str, Any]], str] | None = None
         self.yayin.yayinla("gorunum", ayar["gorunum"])
 
     @property
@@ -195,6 +198,24 @@ class Durum:
 
     def calisiyor(self) -> bool:
         return bool(self.gorev and not self.gorev.done())
+
+    async def kaynak_uyarisi(self) -> dict[str, str] | None:
+        """§12.2: cihaz ps5/xbox/kart, uygun bir pencere var ama kaynak tüm ekran ise sakin bir uyarı."""
+        cihaz = self.ayar.get("cihaz")
+        if cihaz not in ("ps5", "xbox", "kart") or not str(self.ayar.get("kaynak") or "").startswith("ekran:"):
+            return None
+        simdi = time.monotonic()
+        onbellek = self._kaynak_onbellek
+        if onbellek is None or simdi - onbellek[0] > KAYNAK_ONBELLEK_SN or onbellek[2] != cihaz:
+            try:
+                from . import yakalama
+                liste = await asyncio.to_thread(yakalama.kaynaklar, cihaz)
+            except Exception:   # noqa: BLE001 — yakalama yoksa uyarı da yok
+                liste = []
+            onbellek = self._kaynak_onbellek = (simdi, liste, cihaz)
+        if not any(k.get("onerilen") for k in onbellek[1]):
+            return None
+        return {"kod": "tum_ekran", "mesaj": metinler.mesaj(f"uyari_tum_ekran_{cihaz}", self.dil)}
 
     def okuyucu_olustur(self) -> Any:
         """OCR okuyucusunu seçer. Ağır içe aktarmalar yapabilir: olay döngüsü dışında çağrılır."""
@@ -428,11 +449,15 @@ def _motor_adi(d: Durum) -> str:
 async def api_durum(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     y = d.yayin.son_yazi
-    return web.json_response({
+    yanit = {
         "calisiyor": d.calisiyor(), "motor": _motor_adi(d), "yedekte": d.yonetici.yedekte,
         "tv_sayisi": d.yayin.istemci_sayisi, "son_yazi": y["metin"] if y else "",
         "adresler": lan_adresleri(), "kapi": d.calisan_kapi or d.ayar["kapi"],
-        "sinir": d.erisim.sinir(), **d.yonetici.durum_ek()})
+        "sinir": d.erisim.sinir(), **d.yonetici.durum_ek()}
+    uyari = await d.kaynak_uyarisi()
+    if uyari:
+        yanit["uyari"] = uyari
+    return web.json_response(yanit)
 
 
 def _ayar_gorunumu(d: Durum) -> dict[str, Any]:
@@ -701,7 +726,8 @@ async def api_deneme_yazi(request: web.Request) -> web.Response:
 async def api_kaynaklar(request: web.Request) -> web.Response:
     try:
         from . import yakalama
-        return web.json_response(await asyncio.to_thread(yakalama.kaynaklar))
+        d: Durum = request.app[DURUM]
+        return web.json_response(await asyncio.to_thread(yakalama.kaynaklar, d.ayar.get("cihaz")))
     except YakalamaHatasi:
         return hata("yakalama_yok", 400, request)
 
@@ -824,6 +850,64 @@ async def api_oyun_yaz(request: web.Request) -> web.Response:
     if kod == d.oyun_kodu:
         d.bilgi_yenile()
     return web.json_response(bilgi)
+
+
+BILGI_ZAMAN_ASIMI_SN = 60.0
+
+
+async def api_oyun_bilgi_hazirla(request: web.Request) -> web.Response:
+    """§12.3: seçili LLM motoruyla oyunun adından açıklama + hitap + terim önerisi. Kaydetmez."""
+    d: Durum = request.app[DURUM]
+    kod = _kod_al(request)
+    if kod is None:
+        return hata("oyun_yok", 404, request)
+    motor = d.yonetici.birincil
+    istem = getattr(motor, "serbest_istem", None)
+    if not callable(istem) or getattr(motor, "cevrimdisi", False):
+        return hata("bilgi_cevrimdisi", 400, request)
+    if not d.erisim.izin_var():
+        return hata("ucretsiz_bitti", 402, request)
+    bilgi = oyunlar.oku(kod) or {}
+    try:
+        ham = await asyncio.wait_for(
+            istem(oyun_bilgisi.SISTEM, oyun_bilgisi.kullanici_metni(str(bilgi.get("ad") or kod),
+                                                                     str(bilgi.get("aciklama") or ""))),
+            BILGI_ZAMAN_ASIMI_SN)
+        oneri = oyun_bilgisi.yaniti_coz(ham)
+    except AnahtarHatasi as e:
+        return hata(_bilinen_kod(e) or ("anahtar_yok" if not anahtarlar.kayitli_mi(motor.kod) else "anahtar_gecersiz"),
+                    400, request, _ayrinti(e))
+    except (AgHatasi, asyncio.TimeoutError) as e:
+        return hata(_bilinen_kod(e) or "ag_hatasi", 502, request, _ayrinti(e))
+    except (MotorHatasi, ValueError) as e:
+        return hata("bilgi_okunamadi", 502, request, _ayrinti(e))
+    except Exception as e:   # noqa: BLE001
+        log.exception("Oyun bilgisi hazırlanamadı")
+        return hata("bilgi_okunamadi", 502, request, _ayrinti(e))
+    return web.json_response(oneri)
+
+
+async def api_oyun_bilgi_kaydet(request: web.Request) -> web.Response:
+    """§12.3: onaylanan öneriyi kaydeder: açıklama/hitap oyun bilgisine, terimler sözlüğe (kullanıcının terimleri kalır)."""
+    d: Durum = request.app[DURUM]
+    kod = _kod_al(request)
+    if kod is None:
+        return hata("oyun_yok", 404, request)
+    v = await _json(request)
+    aciklama, hitap, terimler = v.get("aciklama", ""), v.get("hitap", "sen"), v.get("terimler", [])
+    if not (isinstance(aciklama, str) and len(aciklama) <= 2000 and hitap in ("sen", "siz")
+            and isinstance(terimler, list) and len(terimler) <= 500):
+        return hata("gecersiz_istek", 400, request)
+    kismi: dict[str, Any] = {"hitap": hitap}
+    if aciklama.strip():
+        kismi["aciklama"] = aciklama
+    oyun = oyunlar.guncelle(kod, kismi)
+    birlesik, eklenen = oyun_bilgisi.birlestir(sozluk_mod.yukle(kod), terimler)
+    if eklenen:
+        sozluk_mod.kaydet(kod, birlesik)
+    if kod == d.oyun_kodu:
+        d.bilgi_yenile()
+    return web.json_response({"oyun": oyun, "terimler": birlesik, "eklenen": eklenen})
 
 
 async def api_hafiza_sil(request: web.Request) -> web.Response:
@@ -1225,6 +1309,8 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/oyun-sec", api_oyun_sec)
     r.add_get("/api/oyun/{kod}", api_oyun_al)
     r.add_post("/api/oyun/{kod}", api_oyun_yaz)
+    r.add_post("/api/oyun/{kod}/bilgi-hazirla", api_oyun_bilgi_hazirla)
+    r.add_post("/api/oyun/{kod}/bilgi-kaydet", api_oyun_bilgi_kaydet)
     r.add_delete("/api/oyun/{kod}/hafiza", api_hafiza_sil)
     r.add_get("/api/son-ceviriler", api_son_ceviriler)
     r.add_post("/api/duzelt", api_duzelt)

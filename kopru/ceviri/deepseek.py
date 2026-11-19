@@ -47,3 +47,20 @@ class DeepSeekMotoru:
         if baglam is not None:
             baglam.yeni_terimler.extend(terimler)
         return sonuc
+
+    async def serbest_istem(self, sistem: str, kullanici: str, zaman_asimi: float = 45.0) -> str:
+        """Çeviri dışı tek seferlik istek (oyun bilgisi, PROTOKOL 12.3): JSON yanıt metnini döndürür."""
+        if not self._anahtar:
+            raise AnahtarHatasi("deepseek")
+        govde: dict[str, Any] = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": sistem}, {"role": "user", "content": kullanici}],
+            "stream": False,
+            "response_format": {"type": "json_object"},
+            "max_tokens": 4000,
+        }
+        veri = await _http.post_json(URL, govde, {"Authorization": f"Bearer {self._anahtar}"}, zaman_asimi=zaman_asimi)
+        try:
+            return str(veri["choices"][0]["message"]["content"])
+        except (KeyError, IndexError, TypeError) as e:
+            raise MotorHatasi("DeepSeek yanıtı okunamadı") from e

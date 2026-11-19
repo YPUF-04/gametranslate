@@ -227,6 +227,21 @@ HATALAR: dict[str, dict[str, str]] = {
     "katman_coktu": {
         "tr": "Ekran katmanı üst üste kapandı ve yeniden denenmedi; 'Deneme' düğmesine basarak tekrar başlatın ya da gösterimi TV/tarayıcıya alın.",
         "en": "The screen overlay kept closing and was not retried; press 'Test' to start it again or switch to TV/browser display."},
+    "bilgi_cevrimdisi": {
+        "tr": "Oyun bilgisini hazırlamak için internetteki bir çeviri motoru gerekir; ayarlardan Gemini, Claude ya da DeepSeek seçip anahtarını girin, sonra tekrar deneyin.",
+        "en": "Preparing game info needs an online translation engine; pick Gemini, Claude or DeepSeek in settings, enter its key, then try again."},
+    "bilgi_okunamadi": {
+        "tr": "Motor oyun bilgisini anlaşılır biçimde veremedi. Oyunun adını kontrol edip tekrar deneyin ya da bilgiyi elle yazın.",
+        "en": "The engine could not return the game info in a usable form. Check the game name and try again, or type the info by hand."},
+    "uyari_tum_ekran_ps5": {
+        "tr": "Tüm ekran seçili; PS Remote Play penceresini seçersen yalnız oyunu okurum.",
+        "en": "The whole screen is selected; if you pick the PS Remote Play window I will read only the game."},
+    "uyari_tum_ekran_xbox": {
+        "tr": "Tüm ekran seçili; Xbox penceresini seçersen yalnız oyunu okurum.",
+        "en": "The whole screen is selected; if you pick the Xbox window I will read only the game."},
+    "uyari_tum_ekran_kart": {
+        "tr": "Tüm ekran seçili; yakalama kartının penceresini seçersen yalnız oyunu okurum.",
+        "en": "The whole screen is selected; if you pick the capture card window I will read only the game."},
     "sunucu_hatasi": {
         "tr": "Beklenmeyen bir sorun oluştu, programı yeniden başlatmayı deneyin.",
         "en": "Something unexpected went wrong, please try restarting the program."},

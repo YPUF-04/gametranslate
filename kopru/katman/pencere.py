@@ -22,6 +22,7 @@ STIL_GEREKLI = 0x80000 | 0x20 | 0x80 | 0x08000000
 WDA_EXCLUDEFROMCAPTURE = 0x11
 PENCERE_IZLE_SN = 0.5
 STIL_DENETIM_SN = 2.0
+YASAK_YENILE_SN = 1.0     # §12.1: marka pencereleri listesi bu sıklıkta yenilenir
 ANAHTAR_RENK = "#010203"      # Windows renk anahtarı (saydam yapılan renk); tuval arka planıyla AYNI olmalı
 ANAHTAR_COLORREF = 0x030201   # aynı renk, COLORREF (0x00BBGGRR): R=1 G=2 B=3
 KUTU_RENK = "#12121a"
@@ -139,7 +140,7 @@ class Katman:
         self.tk, self.tkfont = tk, tkfont
         dpi_farkindaligi()
         self.kok = tk.Tk()
-        self.kok.title("AltYazıKöprüsü")
+        self.kok.title("AYK katmani")   # marka adını İÇERMEZ: yoksa kendi kendimizi "marka penceresi" diye karartırdık (§12.1)
         self.kok.overrideredirect(True)
         self.kok.attributes("-topmost", True)
         self.saydam = sys.platform in ("win32", "darwin")
@@ -185,6 +186,20 @@ class Katman:
         self.zam = mantik.Zamanlayici()
         self.ebeveyn, self._son_imza, self._son_ebeveyn = ebeveyn, None, 0.0
         self._fontlar: dict[int, Any] = {}
+        self._yasak: list[tuple[int, int, int, int]] = []
+        self._son_yasak = 0.0
+
+    def _yasak_kutular(self) -> list[tuple[int, int, int, int]]:
+        """§12.1: başlığında marka adı geçen pencerelerin (panel sekmesi dahil) katman koordinatlı kutuları.
+        ~1 sn'de bir yenilenir; katmanın kendi penceresi sayılmaz."""
+        if sys.platform != "win32":
+            return []
+        try:
+            from .. import yakalama
+            return yakalama.ekrana_esle(yakalama.kendi_pencere_kutulari(haric_pid=os.getpid()),
+                                        (self.mon.x, self.mon.y), (self.G, self.Y))
+        except Exception:   # noqa: BLE001
+            return []
 
     def _pencere_kutusu(self) -> dict[str, int] | None:
         try:
@@ -281,24 +296,25 @@ class Katman:
         W, H = self.G, self.Y
         kutular: list[tuple[int, int, int, int]] = []
         boyut = max(14, int(g.get("yazi_boyutu", 44) * (H / 1080) * 1.0) or 14)
+        yasak = self._yasak_kutular()
         for o in z.ogeler:
             p = mantik.ekran_ogesi_hazirla(o)
             lay = mantik.ekran_ogesi_yerlesim(
-                p["metin"], p["aciklama"], lambda t, px: self.font(px, True).measure(t),
-                p["boyut_px"], (p["x"], p["y"], 0, 0), W, H)
+                p["metin"], p["aciklama"], lambda t, px: self.font(px, False).measure(t),
+                p["boyut_px"], (p["x"], p["y"], 0, 0), W, H, kaynak_g=p["kaynak_g"])
             x0, y0 = lay["x"], lay["y"]
             x1, y1 = x0 + lay["g"], y0 + lay["y2"]
-            self._yuvarlak(x0, y0, x1, y1, 8, self._kutu_rengi(g))
-            serit = {"gorev": "#FFD166", "bilgi": "#9FB3CC"}.get(p["tur"], "#2EC4B6")
-            self.tuval.create_rectangle(x0 + 3, y0 + 4, x0 + 6, y1 - 4, fill=serit, outline="")
-            cy = y0 + lay["dolgu"] * 0.6
+            if mantik.kutu_kesisir((x0, y0, x1, y1), yasak):   # §12.1: kendi panelimizin üstüne çizilmez
+                continue
+            self._yuvarlak(x0, y0, x1, y1, max(3, lay["dolgu"] // 2), self._kutu_rengi(g))
+            cy = y0 + lay["dolgu_y"]
             renk = "#FFE3A3" if p["tur"] == "gorev" else g.get("yazi_rengi", "#FFFFFF")
             for sat in lay["satirlar"]:
-                self.tuval.create_text(x0 + lay["dolgu"] + 4, cy, text=sat, anchor="nw",
-                                       font=self.font(lay["px"], True), fill=renk)
+                self.tuval.create_text(x0 + lay["dolgu"], cy, text=sat, anchor="nw",
+                                       font=self.font(lay["px"], False), fill=renk)
                 cy += lay["satir_y"]
             for sat in lay["aciklama_satirlar"]:
-                self.tuval.create_text(x0 + lay["dolgu"] + 4, cy, text=sat, anchor="nw",
+                self.tuval.create_text(x0 + lay["dolgu"], cy, text=sat, anchor="nw",
                                        font=self.font(lay["aciklama_px"], False), fill="#D6E4F2")
                 cy += lay["aciklama_px"] * 1.25
             kutular.append((x0, y0, x1, y1))
@@ -373,6 +389,13 @@ class Katman:
         if self.pencere and simdi - self._son_pencere > PENCERE_IZLE_SN:
             self._son_pencere = simdi
             degisti |= self._pencereyi_izle()
+        if sys.platform == "win32" and simdi - self._son_yasak > YASAK_YENILE_SN:
+            self._son_yasak = simdi
+            yasak = self._yasak_kutular()
+            if yasak != self._yasak:
+                self._yasak = yasak
+                self._son_imza = None   # panel taşındı/açıldı/kapandı: yeniden çiz
+                degisti = True
         if sys.platform == "win32" and not self.gizli and simdi - self._son_stil > STIL_DENETIM_SN:
             self._son_stil = simdi
             self._stil_koru()

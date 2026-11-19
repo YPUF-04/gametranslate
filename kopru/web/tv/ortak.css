@@ -14,21 +14,17 @@
   -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-kerning: normal; }
 .ak-kok .ak-ekran { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
 
-/* ekran öğeleri (görev, menü, bilgi): küçük, sakin etiketler; belirir ve solar.
-   Renkli çizgi türü söyler: turkuaz = menü/diğer, sarı = görev, gri-mavi = bilgi. */
-.ak-kok .ak-oge { position: absolute; box-sizing: border-box; padding: 0.34em 0.7em 0.38em 1em; border-radius: 0.5em;
-  background: rgba(9, 15, 27, 0.84); color: #FFFFFF; line-height: 1.25; letter-spacing: 0.005em;
-  box-shadow: inset 0 0 0 0.04em rgba(255, 255, 255, 0.08), 0 0.2em 0.8em rgba(0, 0, 0, 0.28);
-  width: max-content; max-width: 45%; white-space: normal; overflow-wrap: normal; word-break: normal; hyphens: manual; opacity: 0; text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.55);
+/* ekran öğeleri (görev, menü, bilgi): küçük, sakin, normal ağırlıklı etiketler; belirir ve solar (PROTOKOL 12.4).
+   Boyut ve satırlar JS'te hesaplanır (tek satır, en çok 2; genişlik ekranın en çok %35'i). Görev: sıcak yazı rengi. */
+.ak-kok .ak-oge { position: absolute; box-sizing: border-box; padding: 0.25em 0.4em; border-radius: 0.3em;
+  background: rgba(9, 15, 27, 0.7); color: #FFFFFF; line-height: 1.25; letter-spacing: 0.005em; font-weight: 400;
+  width: max-content; max-width: 35%; white-space: nowrap; overflow-wrap: normal; word-break: normal; hyphens: manual; opacity: 0;
+  text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.5);
   transition: opacity 0.25s linear, left 0.25s ease, top 0.25s ease, width 0.25s ease; }
-.ak-kok .ak-oge:before { content: ""; position: absolute; left: 0.38em; top: 0.38em; bottom: 0.38em; width: 0.17em; border-radius: 0.1em; background: #2EC4B6; }
 .ak-kok .ak-oge.ak-acik { opacity: 1; }
-.ak-kok .ak-oge.ak-gorev { box-shadow: inset 0 0 0 0.04em rgba(255, 209, 102, 0.24), 0 0.2em 0.8em rgba(0, 0, 0, 0.28); }
-.ak-kok .ak-oge.ak-gorev:before { background: #FFD166; }
-.ak-kok .ak-oge.ak-bilgi:before { background: #9FB3CC; }
-.ak-kok .ak-oge-metin { font-weight: 650; }
+.ak-kok .ak-oge-metin { display: block; width: max-content; font-weight: 400; white-space: nowrap; }
 .ak-kok .ak-gorev .ak-oge-metin { color: #FFE3A3; }
-.ak-kok .ak-oge-aciklama { font-size: 0.64em; font-weight: 500; margin-top: 0.22em; color: #D6E4F2; opacity: 0.92; }
+.ak-kok .ak-oge-aciklama { display: block; width: max-content; font-size: 0.7em; font-weight: 400; white-space: nowrap; margin-top: 0.15em; color: #D6E4F2; opacity: 0.92; }
 
 /* altyazı: ekranın %70'i genişlikte, alttan (ya da üstten) sabit; büyüme hep dışarıya doğru olur */
 .ak-kok .ak-yazi { position: absolute; left: 15%; width: 70%; display: none; flex-direction: column; align-items: center; }

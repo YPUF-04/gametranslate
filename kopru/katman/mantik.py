@@ -18,8 +18,12 @@ VARSAYILAN_GORUNUM: dict[str, Any] = {
     "yazi_rengi": "#FFFFFF", "konusan_rengi": "#FFD166",
     "asil_goster": False, "ekran_cevir": True, "onceki_goster": True, "ekran_olcek": 1.0,
 }
-EKRAN_EN_AZ_PX = 12          # §11.5: ekran öğesi yazısı bundan küçülmez (1080p'ye göre)
-EKRAN_EN_GENIS = 0.45        # §11.5: kutu en çok ekran genişliğinin %45'i kadar genişler
+EKRAN_EN_AZ_PX = 11          # §12.4: sığmazsa yazı küçülür ama bundan küçük olmaz (1080p'ye göre)
+EKRAN_EN_GENIS = 0.35        # §12.4: kutu en çok ekran genişliğinin %35'i kadar genişler
+EKRAN_KAYNAK_CARPAN = 1.6    # §12.4: ...ve kaynak yazı genişliğinin en çok 1.6 katı kadar
+EKRAN_EN_DAR = 0.12          # çok dar kaynakta ("OK" düğmesi) kutu ekranın en az %12'si kadar genişleyebilir
+EKRAN_EN_COK_SATIR = 2       # §12.4
+EKRAN_EN_AZ_BOYUT, EKRAN_EN_COK_BOYUT = 12.0, 22.0   # §12.4: kaynak boyu yoksa yazı boyu aralığı (1080p)
 
 
 
@@ -190,6 +194,14 @@ def altyazi_kutusu(w: int, h: int, gorunum: dict[str, Any], metin_g: float, meti
     return int(x0), int(y0), int(x0 + kg), int(y0 + ky)
 
 
+def kutu_kesisir(kutu: tuple[float, float, float, float], digerleri: Iterable[tuple[float, float, float, float]]) -> bool:
+    """(sol, üst, sağ, alt) `kutu`, `digerleri`nden biriyle kesişiyor mu? (§12.1: kendi panelimizin üstüne çizilmez)"""
+    for l, t, r, b in digerleri:
+        if kutu[0] < r and kutu[2] > l and kutu[1] < b and kutu[3] > t:
+            return True
+    return False
+
+
 def kelime_sar(metin: str, olc: Callable[[str], float], azami: float) -> list[str]:
     """Yalnız boşluklarda satır kırar (kelime ortasından / harf harf ASLA). Azami genişlikten uzun
     tek bir kelime kendi satırında taşar; çağıran yazıyı küçültür."""
@@ -207,42 +219,116 @@ def kelime_sar(metin: str, olc: Callable[[str], float], azami: float) -> list[st
     return satirlar
 
 
+def _iki_satir(metin: str, olc: Callable[[str], float], azami: float) -> list[str] | None:
+    """Boşluktan iki satıra böl: ikisi de `azami`ye sığan en dengeli (en dar en geniş satırlı) bölme; yoksa None."""
+    kelimeler = metin.split(" ")
+    en_iyi: list[str] | None = None
+    en_iyi_puan: tuple[float, int] | None = None
+    for i in range(1, len(kelimeler)):
+        a, b = " ".join(kelimeler[:i]), " ".join(kelimeler[i:])
+        wa, wb = olc(a), olc(b)
+        if wa > azami or wb > azami:
+            continue
+        puan = (max(wa, wb), 0 if wa >= wb else 1)   # dengeli; eşitse ilk satır uzun
+        if en_iyi_puan is None or puan < en_iyi_puan:
+            en_iyi, en_iyi_puan = [a, b], puan
+    return en_iyi
+
+
+def _satirlara(metin: str, olc: Callable[[str], float], azami: float, en_cok: int) -> list[str] | None:
+    """Önce tek satır; olmazsa (en çok 2 satır ise) boşlukta iki satır; sığmazsa None."""
+    if not metin:
+        return []
+    if olc(metin) <= azami:
+        return [metin]
+    if en_cok >= 2 and " " in metin:
+        return _iki_satir(metin, olc, azami)
+    return None
+
+
+def _uca_nokta(metin: str, olc: Callable[[str], float], azami: float) -> str:
+    """Metni `azami`ye sığacak kadar kısaltıp sonuna "…" koyar (önce sondaki kelimeler, tek kelimeyse harfler)."""
+    if olc(metin) <= azami:
+        return metin
+    kelimeler = metin.split(" ")
+    while len(kelimeler) > 1:
+        kelimeler.pop()
+        deneme = " ".join(kelimeler).rstrip(",;:.-") + "…"
+        if olc(deneme) <= azami:
+            return deneme
+    k = kelimeler[0] if kelimeler else ""
+    while len(k) > 1 and olc(k + "…") > azami:
+        k = k[:-1]
+    return k + "…"
+
+
+def _kirp(metin: str, olc: Callable[[str], float], azami: float, en_cok: int) -> list[str]:
+    """Sığmayan metin: dolu satırlar boşlukta kırılır, son satır "…" ile biter (kelime ortasından bölünmez,
+    yalnız tek bir kelime satırdan uzunsa o kelime kısaltılır)."""
+    kelimeler = metin.split(" ")
+    satirlar: list[str] = []
+    i = 0
+    while len(satirlar) < en_cok - 1 and i < len(kelimeler):
+        cur = kelimeler[i]
+        if olc(cur) > azami:
+            break
+        j = i + 1
+        while j < len(kelimeler) and olc(cur + " " + kelimeler[j]) <= azami:
+            cur += " " + kelimeler[j]
+            j += 1
+        satirlar.append(cur)
+        i = j
+    kalan = " ".join(kelimeler[i:])
+    if kalan:
+        satirlar.append(_uca_nokta(kalan, olc, azami))
+    return satirlar
+
+
 def ekran_ogesi_yerlesim(metin: str, aciklama: str, olc: Callable[[str, int], float], boyut_px: float,
                          hedef: tuple[float, float, float, float], w: int, h: int,
-                         dolgu: int = 8, en_cok_satir: int = 4) -> dict[str, Any]:
-    """Ekran öğesinin yerleşimi (saf, Tk'sız). `olc(metin, px)` yazının piksel genişliği.
-    `boyut_px` 1080p'ye göre yazı boyu; `hedef` 0-1 oranlı (x, y, g, y2) kutu (sol-üst köşe kullanılır).
-    Kutu metne göre genişler (en çok ekranın %45'i), sığmazsa yazı küçülür (en az 12 px*h/1080);
-    satırlar yalnız boşlukta kırılır. Dönen: {"x","y","g","y2","px","satirlar","aciklama_satirlar","aciklama_px"}."""
+                         kaynak_g: float | None = None, en_cok_satir: int = EKRAN_EN_COK_SATIR) -> dict[str, Any]:
+    """Ekran öğesinin yerleşimi (saf, Tk'sız; PROTOKOL §12.4). `olc(metin, px)` yazının piksel genişliği.
+    `boyut_px` 1080p'ye göre yazı boyu; `hedef` 0-1 oranlı (x, y, g, y2), sol-üst köşe kullanılır.
+    Tek satıra sığmaya çalışır; genişlik metne göre, en çok min(kaynak genişliğinin 1.6 katı, ekranın %35'i)
+    (kaynak_g: kaynak yazının 0-1 genişliği). Sığmazsa yalnız boşlukta, en çok 2 satıra bölünür; hâlâ
+    sığmazsa yazı küçülür (en az 11 px*h/1080), o da yetmezse sona "…" konur.
+    Dönen: {"x","y","g","y2","px","satirlar","aciklama_satirlar","aciklama_px","dolgu","dolgu_y","satir_y","kirpildi"}."""
     olcek = h / 1080.0
-    px = max(EKRAN_EN_AZ_PX * olcek, float(boyut_px) * olcek)
     taban_px = max(1, int(round(EKRAN_EN_AZ_PX * olcek)))
     metin = " ".join((metin or "").split())
     aciklama = " ".join((aciklama or "").split())
-    azami_kutu = w * EKRAN_EN_GENIS
-    ic = max(1.0, azami_kutu - 2 * dolgu)
-    p = max(taban_px, int(round(px)))
+    azami = w * EKRAN_EN_GENIS
+    if isinstance(kaynak_g, (int, float)) and not isinstance(kaynak_g, bool) and kaynak_g > 0:
+        azami = min(azami, max(EKRAN_KAYNAK_CARPAN * kaynak_g * w, EKRAN_EN_DAR * w))
+    p = max(taban_px, int(round(float(boyut_px) * olcek)))
+    kirpildi = False
     while True:
+        dolgu = max(2, int(round(p * 0.4)))
+        ic = max(1.0, azami - 2 * dolgu)
         o = lambda t, p=p: olc(t, p)   # noqa: E731
-        ap = max(taban_px, int(round(p * 0.64)))
-        satirlar = kelime_sar(metin, o, ic)
-        asatirlar = kelime_sar(aciklama, lambda t, ap=ap: olc(t, ap), ic) if aciklama else []
-        en_uzun_kelime = max((o(k) for k in metin.split()), default=0.0)
-        tasar = en_uzun_kelime > ic or len(satirlar) > en_cok_satir
-        if not tasar or p <= taban_px:
+        satirlar = _satirlara(metin, o, ic, en_cok_satir)
+        if satirlar is not None:
+            break
+        if p <= taban_px:
+            satirlar = _kirp(metin, o, ic, en_cok_satir)
+            kirpildi = True
             break
         p = max(taban_px, int(p * 0.92) if int(p * 0.92) < p else p - 1)
-    govde_g = max([o(s) for s in satirlar] + [olc(s, ap) for s in asatirlar] + [1.0])
+    dolgu_y = max(2, int(round(p * 0.25)))
+    ap = max(taban_px, int(round(p * 0.7)))
+    oa = lambda t: olc(t, ap)   # noqa: E731
+    asatirlar = (_satirlara(aciklama, oa, ic, en_cok_satir) or _kirp(aciklama, oa, ic, en_cok_satir)) if aciklama else []
+    govde_g = max([o(s) for s in satirlar] + [oa(s) for s in asatirlar] + [1.0])
     kg = govde_g + 2 * dolgu
     satir_y = p * 1.25
-    kh = len(satirlar) * satir_y + len(asatirlar) * ap * 1.25 + 2 * dolgu * 0.6
+    kh = len(satirlar) * satir_y + len(asatirlar) * ap * 1.25 + 2 * dolgu_y
     x = _sinirla(float(hedef[0]), 0, 1) * w
     y = _sinirla(float(hedef[1]), 0, 1) * h
     x = max(0.0, min(x, w - kg))        # ekran dışına taşmaz
     y = max(0.0, min(y, h - kh))
     return {"x": int(x), "y": int(y), "g": int(kg + 0.999), "y2": int(kh + 0.999), "px": p,
             "satirlar": satirlar, "aciklama_satirlar": asatirlar, "aciklama_px": ap, "dolgu": dolgu,
-            "satir_y": satir_y}
+            "dolgu_y": dolgu_y, "satir_y": satir_y, "kirpildi": kirpildi}
 
 
 def ekran_ogesi_hazirla(o: dict[str, Any]) -> dict[str, Any]:
@@ -258,8 +344,11 @@ def ekran_ogesi_hazirla(o: dict[str, Any]) -> dict[str, Any]:
     if isinstance(bp, (int, float)) and not isinstance(bp, bool) and bp > 0:
         boyut = float(bp)
     else:
-        boyut = _sinirla(round(y2 * 1080 * 0.62), 14, 30)
-    return {"x": x, "y": y, "boyut_px": boyut, "metin": str(o.get("metin") or ""),
+        boyut = _sinirla(round(y2 * 1080 * 0.75), EKRAN_EN_AZ_BOYUT, EKRAN_EN_COK_BOYUT)
+    kg = sayi(o, "g", 0.0)
+    if isinstance(o.get("hedef"), dict):
+        kg = max(kg, sayi(o["hedef"], "g", 0.0))
+    return {"x": x, "y": y, "boyut_px": boyut, "kaynak_g": kg, "metin": str(o.get("metin") or ""),
             "aciklama": str(o.get("aciklama") or ""), "tur": o.get("tur", "diger")}
 
 

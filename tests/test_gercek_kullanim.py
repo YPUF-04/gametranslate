@@ -279,7 +279,7 @@ async def test_hud_sayilari_ve_parcalar_cevrilmez():
     hud = [Satir("358", 0.1, 0.1, 0.05, 0.03), Satir("30 30", 0.3, 0.1, 0.05, 0.03),
            Satir("988", 0.5, 0.1, 0.05, 0.03), Satir("x", 0.6, 0.3, 0.02, 0.03),
            Satir("Return to base", 0.2, 0.5, 0.3, 0.04)]
-    olaylar, motor, _, _ = await kos([(10 + i // 2, hud) for i in range(6)])
+    olaylar, motor, _, _ = await kos([(10 + i // 2, hud) for i in range(6)], {"kaynak": "pencere:1"})
     assert motor.cagrilar == [["Return to base"]]
 
 
@@ -392,22 +392,23 @@ async def test_bolge_yonlendirme_ustune_ozel_ve_altyazi():
 
 
 def test_boyut_px_kaynak_yuksekligi_olcek_ve_genel_olcek():
-    kucuk = Satir("a", 0, 0, 0.1, 0.01)        # 10.8 px yüksek -> 14'e sıkışır
-    buyuk = Satir("a", 0, 0, 0.1, 0.08)        # 86 px -> 30'a sıkışır
-    orta = Satir("a", 0, 0, 0.1, 0.03)         # 32.4 px * 0.8 = 25.9
-    assert boyut_hesapla(kucuk, 1.0, 1.0) == 14.0 and boyut_hesapla(buyuk, 1.0, 1.0) == 30.0
-    assert boyut_hesapla(orta, 1.0, 1.0) == pytest.approx(25.9, abs=0.1)
-    assert boyut_hesapla(orta, 1.5, 1.2) == pytest.approx(25.9 * 1.8, abs=0.2)
-    iki_satir = Satir("a b", 0, 0, 0.1, 0.06, 2)    # iki satırlık öğe: satır başına 0.03
+    kucuk = Satir("a", 0, 0, 0.1, 0.01)        # 10.8 px yüksek * 0.75 = 8 -> 12'ye sıkışır (§12.4)
+    buyuk = Satir("a", 0, 0, 0.1, 0.08)        # 86 px * 0.75 = 65 -> 22'ye sıkışır
+    orta = Satir("a", 0, 0, 0.1, 0.02)         # 21.6 px * 0.75 = 16.2
+    assert boyut_hesapla(kucuk, 1.0, 1.0) == 12.0 and boyut_hesapla(buyuk, 1.0, 1.0) == 22.0
+    assert boyut_hesapla(orta, 1.0, 1.0) == pytest.approx(16.2, abs=0.1)
+    assert boyut_hesapla(orta, 1.5, 1.2) == pytest.approx(16.2 * 1.8, abs=0.2)
+    iki_satir = Satir("a b", 0, 0, 0.1, 0.04, 2)    # iki satırlık öğe: satır başına 0.02
     assert boyut_hesapla(iki_satir, 1.0, 1.0) == boyut_hesapla(orta, 1.0, 1.0)
 
 
 async def test_ekran_olcek_ve_boyut_olayda():
-    oge = Satir("Return to the base camp quickly", 0.02, 0.05, 0.3, 0.03)
-    olaylar, _, _, _ = await kos([(10, [oge])] * 4, {"gorunum": {**VARSAYILAN["gorunum"], "ekran_olcek": 1.5}})
+    oge = Satir("Return to the base camp quickly", 0.02, 0.05, 0.3, 0.02)
+    olaylar, _, _, _ = await kos([(10, [oge])] * 4, {"gorunum": {**VARSAYILAN["gorunum"], "ekran_olcek": 1.5},
+                                                      "kaynak": "pencere:1"})
     (e,) = yalniz(olaylar, "ekran")
-    assert e["ogeler"][0]["boyut_px"] == pytest.approx(25.9 * 1.5, abs=0.2)
-    assert e["ogeler"][0]["hedef"] == {"x": 0.02, "y": 0.05, "g": 0.3, "y2": 0.03}
+    assert e["ogeler"][0]["boyut_px"] == pytest.approx(16.2 * 1.5, abs=0.2)
+    assert e["ogeler"][0]["hedef"] == {"x": 0.02, "y": 0.05, "g": 0.3, "y2": 0.02}
 
 
 async def test_bolgeli_kipte_yalniz_altyazi_bolgesi_altyazi_olur():
@@ -428,7 +429,7 @@ def test_kucuk_kesit_buyutulur_gri_ve_kontrastli():
     assert ocr_hazirla(Image.new("RGB", (100, 80), (5, 5, 5))).size == (100, 80)    # yeterince yüksek: boyut aynı
 
 
-# ---------- 11.5 yerleşim (Tk'sız saf fonksiyon) ----------
+# ---------- 12.4 yerleşim (Tk'sız saf fonksiyon) ----------
 
 def olc(t, px):
     return len(t) * px * 0.55
@@ -438,37 +439,84 @@ def _kelimeler_bozulmadi(lay, metin):
     assert " ".join(lay["satirlar"]).split() == metin.split()      # yalnız boşlukta kırıldı, kelime kaybolmadı/bölünmedi
 
 
-def test_yerlesim_kelimeyi_asla_bolmez_ve_en_cok_yuzde_45():
+def test_yerlesim_kelimeyi_asla_bolmez_ve_en_cok_yuzde_35_iki_satir():
     W, H = 1920, 1080
-    metin = "Bu çok uzun bir görev açıklaması olup kutu genişleyip sonra alt satıra geçmelidir"
-    lay = mantik.ekran_ogesi_yerlesim(metin, "", olc, 30, (0.1, 0.2, 0.02, 0.03), W, H)
+    metin = "Bu çok uzun bir görev açıklaması olup kutu"
+    lay = mantik.ekran_ogesi_yerlesim(metin, "", olc, 22, (0.1, 0.2, 0.02, 0.03), W, H, kaynak_g=0.4)
     _kelimeler_bozulmadi(lay, metin)
-    assert lay["g"] <= W * 0.45 + 1 and len(lay["satirlar"]) >= 2
-    assert all(olc(s, lay["px"]) + 2 * lay["dolgu"] <= W * 0.45 + 1 for s in lay["satirlar"])
+    assert lay["g"] <= W * 0.35 + 1 and len(lay["satirlar"]) <= 2
+    assert all(olc(s, lay["px"]) + 2 * lay["dolgu"] <= W * 0.35 + 1 for s in lay["satirlar"])
 
 
 def test_yerlesim_kisa_metin_tek_satir_ve_hedefte():
     lay = mantik.ekran_ogesi_yerlesim("Parti:", "", olc, 24, (0.5, 0.25, 0.01, 0.01), 2000, 1000)
     assert lay["satirlar"] == ["Parti:"]                # harf harf ("Pa / r / ti:") sarılmadı
-    assert (lay["x"], lay["y"]) == (1000, 250) and lay["g"] < 2000 * 0.45
+    assert (lay["x"], lay["y"]) == (1000, 250) and lay["g"] < 2000 * 0.35
 
 
-def test_yerlesim_uzun_kelime_yazi_kuculur_en_az_12px():
+def test_yerlesim_genislik_kaynagin_1_6_kati_ve_ekranin_35i():
+    W, H = 1920, 1080
+    metin = "Return to the base camp"
+    dar = mantik.ekran_ogesi_yerlesim(metin, "", olc, 16, (0, 0, 0, 0), W, H, kaynak_g=0.10)   # 1.6 x 192 = 307 px
+    assert dar["g"] <= 1.6 * 0.10 * W + 1 and len(dar["satirlar"]) <= 2
+    genis = mantik.ekran_ogesi_yerlesim(metin * 8, "", olc, 16, (0, 0, 0, 0), W, H, kaynak_g=0.9)
+    assert genis["g"] <= W * 0.35 + 1
+    tek = mantik.ekran_ogesi_yerlesim(metin, "", olc, 16, (0, 0, 0, 0), W, H, kaynak_g=0.9)
+    assert tek["satirlar"] == [metin]                      # sığıyorsa TEK satır
+
+
+@pytest.mark.parametrize("metin", [
+    "Return to the base camp before sunset", "Press X to continue your journey", "Speak with the old merchant near the gate",
+    "Bu görevi tamamlamak için köydeki demirciyle konuş", "Yeni bir bölge keşfedildi", "Sitesi yeni yeni yeni",
+])
+@pytest.mark.parametrize("kaynak_g", [0.06, 0.12, 0.25, 0.5])
+@pytest.mark.parametrize("boyut", [12, 16, 22, 44])
+def test_yerlesim_normal_cumle_asla_kelime_kelime_yigilmaz(metin, kaynak_g, boyut):
+    lay = mantik.ekran_ogesi_yerlesim(metin, "", olc, boyut, (0.1, 0.1, 0, 0), 1920, 1080, kaynak_g=kaynak_g)
+    assert 1 <= len(lay["satirlar"]) <= 2
+    if len(metin.split()) >= 4:     # "Return / to / the / base" gibi her kelime ayrı satırda yığılmaz
+        assert len(lay["satirlar"][0].split()) >= 2
+    assert lay["px"] >= 11
+
+
+def test_yerlesim_sigmazsa_kucultur_sonra_uca_nokta_koyar():
+    metin = "Bu çok uzun bir görev açıklaması olup kutu genişleyip sonra kelime sınırlarında alt satıra geçmelidir " * 3
+    lay = mantik.ekran_ogesi_yerlesim(metin, "", olc, 22, (0.0, 0.0, 0, 0), 1920, 1080, kaynak_g=0.1)
+    assert lay["px"] == 11 and lay["kirpildi"] and len(lay["satirlar"]) <= 2
+    assert lay["satirlar"][-1].endswith("…")
+    assert all(k in metin.split() for k in lay["satirlar"][0].split())     # kelime ortasından bölünmedi
+    kucuk = mantik.ekran_ogesi_yerlesim("Konfigürasyonlarımızdan", "", olc, 30, (0, 0, 0.01, 0.01), 200, 1080)
+    assert kucuk["px"] == 11 and kucuk["satirlar"][0].endswith("…")          # tek kelime bile sığmazsa kısaltılır
+
+
+def test_yerlesim_uzun_kelime_yazi_kuculur_en_az_11px():
     metin = "Konfigürasyon"
-    lay = mantik.ekran_ogesi_yerlesim(metin, "", olc, 30, (0.0, 0.0, 0.01, 0.01), 400, 1080)   # %45 = 180 px
+    lay = mantik.ekran_ogesi_yerlesim(metin, "", olc, 30, (0.0, 0.0, 0.01, 0.01), 400, 1080)   # %35 = 140 px
     assert lay["satirlar"] == [metin]
-    assert lay["px"] < 30 and lay["px"] >= 12
-    assert olc(metin, lay["px"]) + 2 * lay["dolgu"] <= 180 + 1
-    # imkânsız darlıkta bile alt sınır korunur ve kelime yine bölünmez
-    dar = mantik.ekran_ogesi_yerlesim("Konfigürasyonlarımızdan", "", olc, 30, (0, 0, 0.01, 0.01), 200, 1080)
-    assert dar["px"] == 12 and dar["satirlar"] == ["Konfigürasyonlarımızdan"]
+    assert 11 <= lay["px"] < 30
+    assert olc(metin, lay["px"]) + 2 * lay["dolgu"] <= 140 + 1
 
 
 def test_yerlesim_ekran_disina_tasmaz_ve_1080_olcegi():
     lay = mantik.ekran_ogesi_yerlesim("Ana kampa dön", "Görev: üsse geri git", olc, 20, (0.98, 0.99, 0.01, 0.01), 1920, 1080)
     assert lay["x"] + lay["g"] <= 1920 and lay["y"] + lay["y2"] <= 1080 and lay["aciklama_satirlar"]
     kucuk = mantik.ekran_ogesi_yerlesim("Menü", "", olc, 20, (0, 0, 0, 0), 960, 540)
-    assert kucuk["px"] == 10 or kucuk["px"] == round(20 * 540 / 1080)     # 1080p ölçeğine göre yarı boy
+    assert kucuk["px"] == round(20 * 540 / 1080)     # 1080p ölçeğine göre yarı boy
+
+
+def test_ekran_ogesi_boyut_kelepcesi_12_22():
+    from kopru.isleme import boyut_hesapla
+    for y2 in (0.005, 0.01, 0.02, 0.05, 0.2):
+        b = boyut_hesapla(Satir("a b c", 0, 0, 0.1, y2), 1.0, 1.0)
+        assert 12.0 <= b <= 22.0
+    assert mantik.ekran_ogesi_hazirla({"x": 0, "y": 0, "y2": 0.5, "metin": "A"})["boyut_px"] == 22.0
+    assert mantik.ekran_ogesi_hazirla({"x": 0, "y": 0, "y2": 0.001, "metin": "A"})["boyut_px"] == 12.0
+
+
+def test_kutu_kesisir_kendi_pencereye_cizilmez():
+    assert mantik.kutu_kesisir((10, 10, 50, 30), [(40, 20, 100, 100)])
+    assert not mantik.kutu_kesisir((10, 10, 50, 30), [(50, 10, 100, 30), (0, 40, 100, 80)])    # yalnız değiyor
+    assert not mantik.kutu_kesisir((10, 10, 50, 30), [])
 
 
 def test_ekran_ogesi_hazirla_hedef_ve_boyut():
@@ -476,4 +524,4 @@ def test_ekran_ogesi_hazirla_hedef_ve_boyut():
                                     "boyut_px": 22})
     assert (p["x"], p["y"], p["boyut_px"]) == (0.6, 0.7, 22.0)
     eski = mantik.ekran_ogesi_hazirla({"x": 0.1, "y": 0.2, "g": 0.2, "y2": 0.04, "metin": "A"})   # eski sunucu
-    assert (eski["x"], eski["y"]) == (0.1, 0.2) and 14 <= eski["boyut_px"] <= 30
+    assert (eski["x"], eski["y"]) == (0.1, 0.2) and 12 <= eski["boyut_px"] <= 22

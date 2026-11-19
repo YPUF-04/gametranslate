@@ -66,3 +66,29 @@ class ClaudeMotoru:
         if baglam is not None:
             baglam.yeni_terimler.extend(terimler)
         return sonuc
+
+    async def serbest_istem(self, sistem: str, kullanici: str, zaman_asimi: float = 45.0) -> str:
+        """Çeviri dışı tek seferlik istek (oyun bilgisi, PROTOKOL 12.3). Düşünme/sıcaklık/ön doldurma yok,
+        `output_config.effort` düşük; yanıtın metin bloklarını döndürür."""
+        import anthropic
+        istemci = self._al()
+        try:
+            yanit = await istemci.messages.create(
+                model=self.model,
+                max_tokens=4000,
+                output_config={"effort": "low"},
+                system=sistem,
+                messages=[{"role": "user", "content": kullanici}],
+                timeout=zaman_asimi,
+            )
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
+            raise AnahtarHatasi("claude") from e
+        except anthropic.NotFoundError as e:
+            raise ModelBulunamadi("HTTP 404") from e
+        except anthropic.APIError as e:
+            raise AgHatasi(str(type(e).__name__)) from e
+        except (TimeoutError, OSError) as e:
+            raise AgHatasi(type(e).__name__) from e
+        if getattr(yanit, "stop_reason", None) == "refusal":
+            raise MotorHatasi("Claude isteği reddetti")
+        return "".join(str(getattr(b, "text", "")) for b in (yanit.content or []) if getattr(b, "type", "") == "text")

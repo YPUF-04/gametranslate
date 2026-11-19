@@ -27,13 +27,14 @@ class GeminiMotoru:
         self._anahtar = anahtar
         self.model = model
 
-    async def _gonder(self, govde: dict[str, Any]) -> Any:
+    async def _gonder(self, govde: dict[str, Any], zaman_asimi: float = 8.0) -> Any:
         """İstek; model 404 verirse sıradaki yedek modelle yeniden dener, çalışanı hatırlar."""
         denenecek = [self.model] + [m for m in YEDEK_MODELLER if m != self.model]
         son: ModelBulunamadi | None = None
         for m in denenecek:
             try:
-                veri = await _http.post_json(URL.format(model=m), govde, {"x-goog-api-key": self._anahtar})
+                veri = await _http.post_json(URL.format(model=m), govde, {"x-goog-api-key": self._anahtar},
+                                             zaman_asimi=zaman_asimi)
             except ModelBulunamadi as e:
                 son = e
                 continue
@@ -62,3 +63,18 @@ class GeminiMotoru:
         if baglam is not None:
             baglam.yeni_terimler.extend(terimler)
         return sonuc
+
+    async def serbest_istem(self, sistem: str, kullanici: str, zaman_asimi: float = 45.0) -> str:
+        """Çeviri dışı tek seferlik istek (oyun bilgisi, PROTOKOL 12.3): JSON yanıt metnini döndürür."""
+        if not self._anahtar:
+            raise AnahtarHatasi("gemini")
+        govde: dict[str, Any] = {
+            "systemInstruction": {"parts": [{"text": sistem}]},
+            "contents": [{"role": "user", "parts": [{"text": kullanici}]}],
+            "generationConfig": {"responseMimeType": "application/json"},
+        }
+        veri = await self._gonder(govde, zaman_asimi)
+        try:
+            return "".join(p.get("text", "") for p in veri["candidates"][0]["content"]["parts"])
+        except (KeyError, IndexError, TypeError) as e:
+            raise MotorHatasi("Gemini yanıtı okunamadı") from e

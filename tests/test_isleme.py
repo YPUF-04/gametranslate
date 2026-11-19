@@ -86,7 +86,7 @@ async def test_ekran_ogeleri_ve_aciklama():
     gorev = Satir("Return to the base camp quickly", 0.02, 0.05, 0.3, 0.04)
     menu = Satir("Continue", 0.45, 0.4, 0.1, 0.04)
     k = [(10, [gorev, menu])] * 3 + [(50, [])] * 10
-    olaylar, motor = await kos(k, {"ekrani_cevir": True, "kisa_aciklama": True})
+    olaylar, motor = await kos(k, {"ekrani_cevir": True, "kisa_aciklama": True, "kaynak": "pencere:1"})
     e = [v for o, v in olaylar if o == "ekran"]
     assert len(e) == 1
     turler = {o["metin"]: o["tur"] for o in e[0]["ogeler"]}
@@ -355,7 +355,7 @@ async def test_ekran_ogesi_degismeyince_yeniden_gonderilmez():
     gorev = Satir("Return to the base camp quickly", 0.02, 0.05, 0.3, 0.04)
     kaymis = Satir("Return to the base camp quickly", 0.025, 0.052, 0.3, 0.04)   # OCR titremesi
     k = [(10, [gorev])] * 4 + [(10, [kaymis])] * 4 + [(10, [gorev])] * 4
-    olaylar = await kos_zamanli(k, {"ekrani_cevir": True})
+    olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
     assert len(yalniz(olaylar, "ekran")) == 1
     assert not yalniz(olaylar, "ekran-sil")
 
@@ -363,7 +363,7 @@ async def test_ekran_ogesi_degismeyince_yeniden_gonderilmez():
 async def test_ekran_ogesi_gidince_1sn_sonra_kalkar():
     menu = Satir("Continue", 0.45, 0.4, 0.1, 0.04)
     k = ekran_senaryo([menu], 4, 16)
-    olaylar = await kos_zamanli(k, {"ekrani_cevir": True})
+    olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
     (t_sil, _), = yalniz(olaylar, "ekran-sil")
     gitti = 4 * DT + 2 * DT
     assert t_sil >= gitti + 1.0 - 1e-9 and t_sil < gitti + 1.0 + DT + 1e-9
@@ -372,7 +372,7 @@ async def test_ekran_ogesi_gidince_1sn_sonra_kalkar():
 async def test_ekran_tek_kareli_titreme_ogeyi_kaldirmaz():
     menu = Satir("Continue", 0.45, 0.4, 0.1, 0.04)
     k = [(10, [menu])] * 3 + [(50, [])] * 2 + [(10, [menu])] * 8
-    olaylar = await kos_zamanli(k, {"ekrani_cevir": True})
+    olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
     assert len(yalniz(olaylar, "ekran")) == 1 and not yalniz(olaylar, "ekran-sil")
 
 
@@ -380,7 +380,7 @@ async def test_ekran_ogesi_yerinde_guncellenir_ayni_id():
     a = Satir("Collect 3 herbs", 0.02, 0.05, 0.3, 0.04)
     b = Satir("Collect 4 herbs", 0.02, 0.05, 0.3, 0.04)
     k = [(10, [a])] * 3 + [(20, [b])] * 6
-    olaylar = await kos_zamanli(k, {"ekrani_cevir": True})
+    olaylar = await kos_zamanli(k, {"ekrani_cevir": True, "kaynak": "pencere:1"})
     e = yalniz(olaylar, "ekran")
     assert len(e) == 2
     assert [len(v["ogeler"]) for _, v in e] == [1, 1]           # eskisi yerinde değişti, yan yana ikilenmedi

@@ -39,7 +39,8 @@ GERI_BESLEME_SN = 60.0         # §11.1: son 60 sn'de yayınlanan çevirilere be
 GERI_BESLEME_ESIK = 0.80
 ALT_BANT_Y = 0.70              # §11.3: otomatik kipte altyazı yalnız alt-orta bandından
 ALT_BANT_X = (0.2, 0.8)
-BOYUT_MIN_PX, BOYUT_MAX_PX = 14.0, 30.0   # §11.5: 1080p'de ekran öğesi yazı boyu
+BOYUT_MIN_PX, BOYUT_MAX_PX = 12.0, 22.0   # §12.4: 1080p'de ekran öğesi yazı boyu
+BOYUT_ORANI = 0.75                        # §12.4: kaynak satır yüksekliğinin 0.75'i
 _KELIME = re.compile(r"\w+", re.UNICODE)
 _KONUSAN = re.compile(r"^([A-ZÇĞİÖŞÜ][\w'. -]{0,24}):\s+(\S.*)$", re.UNICODE)
 
@@ -109,11 +110,11 @@ def altyazi_sec(satirlar: list[Satir]) -> list[Satir]:
 def ogenin_ekran_kutusu(metin: str, boyut_px: float, hedef: tuple[float, float, float, float]
                         ) -> tuple[float, float, float, float]:
     """Ekran öğesinin katmanda kaplayacağı alanın kaba tahmini (0-1): hedefin sol-üstünden, metne göre
-    genişleyen (en çok %45) kutu. Maske için; gerçek çizim katmandadır."""
-    doğal = max(1.0, len(metin) * boyut_px * 0.55 + 24) / 1920
-    g = min(0.45, doğal)
-    satir = max(1, int(-(-doğal // 0.45)))
-    y2 = (satir * boyut_px * 1.3 + 12) / 1080
+    genişleyen (en çok %35, en çok 2 satır, §12.4) kutu. Maske için; gerçek çizim katmandadır."""
+    doğal = max(1.0, len(metin) * boyut_px * 0.55 + 2 * 0.4 * boyut_px) / 1920
+    g = min(0.35, doğal)
+    satir = min(2, max(1, int(-(-doğal // 0.35))))
+    y2 = (satir * boyut_px * 1.25 + 0.5 * boyut_px) / 1080
     x, y = hedef[0], hedef[1]
     return (x, y, min(g, 1 - x), min(y2, 1 - y))
 
@@ -228,9 +229,10 @@ def birlestir(satirlar: list[Satir]) -> list[Satir]:
 
 
 def boyut_hesapla(o: Satir, olcek: float, genel: float) -> float:
-    """§11.5: kaynak yazının satır yüksekliğinden (1080p) yazı boyu: 14-30 px, sonra bölge ve genel ölçekle çarpılır."""
+    """§12.4: kaynak yazının satır yüksekliğinin (1080p) 0.75'i, 12-22 px'e sıkıştırılır; sonra bölge ve genel
+    ölçekle çarpılır."""
     satir_h = o.y2 * 1080 / max(1, o.satir)
-    taban = max(BOYUT_MIN_PX, min(BOYUT_MAX_PX, satir_h * 0.8))
+    taban = max(BOYUT_MIN_PX, min(BOYUT_MAX_PX, satir_h * BOYUT_ORANI))
     return round(taban * olcek * genel, 1)
 
 
@@ -279,6 +281,11 @@ def _hedef_kutusu(o: Satir, hedef: Any) -> tuple[float, float, float, float]:
     if hedef is not None:
         return (float(hedef[0]), float(hedef[1]), float(hedef[2]), float(hedef[3]))
     return (o.x, o.y, o.g, o.y2)
+
+
+def tam_ekran_mi(ayar: dict[str, Any]) -> bool:
+    """`kaynak` bütün bir ekran mı ("ekran:N")? Orada kendi panelimiz de görünür: bölgesiz yalnız altyazı bandı okunur."""
+    return str(ayar.get("kaynak") or "").startswith("ekran:")
 
 
 def _genel_olcek(ayar: dict[str, Any]) -> float:
@@ -517,9 +524,12 @@ class Isleme:
         else:
             b = ayar["bolge_altyazi"]
             altyazi = [s for _, _, s in satirlar if bolgede_mi(s, b) and altyazi_bandinda(s)]
-            diger = [(None, o, (None, boyut_hesapla(o, 1.0, genel)))
-                     for o in birlestir([s for _, _, s in satirlar if not bolgede_mi(s, b)])
-                     if len(o.metin.strip()) >= 2]
+            if tam_ekran_mi(ayar):
+                diger = []   # §12.1: tüm ekranda bölgesiz yalnız altyazı bandı okunur; menü/görev yalnız kullanıcı bölgesinde
+            else:
+                diger = [(None, o, (None, boyut_hesapla(o, 1.0, genel)))
+                         for o in birlestir([s for _, _, s in satirlar if not bolgede_mi(s, b)])
+                         if len(o.metin.strip()) >= 2]
         altyazi = altyazi_sec(altyazi)
         await self._altyazi_adimi(altyazi, ayar)
         if bolgeler or ayar.get("ekrani_cevir"):   # bölge seçildiyse açıkça istenmiştir
