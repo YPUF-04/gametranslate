@@ -2,6 +2,7 @@
 // tv.html ve obs.html için: aynı kökenden /kopru/akis akışına bağlanır.
 (function () {
   'use strict';
+  if (window.MARKA && window.MARKA.ad) { document.title = window.MARKA.ad; }
   var q = window.location.search || '';
   var url = '/kopru/akis';
   var m = /[?&]akis=([^&]+)/.exec(q);

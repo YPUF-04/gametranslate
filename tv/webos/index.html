@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1920, initial-scale=1">
-<title>AltYazıKöprüsü</title>
+<title>Altyazı</title>
 <link rel="stylesheet" href="ortak.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -13,6 +13,24 @@
 <div id="kok"></div>
 
 <section id="e-ara" class="ekran">
+  <div class="tv-marka">
+    <svg class="tv-logo" viewBox="0 0 64 64" aria-hidden="true">
+      <defs>
+        <linearGradient id="tl-z" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1A3256"/><stop offset="1" stop-color="#0C1729"/></linearGradient>
+        <linearGradient id="tl-k" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2EC4B6"/><stop offset="1" stop-color="#6BE3D7"/></linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="16" fill="url(#tl-z)"/>
+      <path d="M8 33 A30 30 0 0 1 56 33" fill="none" stroke="url(#tl-k)" stroke-width="5" stroke-linecap="round"/>
+      <path d="M20 26 V36 M32 23 V36 M44 26 V36" stroke="#2EC4B6" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+      <rect x="10" y="37" width="44" height="11" rx="5.5" fill="#FFD166"/>
+      <rect x="17" y="41" width="17" height="3" rx="1.5" fill="#0C1729" opacity=".72"/>
+      <rect x="37" y="41" width="10" height="3" rx="1.5" fill="#0C1729" opacity=".72"/>
+    </svg>
+    <div>
+      <div class="tv-ad" id="tv-ad"></div>
+      <div class="tv-slogan" id="tv-slogan"></div>
+    </div>
+  </div>
   <h1 data-i="ara_baslik"></h1>
   <p id="ara-durum" class="yardim"></p>
   <div id="ara-liste" class="liste"></div>
@@ -72,6 +90,7 @@
   </div>
 </section>
 
+<script src="marka.js"></script>
 <script src="i18n.js"></script>
 <script src="platform-webos.js"></script>
 <script src="ortak.js"></script>

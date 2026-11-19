@@ -66,18 +66,20 @@
     var no = ++aramaNo, bulunan = [];
     goster('e-ara');
     $('ara-liste').innerHTML = ''; $('ara-hata').textContent = '';
-    $('ara-durum').textContent = T('ara_baslik');
+    $('ara-durum').textContent = T('ara_baslik'); $('ara-durum').className = 'yardim araniyor';
     P.yerelAdres(function (ip) {
       if (no !== aramaNo) { return; }
       var m = ip && /^(\d+\.\d+\.\d+)\.(\d+)$/.exec(ip);
-      if (!m) { $('ara-durum').textContent = ''; $('ara-hata').textContent = T('adres_alinamadi'); odakla($('b-elle')); return; }
+      if (!m) { $('ara-durum').textContent = ''; $('ara-durum').className = 'yardim'; $('ara-hata').textContent = T('adres_alinamadi'); odakla($('b-elle')); return; }
       var taban = m[1], kendi = parseInt(m[2], 10), liste = [], i;
       for (i = 1; i <= 254; i++) { if (i !== kendi) { liste.push(i); } }
       var sira = 0, bitenSay = 0, aktif = 0, TOPLAM = liste.length, ILK = true;
       function bul(adres, ad) {
         var i2; for (i2 = 0; i2 < bulunan.length; i2++) { if (bulunan[i2] === adres) { return; } }
         bulunan.push(adres);
-        var d = document.createElement('button'); d.className = 'dugme'; d.textContent = (ad || adres) + '  (' + adres + ')';
+        var d = document.createElement('button'), alt = document.createElement('span');
+        d.className = 'dugme'; d.appendChild(document.createTextNode(ad || adres));
+        alt.className = 'pc-adres'; alt.textContent = adres; d.appendChild(alt);
         d.onclick = function () { aramaIptal(); pcSec(adres); };
         $('ara-liste').appendChild(d);
         if (ILK) { ILK = false; odakla(d); }
@@ -97,7 +99,7 @@
         aktif--; bitenSay++;
         $('ara-durum').textContent = T('ara_ilerleme', [bitenSay, TOPLAM]);
         if (bitenSay >= TOPLAM) {
-          $('ara-durum').textContent = T('ara_bitti');
+          $('ara-durum').textContent = T('ara_bitti'); $('ara-durum').className = 'yardim';
           if (!bulunan.length) { $('ara-hata').textContent = T('bulunamadi'); }
         } else { sonraki(); }
       }
@@ -230,11 +232,15 @@
   baglaDugme('b-p-pc', function () { durdurHepsi(); ara(); });
 
   // ---- başlangıç ----
+  var MARKA = window.MARKA || { ad: 'AltYazıKöprüsü', slogan_tr: '', slogan_en: '' };
+  document.title = MARKA.ad;
+  $('tv-ad').textContent = MARKA.ad;
+  $('tv-slogan').textContent = window.AKI18N.dil === 'tr' ? MARKA.slogan_tr : MARKA.slogan_en;
   window.AKI18N.uygula(document);
   tuslariKur();
   var kayitli = depoOku(KEY_PC);
   if (kayitli) {
-    goster('e-ara'); $('ara-durum').textContent = T('kayitli_bakiliyor');
+    goster('e-ara'); $('ara-durum').textContent = T('kayitli_bakiliyor'); $('ara-durum').className = 'yardim araniyor';
     esle(adresUrl(kayitli) + '/kopru/merhaba', function () { pcSec(kayitli); }, function () { ara(); }, 3000);
   } else { ara(); }
 }());
