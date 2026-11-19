@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import queue
 import sys
@@ -14,7 +15,15 @@ from typing import Any
 
 from . import mantik
 
-ANAHTAR_RENK = "#010203"      # Windows renk anahtarı (saydam yapılan renk)
+log = logging.getLogger("kopru.katman")
+
+# Windows'ta pencere stili: LAYERED | TRANSPARENT (tıklamayı geçir) | TOOLWINDOW | NOACTIVATE
+STIL_GEREKLI = 0x80000 | 0x20 | 0x80 | 0x08000000
+WDA_EXCLUDEFROMCAPTURE = 0x11
+PENCERE_IZLE_SN = 0.5
+STIL_DENETIM_SN = 2.0
+ANAHTAR_RENK = "#010203"      # Windows renk anahtarı (saydam yapılan renk); tuval arka planıyla AYNI olmalı
+ANAHTAR_COLORREF = 0x030201   # aynı renk, COLORREF (0x00BBGGRR): R=1 G=2 B=3
 KUTU_RENK = "#12121a"
 SOLUK_RENK = "#B8B8C4"
 BEKLEME_ILK, BEKLEME_EN_COK = 0.5, 5.0
@@ -124,7 +133,7 @@ def _yazi_ailesi(tkfont: Any, kok: Any) -> str:
 
 
 class Katman:
-    def __init__(self, url: str, ekran: int, ebeveyn: int) -> None:
+    def __init__(self, url: str, ekran: int, ebeveyn: int, pencere: int = 0) -> None:
         import tkinter as tk
         from tkinter import font as tkfont
         self.tk, self.tkfont = tk, tkfont
@@ -154,12 +163,22 @@ class Katman:
                 pass
         m = mantik.ekran_sec(monitorleri_bul(self.kok), ekran) or mantik.Monitor(
             1, 0, 0, self.kok.winfo_screenwidth(), self.kok.winfo_screenheight(), True)
+        self.pencere, self.gizli, self._son_pencere = int(pencere or 0), False, 0.0
+        if self.pencere:   # yalnız seçilen pencerenin üstüne (PROTOKOL 11.2): iç alanı izler
+            pm = mantik.pencere_monitoru(self._pencere_kutusu())
+            if pm is not None:
+                m = pm
+            else:
+                self.gizli = True
         self.mon, self.G, self.Y = m, m.g, m.y2
         self.kok.geometry(m.geometri())
+        if self.gizli:
+            self.kok.withdraw()
         self.tuval = tk.Canvas(self.kok, bg=self.bg, highlightthickness=0, bd=0)
         self.tuval.pack(fill="both", expand=True)
-        self.kok.update_idletasks()
+        self.kok.update()
         self.aile = _yazi_ailesi(tkfont, self.kok)
+        self._son_stil = 0.0
         self._tikla_gec()
         self.kuyruk: queue.Queue = queue.Queue()
         self.dinleyici = AkisDinleyici(url, self.kuyruk)
@@ -167,17 +186,67 @@ class Katman:
         self.ebeveyn, self._son_imza, self._son_ebeveyn = ebeveyn, None, 0.0
         self._fontlar: dict[int, Any] = {}
 
+    def _pencere_kutusu(self) -> dict[str, int] | None:
+        try:
+            from .. import yakalama
+            return yakalama.pencere_istemci_kutusu(self.pencere)
+        except Exception:   # noqa: BLE001
+            return None
+
+    def _ust_hwnd(self) -> tuple[Any, int]:
+        """Tk'nin gerçek üst düzey penceresi (sarmalayıcı): winfo_id çocuk pencere olabilir."""
+        import ctypes
+        u = ctypes.windll.user32
+        u.GetAncestor.restype = ctypes.c_void_p
+        u.GetAncestor.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+        wid = self.kok.winfo_id()
+        hwnd = u.GetAncestor(wid, 2) or wid    # GA_ROOT
+        return u, int(hwnd)
+
+    def _wm_frame_hwnd(self) -> list[int]:
+        try:
+            return [int(self.kok.wm_frame(), 16)]
+        except Exception:   # noqa: BLE001
+            return []
+
+    def _yakalamadan_gizle(self, u: Any, hwnd: int) -> bool:
+        """Kendi penceremiz ekran yakalamada görünmesin (PROTOKOL 11.1): çevirilen yazıyı yeniden okumayız."""
+        import ctypes
+        for aday in (hwnd, *self._wm_frame_hwnd()):
+            try:
+                u.SetWindowDisplayAffinity.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+                if u.SetWindowDisplayAffinity(aday, WDA_EXCLUDEFROMCAPTURE):
+                    return True
+            except Exception as e:   # noqa: BLE001
+                log.warning("SetWindowDisplayAffinity çağrılamadı: %s", e)
+        # Windows 10 2004 öncesi: sunucu tarafı maske ve metin süzgeci devreye girer
+        log.warning("SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) başarısız; katman yakalamada görünebilir")
+        print("katman: yakalamadan gizlenemedi (WDA_EXCLUDEFROMCAPTURE)", file=sys.stderr, flush=True)
+        return False
+
+    def _stil_koru(self, zorla: bool = False) -> None:
+        """Windows: tıklama geçirme/araç penceresi/etkinleşmeme stillerini ve renk anahtarını uygular;
+        Tk pencereyi yeniden sarmışsa (stiller düşerse) yeniden kurar. Renk anahtarı tuval rengiyle aynıdır."""
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            u, hwnd = self._ust_hwnd()
+            u.GetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            u.SetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_long]
+            u.SetLayeredWindowAttributes.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ubyte, ctypes.c_ulong]
+            stil = u.GetWindowLongW(hwnd, -20)
+            if zorla or (stil & STIL_GEREKLI) != STIL_GEREKLI:
+                u.SetWindowLongW(hwnd, -20, stil | STIL_GEREKLI)
+                u.SetLayeredWindowAttributes(hwnd, ANAHTAR_COLORREF, 0, 1)   # LWA_COLORKEY
+                self.kok.attributes("-transparentcolor", ANAHTAR_RENK)
+                self._yakalamadan_gizle(u, hwnd)
+        except Exception as e:   # noqa: BLE001
+            log.warning("Pencere stili uygulanamadı: %s", e)
+
     def _tikla_gec(self) -> None:
         if sys.platform == "win32":
-            try:
-                import ctypes
-                u = ctypes.windll.user32
-                hwnd = u.GetParent(self.kok.winfo_id()) or self.kok.winfo_id()
-                stil = u.GetWindowLongW(hwnd, -20)
-                # LAYERED | TRANSPARENT | TOOLWINDOW | NOACTIVATE
-                u.SetWindowLongW(hwnd, -20, stil | 0x80000 | 0x20 | 0x80 | 0x08000000)
-            except Exception:   # noqa: BLE001
-                pass
+            self._stil_koru(zorla=True)
         elif sys.platform == "darwin":
             for dene in (lambda: self.kok.attributes("-ignoremouseevents", True),
                          lambda: self.kok.tk.call("::tk::unsupported::MacWindowStyle", "style",
@@ -213,17 +282,26 @@ class Katman:
         kutular: list[tuple[int, int, int, int]] = []
         boyut = max(14, int(g.get("yazi_boyutu", 44) * (H / 1080) * 1.0) or 14)
         for o in z.ogeler:
-            p = mantik.ekran_ogesi_px(o, W, H)
-            f = self.font(p["yazi_px"], True)
-            metin = p["metin"] + (f"\n{p['aciklama']}" if p["aciklama"] else "")
-            t = self.tuval.create_text(p["x"] + 6, p["y"] + 3, text=metin, anchor="nw", font=f,
-                                       fill=g.get("yazi_rengi", "#FFFFFF"), width=max(60, p["g"]))
-            bb = self.tuval.bbox(t)
-            if bb:
-                self.tuval.create_rectangle(bb[0] - 6, bb[1] - 3, bb[2] + 6, bb[3] + 3, fill=self._kutu_rengi(g),
-                                            outline="")
-                self.tuval.tag_raise(t)
-                kutular.append((bb[0] - 6, bb[1] - 3, bb[2] + 6, bb[3] + 3))
+            p = mantik.ekran_ogesi_hazirla(o)
+            lay = mantik.ekran_ogesi_yerlesim(
+                p["metin"], p["aciklama"], lambda t, px: self.font(px, True).measure(t),
+                p["boyut_px"], (p["x"], p["y"], 0, 0), W, H)
+            x0, y0 = lay["x"], lay["y"]
+            x1, y1 = x0 + lay["g"], y0 + lay["y2"]
+            self._yuvarlak(x0, y0, x1, y1, 8, self._kutu_rengi(g))
+            serit = {"gorev": "#FFD166", "bilgi": "#9FB3CC"}.get(p["tur"], "#2EC4B6")
+            self.tuval.create_rectangle(x0 + 3, y0 + 4, x0 + 6, y1 - 4, fill=serit, outline="")
+            cy = y0 + lay["dolgu"] * 0.6
+            renk = "#FFE3A3" if p["tur"] == "gorev" else g.get("yazi_rengi", "#FFFFFF")
+            for sat in lay["satirlar"]:
+                self.tuval.create_text(x0 + lay["dolgu"] + 4, cy, text=sat, anchor="nw",
+                                       font=self.font(lay["px"], True), fill=renk)
+                cy += lay["satir_y"]
+            for sat in lay["aciklama_satirlar"]:
+                self.tuval.create_text(x0 + lay["dolgu"] + 4, cy, text=sat, anchor="nw",
+                                       font=self.font(lay["aciklama_px"], False), fill="#D6E4F2")
+                cy += lay["aciklama_px"] * 1.25
+            kutular.append((x0, y0, x1, y1))
         if z.yazi:
             y = z.yazi
             azami = W * 0.86
@@ -292,12 +370,41 @@ class Katman:
             if not ebeveyn_canli(self.ebeveyn):
                 self.bitir()
                 return
+        if self.pencere and simdi - self._son_pencere > PENCERE_IZLE_SN:
+            self._son_pencere = simdi
+            degisti |= self._pencereyi_izle()
+        if sys.platform == "win32" and not self.gizli and simdi - self._son_stil > STIL_DENETIM_SN:
+            self._son_stil = simdi
+            self._stil_koru()
         if degisti:
             imza = self._imza()
             if imza != self._son_imza:
                 self._son_imza = imza
                 self.ciz()
         self.kok.after(40, self.tik)
+
+    def _pencereyi_izle(self) -> bool:
+        """Seçili pencerenin iç alanını izler: taşınır/boyutu değişirse katman da gider; simge durumunda gizlenir."""
+        m = mantik.pencere_monitoru(self._pencere_kutusu())
+        if m is None:
+            if not self.gizli:
+                self.gizli = True
+                self.kok.withdraw()
+            return False
+        degisti = False
+        if self.gizli:
+            self.gizli = False
+            self.kok.deiconify()
+            self.kok.attributes("-topmost", True)
+            self._stil_koru(zorla=True)
+            degisti = True
+        if (m.x, m.y, m.g, m.y2) != (self.mon.x, self.mon.y, self.mon.g, self.mon.y2):
+            self.mon, self.G, self.Y = m, m.g, m.y2
+            self.kok.geometry(m.geometri())
+            degisti = True
+        if degisti:
+            self._son_imza = None   # yeni boyutta yeniden çiz
+        return degisti
 
     def bitir(self) -> None:
         self.dinleyici.dur.set()
@@ -316,11 +423,12 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="kopru.katman", description="AltYazıKöprüsü ekran katmanı")
     p.add_argument("--url", required=True)
     p.add_argument("--ekran", type=int, default=1)
+    p.add_argument("--pencere", type=int, default=0, help="yalnız bu pencerenin (hwnd) üstüne konumlan (Windows)")
     p.add_argument("--ebeveyn", type=int, default=0, help="ana programın süreç numarası (ölünce çıkılır)")
     p.add_argument("--ozdenetim", action="store_true", help="pencereyi açıp deneme yazısı çizer, 2 sn sonra kapanır")
     a = p.parse_args(argv)
     try:
-        k = Katman(a.url, a.ekran, a.ebeveyn or os.getpid())
+        k = Katman(a.url, a.ekran, a.ebeveyn or os.getpid(), a.pencere)
         if a.ozdenetim:
             k.kuyruk.put(("yazi", {"id": "oz", "metin": "Öz denetim: Türkçe harfler çğıöşü", "sure_ms": 3000}))
             def _bitti() -> None:

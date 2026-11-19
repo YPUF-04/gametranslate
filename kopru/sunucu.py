@@ -555,7 +555,7 @@ async def api_ayarlar_yaz(request: web.Request) -> web.Response:
         d.dublaj.senkronla()
     if "gorunum" in kismi:
         d.yayin.yayinla("gorunum", d.ayar["gorunum"])
-    if {"gosterim", "katman_ekran"} & kismi.keys():
+    if {"gosterim", "katman_ekran", "kaynak"} & kismi.keys():
         d.katman.senkronla(kullanici_istegi=True)   # gösterim/ekran değişti: aç, kapat ya da yeni ekrana taşı
     if {"motor", "yedek_motor", "modeller", "aktif_oyun", "kalite", "hafiza_izni"} & kismi.keys():
         d.yeniden_kur()

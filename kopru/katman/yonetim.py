@@ -18,9 +18,11 @@ YENIDEN_PENCERE_SN = 60.0
 DENEME_SN = 8.0            # deneme altyazısından sonra, başka sebep yoksa katman bu kadar sonra kapanır
 
 
-def komut(url: str, ekran: int) -> list[str]:
+def komut(url: str, ekran: int, pencere: int | None = None) -> list[str]:
     """Paketli programda `exe --katman ...` (calistir.py dağıtır), değilse `python -m kopru.katman ...`."""
     args = ["--url", url, "--ekran", str(ekran), "--ebeveyn", str(os.getpid())]
+    if pencere:
+        args += ["--pencere", str(pencere)]   # katman yalnız bu pencerenin üstüne konumlanır (PROTOKOL 11.2)
     if getattr(sys, "frozen", False):
         return [sys.executable, "--katman", *args]
     return [sys.executable, "-m", "kopru.katman", *args]
@@ -64,6 +66,7 @@ class KatmanYonetici:
         self.saat = saat
         self.surec: Any = None
         self._ekran: int | None = None
+        self._pencere: int | None = None
         self._baslamalar: deque[float] = deque()
         self.vazgecildi = False       # üst üste çöktü: kullanıcı yeniden isteyene dek denenmez
         self.deneme_bitis = 0.0
@@ -76,6 +79,13 @@ class KatmanYonetici:
     def istenen(self) -> bool:
         deneme = self.saat() < self.deneme_bitis
         return deneme or (self.ayar_al().get("gosterim") == "bilgisayar" and bool(self.calisiyor()))
+
+    def istenen_pencere(self) -> int | None:
+        """`kaynak = "pencere:<hwnd>"` ise hwnd (yalnız Windows'ta; katman o pencerenin üstüne konur)."""
+        if sys.platform != "win32":
+            return None
+        from .. import yakalama
+        return yakalama.pencere_kodu(str(self.ayar_al().get("kaynak") or ""))
 
     def url(self) -> str:
         return f"http://127.0.0.1:{self.kapi_al()}/kopru/akis"
@@ -94,8 +104,9 @@ class KatmanYonetici:
             return False
         self._baslamalar.append(simdi)
         self._ekran = int(self.ayar_al().get("katman_ekran", 1))
+        self._pencere = self.istenen_pencere()
         try:
-            self.surec = self.baslatici(komut(self.url(), self._ekran))
+            self.surec = self.baslatici(komut(self.url(), self._ekran, self._pencere))
         except Exception as e:   # noqa: BLE001
             log.warning("Ekran katmanı başlatılamadı: %s", e)
             self.surec, self.son_hata = None, "katman_destek_yok"
@@ -126,7 +137,8 @@ class KatmanYonetici:
             self.durdur_surec()
             return
         if self.acik():
-            if self._ekran != int(self.ayar_al().get("katman_ekran", 1)):
+            if self._ekran != int(self.ayar_al().get("katman_ekran", 1)) \
+                    or self._pencere != self.istenen_pencere():
                 self.durdur_surec()
                 self._baslat()
             return

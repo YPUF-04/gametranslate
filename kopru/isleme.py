@@ -10,6 +10,7 @@ import asyncio
 import logging
 import re
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Any, Callable
@@ -34,6 +35,12 @@ EN_COK_ALTYAZI_KARAKTER = 600   # bundan uzun "altyazı" okuma gürültüsüdür
 EN_COK_OGE_KARAKTER = 300
 EN_COK_OGE = 24               # bir karede çevrilecek en çok ekran öğesi
 HATA_LOG_SN = 60.0            # aynı hata günlüğe en çok dakikada bir
+GERI_BESLEME_SN = 60.0         # §11.1: son 60 sn'de yayınlanan çevirilere benzeyen okumalar atılır
+GERI_BESLEME_ESIK = 0.80
+ALT_BANT_Y = 0.70              # §11.3: otomatik kipte altyazı yalnız alt-orta bandından
+ALT_BANT_X = (0.2, 0.8)
+BOYUT_MIN_PX, BOYUT_MAX_PX = 14.0, 30.0   # §11.5: 1080p'de ekran öğesi yazı boyu
+_KELIME = re.compile(r"\w+", re.UNICODE)
 _KONUSAN = re.compile(r"^([A-ZÇĞİÖŞÜ][\w'. -]{0,24}):\s+(\S.*)$", re.UNICODE)
 
 
@@ -44,6 +51,83 @@ def okuma_suresi_ms(metin: str) -> int:
 def sure_ms(metin: str) -> int:
     """Altyazının en az ekranda kalma süresi: max(1800, okuma süresi)."""
     return max(EN_AZ_GOSTERIM_MS, okuma_suresi_ms(metin))
+
+
+def _kelimeler(metin: str) -> list[str]:
+    return _KELIME.findall(metin.casefold())
+
+
+def tekrar_var_mi(metin: str) -> bool:
+    """Aynı kelime üst üste 3 kez ("tek tek tek", "Parti: Parti: Parti:") ya da bütün kelimeler aynı."""
+    k = _kelimeler(metin)
+    if len(k) >= 2 and len(set(k)) == 1:
+        return True
+    return any(k[i] == k[i + 1] == k[i + 2] for i in range(len(k) - 2))
+
+
+def okuma_gurultusu_mu(metin: str) -> bool:
+    """§11.3: çevrilmeyecek okuma: <2 harf, tek karakter, çoğu rakam/simge (HUD sayıları), tekrarlı kelime."""
+    m = "".join(metin.split())
+    if len(m) <= 1:
+        return True
+    harf = sum(1 for c in m if c.isalpha())
+    if harf < 2 or (len(m) - harf) / len(m) > 0.5:
+        return True
+    return tekrar_var_mi(metin)
+
+
+def altyazi_bandinda(s: Satir) -> bool:
+    """Satırın merkezi ekranın alt-orta bandında mı (y>0.70, x 0.2-0.8)?"""
+    cx, cy = s.x + s.g / 2, s.y + s.y2 / 2
+    return cy > ALT_BANT_Y and ALT_BANT_X[0] <= cx <= ALT_BANT_X[1]
+
+
+def _bitisik(a: Satir, b: Satir) -> bool:
+    """Alt alta (aralık < satır yüksekliği) ve yatayda örtüşen iki satır."""
+    ust, alt = (a, b) if a.y <= b.y else (b, a)
+    bosluk = alt.y - (ust.y + ust.y2)
+    yatay = min(a.x + a.g, b.x + b.g) - max(a.x, b.x)
+    return bosluk < 0.9 * max(a.y2, b.y2) and yatay > 0
+
+
+def altyazi_sec(satirlar: list[Satir]) -> list[Satir]:
+    """Birbirine bitişik satırları kümeler (§11.3); en çok yazısı olan (eşitse en alttaki) küme altyazıdır."""
+    kumeler: list[list[Satir]] = []
+    for s in sorted(satirlar, key=lambda s: (s.y, s.x)):
+        hedef = [k for k in kumeler if any(_bitisik(s, o) for o in k)]
+        yeni = [s]
+        for k in hedef:
+            yeni += k
+            kumeler.remove(k)
+        kumeler.append(yeni)
+    if not kumeler:
+        return []
+    en = max(kumeler, key=lambda k: (sum(len(x.metin) for x in k), max(x.y for x in k)))
+    return sorted(en, key=lambda s: (round(s.y, 2), s.x))
+
+
+def ogenin_ekran_kutusu(metin: str, boyut_px: float, hedef: tuple[float, float, float, float]
+                        ) -> tuple[float, float, float, float]:
+    """Ekran öğesinin katmanda kaplayacağı alanın kaba tahmini (0-1): hedefin sol-üstünden, metne göre
+    genişleyen (en çok %45) kutu. Maske için; gerçek çizim katmandadır."""
+    doğal = max(1.0, len(metin) * boyut_px * 0.55 + 24) / 1920
+    g = min(0.45, doğal)
+    satir = max(1, int(-(-doğal // 0.45)))
+    y2 = (satir * boyut_px * 1.3 + 12) / 1080
+    x, y = hedef[0], hedef[1]
+    return (x, y, min(g, 1 - x), min(y2, 1 - y))
+
+
+def yazinin_ekran_kutusu(metin: str, gorunum: dict[str, Any]) -> tuple[float, float, float, float]:
+    """Altyazı kutusunun kaba tahmini (0-1): yatay ortalı, alttan (ya da üstten) sabit, önceki satır payıyla."""
+    boyut = float(gorunum.get("yazi_boyutu", 44) or 44)
+    doğal = len(metin) * boyut * 0.55 / 1920 + 0.04
+    g = min(0.96, doğal)
+    satir = 1 if doğal <= 0.86 else 2
+    y2 = (satir * boyut * 1.34 + 0.8 * boyut + boyut * 0.6) / 1080 + 0.02   # + önceki satır + dolgu
+    kenar = float(gorunum.get("kenar_bosluk", 0.08) or 0.08)
+    y = kenar if gorunum.get("konum") == "ust" else 1 - kenar - y2
+    return ((1 - g) / 2, max(0.0, y), g, min(y2, 1.0))
 
 
 def konusan_ayir(metin: str) -> tuple[str | None, str]:
@@ -90,6 +174,19 @@ def bolgede_mi(s: Satir, b: dict[str, float]) -> bool:
     return b["x"] <= cx <= b["x"] + b["g"] and b["y"] <= cy <= b["y"] + b["y2"]
 
 
+def ocr_hazirla(kes: Any) -> Any:
+    """§11/6: küçük kesiti (<60 px yüksek) en az ×2 büyütür (stilize yazı tiplerini okumak kolaylaşır),
+    gri tona çevirip kontrastı açar. Boyut değişir ama okuyucu normalize koordinat döndürür."""
+    from PIL import Image, ImageOps
+    if kes.size[1] < 60:
+        kat = min(4.0, max(2.0, EN_KUCUK_OCR_YUKSEKLIK / kes.size[1]))
+        kes = kes.resize((max(1, int(kes.size[0] * kat)), max(1, int(kes.size[1] * kat))), Image.LANCZOS)
+    try:
+        return ImageOps.autocontrast(kes.convert("L")).convert("RGB")
+    except Exception:   # noqa: BLE001 — kontrast uygulanamazsa ham kesit
+        return kes
+
+
 def kirp(resim: Any, b: dict[str, Any]) -> tuple[Any, tuple[float, float, float, float]]:
     """Kareyi bölgeye göre keser. Dönen kutu, gerçekten kesilen pikselin 0-1 karşılığıdır."""
     w, h = resim.size
@@ -97,10 +194,7 @@ def kirp(resim: Any, b: dict[str, Any]) -> tuple[Any, tuple[float, float, float,
     y0 = min(max(int(round(b["y"] * h)), 0), h - 1)
     x1 = max(x0 + 1, min(w, int(round((b["x"] + b["g"]) * w))))
     y1 = max(y0 + 1, min(h, int(round((b["y"] + b["y2"]) * h))))
-    kes = resim.crop((x0, y0, x1, y1))
-    if kes.size[1] < EN_KUCUK_OCR_YUKSEKLIK:   # çok ince bölgeyi okuyucular sevmez
-        kat = min(4.0, EN_KUCUK_OCR_YUKSEKLIK / kes.size[1])
-        kes = kes.resize((max(1, int(kes.size[0] * kat)), max(1, int(kes.size[1] * kat))))
+    kes = ocr_hazirla(resim.crop((x0, y0, x1, y1)))
     return kes, (x0 / w, y0 / h, (x1 - x0) / w, (y1 - y0) / h)
 
 
@@ -129,8 +223,15 @@ def birlestir(satirlar: list[Satir]) -> list[Satir]:
         y1 = min(s.y for s in g)
         x2 = max(s.x + s.g for s in g)
         y2 = max(s.y + s.y2 for s in g)
-        out.append(Satir(" ".join(s.metin for s in g), x1, y1, x2 - x1, y2 - y1))
+        out.append(Satir(" ".join(s.metin for s in g), x1, y1, x2 - x1, y2 - y1, sum(s.satir for s in g)))
     return out
+
+
+def boyut_hesapla(o: Satir, olcek: float, genel: float) -> float:
+    """§11.5: kaynak yazının satır yüksekliğinden (1080p) yazı boyu: 14-30 px, sonra bölge ve genel ölçekle çarpılır."""
+    satir_h = o.y2 * 1080 / max(1, o.satir)
+    taban = max(BOYUT_MIN_PX, min(BOYUT_MAX_PX, satir_h * 0.8))
+    return round(taban * olcek * genel, 1)
 
 
 def tur_bul(o: Satir) -> str:
@@ -160,6 +261,32 @@ def _ortusme(a: Any, b: Any) -> float:
 
 
 @dataclass
+class _K:
+    """Kutu (örtüşme hesabı için)."""
+    x: float
+    y: float
+    g: float
+    y2: float
+
+
+def _altyazi_bolgesi(b: dict[str, Any]) -> bool:
+    """§11.4: altyazı türündeki bölge ya da hedefi "altyazi" olan bölge `yazi` olayına gider."""
+    return b.get("tur") == "altyazi" or b.get("hedef") == "altyazi"
+
+
+def _hedef_kutusu(o: Satir, hedef: Any) -> tuple[float, float, float, float]:
+    """Çizim kutusu: özel hedef varsa o, yoksa kaynağın kendi kutusu ("ustune")."""
+    if hedef is not None:
+        return (float(hedef[0]), float(hedef[1]), float(hedef[2]), float(hedef[3]))
+    return (o.x, o.y, o.g, o.y2)
+
+
+def _genel_olcek(ayar: dict[str, Any]) -> float:
+    v = (ayar.get("gorunum") or {}).get("ekran_olcek", 1.0)
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and 0.6 <= v <= 2.0 else 1.0
+
+
+@dataclass
 class _Yazi:
     """Altyazının gösterim durumu (7.2)."""
     aktif: bool = False
@@ -174,6 +301,7 @@ class _Yazi:
     kayip: int = 0              # üst üste görünmeyen kare sayısı
     gitti: float | None = None  # "gitti" sayıldığı an
     onceki: str = ""            # önceki karedeki aday
+    kutu: tuple[float, float, float, float] | None = None   # kaynak yazının kutusu (maske için)
 
 
 @dataclass
@@ -191,6 +319,9 @@ class _Oge:
     aciklama: str | None = None
     kayip: int = 0
     gitti: float | None = None
+    hedef: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)   # çizileceği kutu (0-1)
+    ozel: bool = False          # kullanıcının çizdiği hedef (kaynağın üstü değil)
+    boyut_px: float = 14.0
 
 
 @dataclass
@@ -221,6 +352,8 @@ class Isleme:
         self._spek_aday = ""
         self._son_hata_logu = -1e9
         self._adim_hatali = False
+        self._ceviriler: deque[tuple[float, str]] = deque(maxlen=200)   # (an, normalize çeviri): geri besleme süzgeci
+        self._son_kutu: tuple[float, float, float, float] | None = None
 
     # -- önden (speculative) çeviri --
     def _spek_iptal(self) -> None:
@@ -245,6 +378,63 @@ class Isleme:
         """Kullanıcı ekrandaki satırı düzeltti: canlı tutma yenilemesi de yeni metni yollasın."""
         if self._y.asil and normallestir(self._y.asil) == normallestir(asil):
             self._y.metin = ceviri
+        self._ceviri_kaydet(asil, ceviri)
+
+    # -- geri besleme süzgeci (§11.1) --
+    def _ceviri_kaydet(self, asil: str, ceviri: str) -> None:
+        """Yayınlanan çeviriyi son 60 sn'lik listeye ekler. Kaynağa zaten benzeyen çeviriler (özel isimler,
+        "Vice City") eklenmez: yoksa oyunun kendi yazısı "kendi çevirimiz" sanılıp atılırdı."""
+        n, a = normallestir(ceviri), normallestir(asil)
+        if len(n) >= 2 and SequenceMatcher(None, n, a).ratio() < GERI_BESLEME_ESIK:
+            self._ceviriler.append((self.saat(), n))
+
+    def geri_besleme_mi(self, metin: str) -> bool:
+        """Okunan satır, son 60 sn'de yayınladığımız bir çeviriye ≥%80 benziyor mu (kendi katmanımızı okuduk)?"""
+        simdi = self.saat()
+        while self._ceviriler and simdi - self._ceviriler[0][0] > GERI_BESLEME_SN:
+            self._ceviriler.popleft()
+        n = normallestir(metin)
+        if not n:
+            return False
+        for _, c in self._ceviriler:
+            if SequenceMatcher(None, n, c).ratio() >= GERI_BESLEME_ESIK:
+                return True
+            if len(n) >= 8 and n in c:                      # kutunun bir satırı: çevirinin parçası
+                return True
+            if len(c) >= 8 and c in n and len(c) * 2 >= len(n):   # çeviri + başka bir şey birlikte okunmuş
+                return True
+        return False
+
+    def _suz(self, satirlar: list[tuple[int, str | None, Satir]]) -> list[tuple[int, str | None, Satir]]:
+        """Gürültü (§11.3) ve kendi çevirimiz (§11.1) olan satırları atar."""
+        return [(i, t, s) for i, t, s in satirlar
+                if not okuma_gurultusu_mu(s.metin) and not self.geri_besleme_mi(s.metin)]
+
+    # -- katman maskesi (§11.1: WDA_EXCLUDEFROMCAPTURE yoksa yedek) --
+    def maske_kutulari(self, ayar: dict[str, Any]) -> list[tuple[float, float, float, float]]:
+        """Katmanın YALNIZ kendi çizdiği, kaynak yazıyla çakışmayan alanlar (0-1). Kaynağın üstüne çizilen
+        kutular maskelenmez (oyunun kendi yazısı da kaybolurdu); onları metin süzgeci yakalar."""
+        if ayar.get("gosterim") != "bilgisayar":
+            return []
+        kaynak = str(ayar.get("kaynak") or "")
+        try:
+            ayni = kaynak.startswith("pencere:") or kaynak == f"ekran:{int(ayar.get('katman_ekran', 1))}"
+        except (TypeError, ValueError):
+            ayni = False
+        if not ayni:
+            return []
+        out: list[tuple[float, float, float, float]] = []
+        a, simdi = self._y, self.saat()
+        if a.aktif and simdi < a.bitis and a.metin:
+            kutu = yazinin_ekran_kutusu(a.metin, ayar.get("gorunum") or {})
+            if a.kutu is None or _ortusme(_K(*kutu), _K(*a.kutu)) < 0.1:
+                out.append(kutu)
+        for e in self._ogeler:
+            if e.ozel and e.gitti is None:
+                kutu = ogenin_ekran_kutusu(e.metin, e.boyut_px, e.hedef)
+                if _ortusme(_K(*kutu), _K(e.x, e.y, e.g, e.y2)) < 0.1:
+                    out.append(kutu)
+        return out
 
     # -- yardımcılar --
     def _yeni_id(self, on: str) -> str:
@@ -284,9 +474,24 @@ class Isleme:
         return o
 
     # -- bir adım --
-    def _kare_hazirla(self, bolgeler: list[dict[str, Any]]) -> tuple[Any, list, bytes]:
-        """İş parçacığında: kare al + bölgeleri kes + parmak izi (4K karede PIL işi olay döngüsünü tutmasın)."""
+    @staticmethod
+    def _maskele(resim: Any, maske: list[tuple[float, float, float, float]]) -> Any:
+        """Katmanın kendi çizdiği alanları kareyi bozmadan (kopyada) siyaha boyar."""
+        from PIL import ImageDraw
+        resim = resim.copy()
+        w, h = resim.size
+        d = ImageDraw.Draw(resim)
+        for x, y, g, y2 in maske:
+            d.rectangle((int((x - 0.005) * w), int((y - 0.005) * h),
+                         int((x + g + 0.005) * w) + 1, int((y + y2 + 0.005) * h) + 1), fill=(0, 0, 0))
+        return resim
+
+    def _kare_hazirla(self, bolgeler: list[dict[str, Any]],
+                      maske: list[tuple[float, float, float, float]] | None = None) -> tuple[Any, list, bytes]:
+        """İş parçacığında: kare al + maske + bölgeleri kes + parmak izi (4K karede PIL işi olay döngüsünü tutmasın)."""
         resim = self.kare_kaynagi()
+        if maske:
+            resim = self._maskele(resim, maske)
         parcalar = [(i, b, *kirp(resim, b)) for i, b in enumerate(bolgeler)]
         if parcalar:
             izi = b"".join(parmak_izi(p[2]) for p in parcalar)
@@ -297,21 +502,25 @@ class Isleme:
     async def adim(self) -> None:
         ayar = self.ayar()
         bolgeler = bolgeleri_temizle(ayar.get("bolgeler"))
-        resim, parcalar, izi = await asyncio.to_thread(self._kare_hazirla, bolgeler)
+        maske = self.maske_kutulari(ayar)
+        resim, parcalar, izi = await asyncio.to_thread(self._kare_hazirla, bolgeler, maske)
         anahtar = tuple((b["x"], b["y"], b["g"], b["y2"], b["tur"]) for b in bolgeler)
         if self._izi is None or anahtar != self._bolge_anahtari or fark(izi, self._izi) > DEGISIM_ESIGI:
             self._okuma = await asyncio.to_thread(self._oku, resim, parcalar)
         self._izi = izi  # değişmediyse son OCR sonucu yeniden kullanılır
         self._bolge_anahtari = anahtar
-        satirlar = self._okuma.satirlar
+        satirlar = self._suz(self._okuma.satirlar)
+        genel = _genel_olcek(ayar)
         if bolgeler:
-            altyazi = [s for _, tur, s in satirlar if tur == "altyazi"]
-            diger = self._bolgeli_ogeler(satirlar)
+            altyazi = [s for i, _, s in satirlar if i < len(bolgeler) and _altyazi_bolgesi(bolgeler[i])]
+            diger = self._bolgeli_ogeler(satirlar, bolgeler, genel)
         else:
             b = ayar["bolge_altyazi"]
-            altyazi = [s for _, _, s in satirlar if bolgede_mi(s, b)]
-            diger = [(None, o) for o in birlestir([s for _, _, s in satirlar if not bolgede_mi(s, b)]
-                                                  ) if len(o.metin.strip()) >= 2]
+            altyazi = [s for _, _, s in satirlar if bolgede_mi(s, b) and altyazi_bandinda(s)]
+            diger = [(None, o, (None, boyut_hesapla(o, 1.0, genel)))
+                     for o in birlestir([s for _, _, s in satirlar if not bolgede_mi(s, b)])
+                     if len(o.metin.strip()) >= 2]
+        altyazi = altyazi_sec(altyazi)
         await self._altyazi_adimi(altyazi, ayar)
         if bolgeler or ayar.get("ekrani_cevir"):   # bölge seçildiyse açıkça istenmiştir
             await self._ekran_adimi(diger, ayar)
@@ -321,13 +530,30 @@ class Isleme:
             self.yayin.yayinla("ekran-sil", {})
 
     @staticmethod
-    def _bolgeli_ogeler(satirlar: list[tuple[int, str | None, Satir]]) -> list[tuple[str | None, Satir]]:
-        """Altyazı dışındaki bölgelerin satırlarını, her bölge kendi içinde birleştirerek öğeye çevirir."""
-        out: list[tuple[str | None, Satir]] = []
-        for i in sorted({i for i, tur, _ in satirlar if tur != "altyazi"}):
+    def _bolgeli_ogeler(satirlar: list[tuple[int, str | None, Satir]], bolgeler: list[dict[str, Any]],
+                        genel: float = 1.0) -> list[tuple[str | None, Satir, tuple[Any, float]]]:
+        """Altyazı dışındaki bölgelerin satırlarını öğeye çevirir (PROTOKOL 11.4). Çıktı: (tür, satır,
+        (hedef kutusu | None, boyut_px)); hedef None = kaynağın üstüne. Kullanıcı hedef kutusu çizdiyse
+        bölgenin bütün satırları tek öğede toplanır (üst üste binmesin)."""
+        out: list[tuple[str | None, Satir, tuple[Any, float]]] = []
+        for i in sorted({i for i, tur, _ in satirlar if tur != "altyazi" and i < len(bolgeler)
+                         and not _altyazi_bolgesi(bolgeler[i])}):
+            b = bolgeler[i]
             grup = [s for j, _, s in satirlar if j == i]
-            tur = next(t for j, t, _ in satirlar if j == i)
-            out += [(tur, o) for o in birlestir(grup) if len(o.metin.strip()) >= 2]
+            tur = b["tur"]
+            hedef = b.get("hedef")
+            olcek = float(b.get("olcek") or 1.0)
+            if isinstance(hedef, dict) and grup:
+                sirali = sorted(grup, key=lambda s: (round(s.y, 2), s.x))
+                x1, y1 = min(s.x for s in sirali), min(s.y for s in sirali)
+                x2, y2 = max(s.x + s.g for s in sirali), max(s.y + s.y2 for s in sirali)
+                tek = Satir(" ".join(s.metin for s in sirali), x1, y1, x2 - x1, y2 - y1, len(sirali))
+                if len(tek.metin.strip()) >= 2:
+                    out.append((tur, tek, ((hedef["x"], hedef["y"], hedef["g"], hedef["y2"]),
+                                           boyut_hesapla(tek, olcek, genel))))
+                continue
+            out += [(tur, o, (None, boyut_hesapla(o, olcek, genel))) for o in birlestir(grup)
+                    if len(o.metin.strip()) >= 2]
         return out
 
     # -- altyazı (7.2 kuralları) --
@@ -338,6 +564,10 @@ class Isleme:
         if len(metin) > EN_COK_ALTYAZI_KARAKTER:
             metin = ""     # ekranın yazı dolu bir yerine denk gelindi (menü/harita): altyazı sayılmaz
         aday = normallestir(metin)
+        if sirali and aday:
+            self._son_kutu = (min(s.x for s in sirali), min(s.y for s in sirali),
+                              max(s.x + s.g for s in sirali) - min(s.x for s in sirali),
+                              max(s.y + s.y2 for s in sirali) - min(s.y for s in sirali))
         if aday:
             a.kayip, a.gitti = 0, None
             if a.aktif and aday == a.norm:
@@ -412,6 +642,8 @@ class Isleme:
             a.id = self._yeni_id("a")
         a.asil, a.metin, a.konusan, a.tur = govde, c.metin, konusan, "altyazi"
         a.aktif, a.norm, a.kayip, a.gitti = True, aday, 0, None
+        a.kutu = self._son_kutu
+        self._ceviri_kaydet(govde, c.metin)
         a.min_bitis = a.bitis = simdi + s / 1000
         kaynak = getattr(c, "kaynak", "motor")
         if devam and hasattr(self.yonetici, "satir_guncelle"):
@@ -427,22 +659,29 @@ class Isleme:
                 return e
         return None
 
-    async def _ekran_adimi(self, gelen: list[tuple[str | None, Satir]], ayar: dict[str, Any]) -> None:
+    async def _ekran_adimi(self, gelen: list[tuple[str | None, Satir, tuple[Any, float]]],
+                           ayar: dict[str, Any]) -> None:
         simdi = self.saat()
         kullanilan: set[str] = set()
-        yeniler: list[tuple[str | None, Satir, str]] = []
-        gelen = [(t, o) for t, o in gelen if len(o.metin) <= EN_COK_OGE_KARAKTER][:EN_COK_OGE]
-        for tur_ip, o in gelen:
+        yeniler: list[tuple[str | None, Satir, tuple[Any, float], str]] = []
+        degisti = False
+        gelen = [g for g in gelen if len(g[1].metin) <= EN_COK_OGE_KARAKTER][:EN_COK_OGE]
+        for tur_ip, o, hz in gelen:
             n = normallestir(o.metin)
             e = self._oge_bul(n, o, kullanilan)
             if e:
                 kullanilan.add(e.id)
+                ozel = hz[0] is not None   # bölge hedefi/ölçeği sonradan değiştiyse yerinde güncelle
+                kutu = _hedef_kutusu(o, hz[0]) if ozel else e.hedef   # kaynağın üstündekinde OCR titremesi yok sayılır
+                if abs(hz[1] - e.boyut_px) >= 1.0 or ozel != e.ozel or (ozel and kutu != e.hedef):
+                    e.hedef, e.boyut_px, e.ozel = kutu, hz[1], ozel
+                    degisti = True
             elif n:
-                yeniler.append((tur_ip, o, n))
+                yeniler.append((tur_ip, o, hz, n))
         # yeni öğe iki kare üst üste aynı yerde görünürse kesinleşir (OCR titremesine karşı)
         kesin = [y for y in yeniler
-                 if any(n == y[2] and _yakin(s, y[1]) for n, s in self._oge_adaylari)]
-        self._oge_adaylari = [(n, o) for _, o, n in yeniler]
+                 if any(n == y[3] and _yakin(s, y[1]) for n, s in self._oge_adaylari)]
+        self._oge_adaylari = [(n, o) for _, o, _, n in yeniler]
         sonuc: dict[int, Any] = {}
         if kesin:
             try:
@@ -451,9 +690,8 @@ class Isleme:
                 raise
             except Exception as e:
                 self._hata(e)
-                self._oge_adaylari = [(n, o) for _, o, n in yeniler]
+                self._oge_adaylari = [(n, o) for _, o, _, n in yeniler]
                 return
-        degisti = False
         # görünmeyen öğeler: 3 kare kayıp -> gitti -> 1 sn sonra kalkar
         bos = [e for e in self._ogeler if e.id not in kullanilan]
         for e in bos:
@@ -464,18 +702,21 @@ class Isleme:
             if e.id in kullanilan:
                 e.kayip, e.gitti = 0, None
         # kesinleşen öğe, aynı yerdeki eski öğenin yerine geçer (yerinde güncelleme); yoksa eklenir
-        for i, (tur_ip, o, n) in enumerate(kesin):
+        for i, (tur_ip, o, hz, n) in enumerate(kesin):
             c, tur = sonuc[i]
             eski = next((e for e in bos if _ortusme(e, o) >= 0.5), None)
             aciklama = c.aciklama[:60] if getattr(c, "aciklama", None) else None
+            kutu, ozel = _hedef_kutusu(o, hz[0]), hz[0] is not None
             if eski is not None:
                 bos.remove(eski)
                 eski.norm, eski.asil, eski.metin, eski.aciklama, eski.tur = n, o.metin, c.metin, aciklama, tur
                 eski.x, eski.y, eski.g, eski.y2 = o.x, o.y, o.g, o.y2
+                eski.hedef, eski.ozel, eski.boyut_px = kutu, ozel, hz[1]
                 eski.kayip, eski.gitti = 0, None
             else:
                 self._ogeler.append(_Oge(self._yeni_id("o"), n, o.metin, o.x, o.y, o.g, o.y2, tur,
-                                         c.metin, aciklama))
+                                         c.metin, aciklama, hedef=kutu, ozel=ozel, boyut_px=hz[1]))
+            self._ceviri_kaydet(o.metin, c.metin)
             degisti = True
         kalan = [e for e in self._ogeler if e.gitti is None or simdi - e.gitti < EKRAN_GITTI_SN]
         if len(kalan) != len(self._ogeler):
@@ -483,10 +724,10 @@ class Isleme:
         if degisti:
             self._ekran_yayinla()
 
-    async def _ekran_cevir(self, kesin: list[tuple[str | None, Satir, str]],
+    async def _ekran_cevir(self, kesin: list[tuple[str | None, Satir, tuple[Any, float], str]],
                            ayar: dict[str, Any]) -> dict[int, tuple[Any, str]]:
         turler = []
-        for tur_ip, o, _ in kesin:
+        for tur_ip, o, *_ in kesin:
             turler.append("gorev" if tur_ip == "ust_yazi" else tur_bul(o))
         acik = bool(ayar.get("kisa_aciklama"))
         # açıklama yalnız görev/bilgi öğeleri için istenir
@@ -508,7 +749,10 @@ class Isleme:
         liste = []
         for e in self._ogeler:
             oge = {"id": e.id, "x": round(e.x, 4), "y": round(e.y, 4), "g": round(e.g, 4),
-                   "y2": round(e.y2, 4), "metin": e.metin, "tur": e.tur}
+                   "y2": round(e.y2, 4), "metin": e.metin, "tur": e.tur,
+                   "hedef": {"x": round(e.hedef[0], 4), "y": round(e.hedef[1], 4),
+                             "g": round(e.hedef[2], 4), "y2": round(e.hedef[3], 4)},
+                   "boyut_px": e.boyut_px}
             if e.aciklama:
                 oge["aciklama"] = e.aciklama
             liste.append(oge)
