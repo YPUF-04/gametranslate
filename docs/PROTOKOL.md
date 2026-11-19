@@ -310,3 +310,20 @@ Dizin: `https://raw.githubusercontent.com/argosopentech/argospm-index/main/index
 
 ### 12.4 Ekran öğesi boyutu
 Varsayılan yazı boyu kaynak satır yüksekliğinin 0.75'i (1080p'de 12–22 px); öğe tek satıra sığmaya çalışır, genişlik metne göre (kaynak genişliğinin en çok 1.6 katı, ekranın en çok %35'i), yalnız boşlukta satır kırılır, en çok 2 satır; sığmazsa yazı küçülür (en az 11 px) ve sonuna "…" konur.
+
+## 13. Kısayol tuşları, eski yazının temizlenmesi, ana ekran (sürüm 0.8)
+
+### 13.1 Kısayol tuşları (yalnız Windows; diğerlerinde panelden)
+Ayar `kisayollar`: `{"baslat_durdur":"ctrl+shift+t","gizle_goster":"ctrl+shift+h","yeniden_oku":"ctrl+shift+r"}` (boş = kapalı).
+- Sunucu sürecinde ayrı bir iş parçacığı Windows `RegisterHotKey` ile dinler (oyun odaktayken de çalışır).
+- `baslat_durdur`: çeviriyi başlatır/durdurur. `gizle_goster`: ekran katmanını gizler/gösterir (çeviri sürer); SSE `katman-gizle` / `katman-goster`. `yeniden_oku`: bekleyen yazıları siler, hemen yeni kare okur.
+- `GET /api/kisayollar` → `{"destek":true,"kayitli":{"baslat_durdur":true,...},"hata":{"gizle_goster":"Bu tuş başka bir programda kullanılıyor."}}`
+- Durum değişince `durum` olayı yayınlanır (panel ve katman küçük bir bildirim gösterir: "Çeviri durdu", "Yazılar gizlendi").
+
+### 13.2 Kaynak yazı gidince çeviri de gitsin
+- Ekran öğeleri: kaynak bölgede metin 2 ardışık karede görünmezse 600 ms sonra `ekran` olayında çıkarılır (öğe `id` bazlı); bölge tamamen boşsa o bölgenin tüm öğeleri silinir.
+- Altyazı: §7.2 aynen; ama metin kaybolunca en çok 1500 ms daha kalır (en az gösterim süresi uzunsa bile).
+- Kare değişmediği için OCR atlanırsa bu sayaçlar ilerlemez → değişiklik algısı "boş bölge"yi de değişiklik sayar.
+
+### 13.3 Ana ekran (kurulum bittikten sonra)
+Üstte büyük Başlat/Durdur + durum; altında kartlar: Oyun · Görüntü kaynağı · Çeviri motoru · Nerede göreyim · Çevrilecek yerler · Kısayol tuşları · Son çeviriler (kompakt). Her kartta tek "Değiştir" → o sihirbaz adımını tek başına açar, "Bitti" ile ana ekrana döner. Gelişmiş ayarlar tek bağlantının arkasında.
