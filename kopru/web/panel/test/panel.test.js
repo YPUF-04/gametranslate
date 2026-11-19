@@ -108,7 +108,12 @@ function sahteSunucu() {
       switch (q.method + ' ' + url.pathname) {
         case 'GET /api/durum':
           return j({ calisiyor: st.calisiyor, motor: st.ayarlar.motor, yedekte: false, tv_sayisi: st.calisiyor ? 1 : 0,
-            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir, uyari: st.uyari || null });
+            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir, uyari: st.uyari || null, bildirim: st.bildirim || null });
+        case 'GET /api/kisayollar': {   // PROTOKOL 13.1
+          const k = st.ayarlar.kisayollar || { baslat_durdur: 'ctrl+shift+t', gizle_goster: 'ctrl+shift+h', yeniden_oku: 'ctrl+shift+r' }, hata = st.kisayolHata || {};
+          const kayitli = {}; for (const ad of Object.keys(k)) kayitli[ad] = !!k[ad] && !hata[ad];
+          return j({ destek: true, kayitli, hata });
+        }
         case 'GET /api/ayarlar': return j(Object.assign({ claude: false, gemini: !!st.anahtarlar.gemini }, st.ayarlar));
         case 'POST /api/ayarlar': if (b.bolgeler) st.bolgePostlari.push(b.bolgeler); Object.assign(st.ayarlar, b, b.gorunum ? { gorunum: Object.assign({}, st.ayarlar.gorunum, b.gorunum) } : {}); return j({ tamam: true });
         case 'GET /api/kare': st.kareIstekleri++; if (st.kareHata) return j({ hata: 'yakalama_yok', mesaj: 'Ekran görüntüsü alınamadı. Oyunun penceresini küçültmeyin ve "Görüntüyü yenile"ye basın.', ayrinti: 'YakalamaHatasi: DXGI_ERROR_ACCESS_LOST (pencere:123)' }, 400); s.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); return s.end(KARE);
@@ -661,7 +666,7 @@ function dilKontrol() {
     adim('6. Hazır: 5 adımın özeti yeşil, büyük Başlat');
     await sayfa.click('#hazir-baslat');
 
-    // ================= ANA EKRAN =================
+    // ================= ANA EKRAN (PROTOKOL 13.3) =================
     await sayfa.waitForSelector('#izin-evet');
     assert.match(await metin('.pencere'), /Bu oyunun çevirilerini hatırlayayım mı\?/);
     await gor('v2-izin.png');
@@ -669,7 +674,33 @@ function dilKontrol() {
     await sayfa.waitForFunction(() => /Durdur/.test(document.querySelector('#baslat-durdur').textContent));
     assert.strictEqual(st.ayarlar.hafiza_izni, true);
     assert.strictEqual(st.ayarlar.kurulum_tamam, true);
-    adim('Başlat → izin penceresi: Evet → hafiza_izni=true, kurulum_tamam=true');
+    adim('Başlat → izin penceresi: Evet → hafiza_izni=true, kurulum_tamam=true → ana ekran');
+    // --- yapı: üstte büyük düğme + durum + oyun + kısayol ipucu; altında kartlar, her birinde tek "Değiştir"
+    await sayfa.waitForSelector('#pano');
+    for (const id of ['pk-oyun', 'pk-goruntu', 'pk-motor', 'pk-gosterim', 'pk-bolge', 'pk-kisayol', 'son-kart', 'erisim-kart', 'dublaj-kart']) assert.strictEqual(await sayfa.locator('#pano #' + id).count(), 1, id);
+    assert.strictEqual(await sayfa.locator('#pano .pk-degistir').count(), 6, 'altı kartta tek Değiştir');
+    for (const id of ['oyun', 'goruntu', 'motor', 'gosterim', 'bolge', 'kisayol']) assert.strictEqual(await sayfa.locator('#pk-' + id + ' button.pk-degistir').count(), 1);
+    assert.match(await sayfa.getAttribute('#degistir-motor', 'aria-label'), /^Değiştir: Çeviri motoru$/);
+    assert.strictEqual(await sayfa.locator('#kurulum-durumu, #rehber-link, #bolge-ac, #oyun-degistir, #gelismis #tv-kart, #son-yazi').count(), 0, 'eski dağınık denetimler yok');
+    assert.ok(await sayfa.evaluate(() => document.querySelector('#dublaj-kart').tagName === 'DETAILS' && !document.querySelector('#dublaj-kart').open), 'dublaj kapalı gelir');
+    assert.match(await metin('#durum-metin'), /Çalışıyor/);
+    assert.match(await metin('#pk-goruntu'), /PS Remote Play[\s\S]*Bu bilgisayarda/);
+    assert.match(await metin('#pk-motor-deger'), /Yerel/);
+    assert.match(await metin('#pk-motor'), /Çevrimdışı, bu bilgisayarda/);
+    assert.match(await metin('#pk-gosterim'), /Bu bilgisayarın ekranında[\s\S]*Yazı büyüklüğü %70/);
+    assert.match(await metin('#bolge-ozet'), /4 kare seçili/);
+    await sayfa.waitForSelector('#kisayol-ipucu:not([hidden])');
+    assert.match(await metin('#kisayol-ipucu'), /Oyun içinde: Ctrl\+Shift\+T başlat \/ durdur/);
+    assert.strictEqual(await sayfa.locator('#kisayol-ipucu kbd').count(), 3, 'tuş kapakları');
+    assert.match(await metin('#kisayol-ozet'), /Başlat \/ durdur[\s\S]*Ctrl[\s\S]*Hazır[\s\S]*Yazıları gizle \/ göster[\s\S]*Hemen yeniden oku/);
+    // küçük resimler: görüntü kaynağı canlı kare (istekle yenilenir), çevrilecek yerler kutulu harita
+    await sayfa.waitForSelector('#pk-kare-goruntu img:not([hidden])');
+    assert.strictEqual(await sayfa.locator('#pk-kare-bolge .pk-kutu').count(), 4);
+    const kareOnce = st.kareIstekleri;
+    await sayfa.click('#pano-kare-yenile');
+    await sayfa.waitForFunction(() => !document.querySelector('#pano-kare-yenile.donuyor'));
+    assert.strictEqual(st.kareIstekleri, kareOnce + 1, 'kare yalnız istekle yenilenir');
+    adim('ana ekran: büyük düğme, durum, kısayol ipucu; 6 kart tek "Değiştir" ile; küçük kare ve kutulu harita; eski dağınık denetimler yok');
     // --- /api/durum uyari.mesaj ana ekranda nazik bir bant olarak
     assert.ok(!(await sayfa.isVisible('#uyari-banner')));
     st.uyari = { mesaj: 'Tüm ekranı okuyorum. PS Remote Play penceresini seçersen daha temiz sonuç alırsın.' };
@@ -678,9 +709,53 @@ function dilKontrol() {
     st.uyari = null;
     await sayfa.waitForSelector('#uyari-banner', { state: 'hidden', timeout: 6000 });
     adim('ana ekran: durum.uyari.mesaj bandı görünür, kalkınca gizlenir');
-    // --- Bağlantı rehberleri: 6 ekran rehberi, hepsi açılır
-    await sayfa.click('#rehber-link');
+    // --- durum.bildirim → küçük bildirim (kısayolla durdurma gibi)
+    st.bildirim = { id: 1, metin: 'Yazılar gizlendi' };
+    await sayfa.waitForSelector('.tost.bilgi:has-text("Yazılar gizlendi")', { timeout: 6000 });
+    await sayfa.waitForTimeout(2300);
+    assert.strictEqual(await sayfa.locator('.tost:has-text("Yazılar gizlendi")').count(), 1, 'aynı bildirim bir kez');
+    st.bildirim = { id: 2, metin: 'Çeviri durdu' }; st.calisiyor = false;
+    await sayfa.waitForSelector('.tost.bilgi:has-text("Çeviri durdu")', { timeout: 6000 });
+    await sayfa.waitForFunction(() => /Başlat/.test(document.querySelector('#baslat-durdur').textContent));
+    await sayfa.click('#baslat-durdur');
+    await sayfa.waitForFunction(() => /Durdur/.test(document.querySelector('#baslat-durdur').textContent));
+    adim('durum.bildirim küçük bildirim olarak bir kez gösterildi; kısayolla durunca düğme güncellendi');
+
+    // --- her "Değiştir" kendi aşamasını tek başına açar, "Bitti, ana ekrana dön" ile döner
+    const DEG = [['goruntu', 1, '[data-cihaz=pc]', 'ileri'], ['motor', 3, '[data-motor=gemini]', 'vazgec'], ['gosterim', 4, '[data-gosterim=bilgisayar]', 'ileri'], ['bolge', 5, '#bolge-sahne:not([hidden])', 'ana-don']];
+    for (const [ad, n, sec, nasil] of DEG) {
+      await sayfa.click('#degistir-' + ad);
+      await sayfa.waitForSelector(sec);
+      assert.strictEqual(await sayfa.locator('.noktalar').count(), 0, ad + ': adım çubuğu yok (odaklı ekran)');
+      assert.strictEqual(await sayfa.locator('#atla-' + n).count(), 0, ad + ': "Bu adımı atla" yok');
+      assert.match(await metin('#ileri-' + n), /Bitti, ana ekrana dön/);
+      assert.ok(!(await sayfa.isDisabled('#ileri-' + n)), ad + ': Bitti hemen basılabilir');
+      assert.ok(await sayfa.isVisible('#ana-don'));
+      if (ad === 'motor') {   // kalite yalnız burada (gelişmişte tekrar yok)
+        await sayfa.click('[data-motor=gemini]');
+        await sayfa.click('#kalite-wiz-hizli');
+        await sayfa.waitForTimeout(150);
+        assert.strictEqual(st.ayarlar.kalite, 'hizli');
+      }
+      if (ad === 'gosterim') {   // ekran ölçeği yalnız burada
+        await sayfa.fill('#ekran-olcek', '120');
+        await sayfa.waitForTimeout(450);
+        assert.strictEqual(st.ayarlar.gorunum.ekran_olcek, 1.2);
+      }
+      await sayfa.click(nasil === 'ana-don' ? '#ana-don' : '#' + nasil + '-' + n);
+      await sayfa.waitForSelector('#pano');
+      assert.strictEqual(await sayfa.evaluate(() => document.activeElement && document.activeElement.tagName), 'H1', ad + ': odak ana ekran başlığında');
+    }
+    assert.strictEqual(st.ayarlar.motor, 'yerel', 'Vazgeç motoru değiştirmez');
+    assert.match(await metin('#pk-motor-deger'), /Yerel/);
+    assert.match(await metin('#pk-gosterim'), /Yazı büyüklüğü %120/);
+    adim('Değiştir: Görüntü (Bitti), Çeviri (kalite, Vazgeç), Nerede (ekran ölçeği, Bitti), Çevrilecek yerler (Ana ekran) — her biri tek başına açıldı ve döndü');
+
+    // --- Bağlantı rehberleri: yalnız üst menüden; 6 ekran rehberi, hepsi açılır
+    await sayfa.click('#tercih-ac');
+    await sayfa.click('#rehber-menu');
     await sayfa.waitForSelector('#rehber-ekran');
+    assert.ok(!(await sayfa.isVisible('#tercih .tercih-pano')), 'menü kapanır');
     assert.match(await metin('h1'), /Bağlantı rehberleri/);
     assert.strictEqual(await sayfa.locator('#rehber-ekran details.rehber-kart').count(), 6);
     const REH = { bilgisayar: [3, /Kenarlıksız/], lg: [4, /Developer Mode/], samsung: [5, /Küçük bir gecikme[\s\S]*Win \+ K/], android: [5, /Android \/ Google TV[\s\S]*Win \+ K/], apple: [4, /Windows'ta yerleşik AirPlay yok[\s\S]*HDMI/], hdmi: [4, /HDMI kablosunu tak/] };
@@ -695,33 +770,65 @@ function dilKontrol() {
     }
     assert.match(await metin('#rehber-samsung .rehber-adres'), /http:\/\/192\.168\.1\.20:8642\/tv/);
     assert.ok(await sayfa.isVisible('#rehber-lg #tv-kart'), 'LG rehberinde mevcut TV kurulum kartı');
+    assert.strictEqual(await sayfa.inputValue('#rehber-lg #tv-ip'), '192.168.1.30', 'TV IP hatırlanır');
     assert.ok(await sayfa.isVisible('#rehber-apple .rehber-adres'));
-    // ekran görüntüsü için yalnız birkaç rehber açık
     for (const id of ['lg', 'android', 'apple', 'hdmi']) await sayfa.click('#rehber-' + id + ' > summary');
     await sayfa.click('#rehber-samsung .rehber-sorun > summary');
     await gor('rehber-baglanti.png', true);
     await sayfa.click('#rehber-samsung > summary');
     await sayfa.click('#rehber-bilgisayar > summary');
     await sayfa.click('#rehber-geri');
-    await sayfa.waitForSelector('#baslat-durdur');
-    // Görünüm menüsünden de açılır
-    await sayfa.click('#tercih-ac');
-    await sayfa.click('#rehber-menu');
-    await sayfa.waitForSelector('#rehber-ekran');
-    assert.ok(!(await sayfa.isVisible('#tercih .tercih-pano')), 'menü kapanır');
-    await sayfa.click('#rehber-geri');
-    await sayfa.waitForSelector('#baslat-durdur');
-    adim('Bağlantı rehberleri: ana ekran bağlantısı ve Görünüm menüsü; 6 rehber açılır (adımlar, Sorun mu var?, adres, LG kartı); geri');
-    // kurulum durumu: 5 adım, tıklayınca o adım yeniden
-    assert.strictEqual(await sayfa.locator('#kurulum-durumu .kurulum-cip.tamam').count(), 5);
-    await sayfa.click('#kurulum-adim-4');
-    await sayfa.waitForSelector('[data-gosterim=bilgisayar]');
-    assert.match(await metin('#ileri-4'), /Bitti, ana ekrana dön/);
-    await sayfa.click('#vazgec-4');
-    await sayfa.waitForSelector('#kurulum-durumu');
-    adim('ana ekran: "Kurulum durumu" 5 ✓, bir adıma basınca o adım tek başına açılır, Vazgeç ile döner');
-    // oyun seçimi (ana ekrandan): yeni oyun, paket, seç
-    await sayfa.click('#oyun-degistir');
+    await sayfa.waitForSelector('#pano');
+    adim('Bağlantı rehberleri: üst menüden; 6 rehber açılır (adımlar, Sorun mu var?, adres, LG kartı + hatırlanan IP); geri');
+
+    // --- kısayol tuşları: tıkla → tuşlara bas → kaydet; çakışma ve "başka program kullanıyor" gösterilir
+    await sayfa.click('#degistir-kisayol');
+    await sayfa.waitForSelector('#kisayol-ekrani');
+    assert.match(await metin('h1'), /Kısayol tuşları/);
+    assert.match(await metin('#kisayol-baslat_durdur'), /Ctrl\s*\+?\s*Shift\s*\+?\s*T/);
+    await sayfa.click('#kisayol-gizle_goster');
+    assert.strictEqual(await sayfa.getAttribute('#kisayol-gizle_goster', 'aria-pressed'), 'true');
+    assert.match(await metin('#kisayol-gizle_goster'), /Tuşlara bas/);
+    await sayfa.keyboard.press('Control+Shift+KeyY');
+    assert.strictEqual(await sayfa.getAttribute('#kisayol-gizle_goster', 'aria-pressed'), 'false');
+    assert.strictEqual(await sayfa.evaluate(() => [...document.querySelectorAll('#kisayol-gizle_goster kbd')].map((k) => k.textContent).join('+')), 'Ctrl+Shift+Y');
+    // tek tuş kabul edilmez (oyunla karışır)
+    await sayfa.click('#kisayol-yeniden_oku');
+    await sayfa.keyboard.press('KeyQ');
+    assert.match(await metin('#kisayol-yeniden_oku-mesaj'), /Ctrl, Alt ya da Shift ile birlikte bas/);
+    await sayfa.keyboard.press('Escape');
+    assert.match(await metin('#kisayol-yeniden_oku'), /Ctrl[\s\S]*R/, 'Esc eskisini korur');
+    // çakışma: aynı tuş iki işe verilirse ikisi de uyarı gösterir, Kaydet kapanır
+    await sayfa.click('#kisayol-baslat_durdur');
+    await sayfa.keyboard.press('Control+Shift+KeyY');
+    assert.match(await metin('#kisayol-baslat_durdur-mesaj'), /"Yazıları gizle \/ göster" için de seçili/);
+    assert.match(await metin('#kisayol-gizle_goster-mesaj'), /"Başlat \/ durdur" için de seçili/);
+    assert.ok(await sayfa.isDisabled('#kisayol-kaydet'));
+    await gor('kisayol-cakisma.png');
+    await sayfa.click('#kisayol-baslat_durdur');
+    await sayfa.keyboard.press('Control+Shift+KeyT');
+    assert.ok(!(await sayfa.isDisabled('#kisayol-kaydet')));
+    await sayfa.click('#kisayol-kaydet');
+    await sayfa.waitForSelector('.tost:has-text("Kısayollar kaydedildi")');
+    await sayfa.waitForSelector('#pano');
+    assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/ayarlar']), { kisayollar: { baslat_durdur: 'ctrl+shift+t', gizle_goster: 'ctrl+shift+y', yeniden_oku: 'ctrl+shift+r' } });
+    await sayfa.waitForFunction(() => /Ctrl[\s\S]*Shift[\s\S]*Y/.test(document.querySelector('[data-kisayol=gizle_goster]').textContent));
+    // sunucu: tuş başka programda → editörde ve kartta açıkça görünür
+    st.kisayolHata = { yeniden_oku: 'Bu tuş başka bir programda kullanılıyor.' };
+    await sayfa.click('#degistir-kisayol');
+    await sayfa.waitForSelector('#kisayol-ekrani');
+    await sayfa.click('#kisayol-kaydet');
+    await sayfa.waitForFunction(() => /başka bir programda/.test(document.querySelector('#kisayol-yeniden_oku-mesaj').textContent));
+    assert.ok(await sayfa.isVisible('#kisayol-ekrani'), 'sorun varken editörde kalır');
+    await sayfa.click('#ana-don');
+    await sayfa.waitForSelector('#kisayol-ozet-hata');
+    assert.match(await metin('#kisayol-ozet-hata'), /Bu tuş başka bir programda kullanılıyor\./);
+    assert.match(await metin('[data-kisayol=yeniden_oku] .ks-durum'), /Çalışmıyor/);
+    st.kisayolHata = null;
+    adim('kısayollar: kutuya tıkla + Ctrl+Shift+Y kaydedildi, tek tuş reddedildi, Esc korudu, çakışma iki satırda + Kaydet kapalı, kisayollar POST edildi, başka program hatası gösterildi');
+
+    // --- oyun: Değiştir → oyun seçimi (yeni oyun, oyun bilgisi, paket)
+    await sayfa.click('#degistir-oyun');
     await sayfa.waitForSelector('[data-oyun=gta6]');
     assert.match(await metin('h1'), /Hangi oyunu oynuyorsun/);
     assert.match(await metin('[data-oyun=gta6]'), /1\.240 cümle hatırlıyorum/);
@@ -733,7 +840,7 @@ function dilKontrol() {
     await sayfa.click('#oyun-ekle');
     await sayfa.waitForSelector('[data-oyun=cyberpunk][aria-pressed=true]');
     assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/oyunlar']), { ad: 'Cyberpunk', aciklama: 'Fütüristik şehirde aksiyon', hitap: 'siz' });
-    // --- oyun bilgisi: çevrimdışı motor → sunucu mesajı + Gemini önerisi; sonra hazırla → ilerleme → incele → düzelt → kaydet
+    // oyun bilgisi: çevrimdışı motor → sunucu mesajı + Gemini önerisi; sonra hazırla → ilerleme → incele → düzelt → kaydet
     assert.strictEqual(st.ayarlar.motor, 'yerel');
     st.bilgiMod = 'cevrimdisi';
     assert.match(await metin('#bilgi-kart'), /karakter, yer ve eşya adlarını öğrenirim; çevirilerde bu adlar bozulmaz/);
@@ -768,11 +875,18 @@ function dilKontrol() {
     assert.match(st.govdeler['POST /api/paket'], /name="dosya"/);
     await sayfa.waitForSelector('[data-oyun=rdr3][aria-pressed=true]');
     await sayfa.click('#ileri-oyun');
-    await sayfa.waitForSelector('#aktif-oyun-ad');
-    await sayfa.waitForFunction(() => /RDR 3/.test(document.querySelector('#aktif-oyun-ad').textContent));
+    await sayfa.waitForSelector('#pano');
+    await sayfa.waitForFunction(() => /RDR 3/.test(document.querySelector('#aktif-oyun-ad').textContent) && /RDR 3/.test(document.querySelector('#pk-oyun-ad').textContent));
     assert.strictEqual(st.ayarlar.aktif_oyun, 'rdr3');
-    await sayfa.waitForFunction(() => /deneme altyazısı/.test(document.querySelector('#son-yazi').textContent), null, { timeout: 6000 });
-    adim('oyun seçimi (ana ekrandan): yeni oyun (hitap: siz), çeviri paketi içe alındı, seçildi');
+    await sayfa.waitForFunction(() => /812 cümle hatırlıyorum/.test(document.querySelector('#aktif-oyun-alt').textContent));
+    // "Oyun bilgisini hazırla" (kartta): oyun ekranı açılır ve hazırlık hemen başlar
+    await sayfa.click('#pano-bilgi');
+    await sayfa.waitForSelector('#bilgi-ilerleme, #bilgi-terimler');
+    assert.match(await metin('#bilgi-kart'), /RDR 3/);
+    await sayfa.click('#ana-don');
+    await sayfa.waitForSelector('#pano');
+    adim('oyun: yeni oyun (hitap: siz), paket içe alındı, seçildi; karttaki "Oyun bilgisini hazırla" hazırlığı başlattı');
+
     // erişim satırı: kalan süre, kötü kod, iyi kod, sınır uyarısı
     await sayfa.waitForSelector('#erisim-metin');
     assert.match(await sayfa.textContent('#erisim-metin'), /Bugün kalan ücretsiz süre: 12 dk/);
@@ -789,40 +903,39 @@ function dilKontrol() {
     await sayfa.waitForSelector('#erisim-sinir', { timeout: 6000 });
     assert.match(await sayfa.textContent('#erisim-sinir'), /Bugünkü ücretsiz süre doldu\. Erişim kodunu gir ya da yarın devam et\. Daha önce çevrilmiş cümleler gösterilmeye devam eder\./);
     assert.match(await sayfa.textContent('#erisim-metin'), /0 dk/);
-    await gor('v4-erisim-sinir.png');
-    await sayfa.fill('#erisim-kod', 'ak1-iyi');
-    assert.strictEqual(await sayfa.inputValue('#erisim-kod'), 'ak1-iyi');
     await sayfa.fill('#erisim-kod', 'AK1-IYI');
     await sayfa.click('#erisim-kaydet');
     await sayfa.waitForFunction(() => /Sınırsız erişim açık ✓/.test(document.querySelector('#erisim-metin').textContent));
     assert.ok(!(await sayfa.locator('#erisim-sinir').count()), 'kod girilince uyarı kalkar');
     assert.ok(!(await sayfa.locator('#kodum-var').count()), 'kod açıkken "Kodum var" gizlenir');
     assert.deepStrictEqual(st.kodlar, ['AK1-KOTU', 'AK1-IYI']);
-    await gor('v4-erisim-acik.png');
     adim('erişim: kalan dakika, yanlış kod dostça hata, süre dolunca sakin uyarı, doğru kod → "Sınırsız erişim açık ✓"');
-    // son çeviriler + düzelt
+
+    // son çeviriler: kompakt — en çok 5 satır, kendi içinde kayan odaklanabilir bölge
     await sayfa.waitForSelector('.ceviri-satir[data-id=a1]', { timeout: 6000 });
     await sayfa.waitForSelector('#oneri-kart:not([hidden])');
-    // kompakt "Son çeviriler": en çok 5 satır, kendi içinde kayan odaklanabilir bölge, "Tümünü göster" en çok 20
     const eskiCev = st.ceviriler.slice();
     for (let i = 0; i < 24; i++) st.ceviriler.push({ id: 'x' + i, asil: 'Line ' + i, ceviri: 'Satır ' + i, kaynak: 'motor' });
     await sayfa.waitForFunction(() => document.querySelectorAll('#son-liste .ceviri-satir').length === 5, null, { timeout: 8000 });
+    await sayfa.waitForTimeout(3300);
+    assert.strictEqual(await sayfa.locator('#son-liste .ceviri-satir').count(), 5, 'en çok 5');
+    assert.strictEqual(await sayfa.locator('#son-tumu').count(), 0, '"Tümünü göster" yok: hep kompakt');
     assert.strictEqual(await sayfa.getAttribute('#son-liste', 'tabindex'), '0');
     assert.match(await sayfa.getAttribute('#son-liste', 'aria-label'), /Son çeviriler listesi/);
-    assert.ok(await sayfa.evaluate(() => document.querySelector('#son-liste').getBoundingClientRect().height <= 321));
-    assert.match(await metin('#son-tumu'), /Tümünü göster/);
-    await sayfa.click('#son-tumu');
-    assert.strictEqual(await sayfa.locator('#son-liste .ceviri-satir').count(), 20, 'en çok 20');
-    assert.ok(await sayfa.evaluate(() => { const e = document.querySelector('#son-liste'); return e.scrollHeight > e.clientHeight && e.getBoundingClientRect().height <= 321; }), 'kart kendi içinde kayar');
-    assert.strictEqual(await sayfa.getAttribute('#son-tumu', 'aria-expanded'), 'true');
-    await sayfa.click('#son-tumu');
-    assert.strictEqual(await sayfa.locator('#son-liste .ceviri-satir').count(), 5);
+    assert.ok(await sayfa.evaluate(() => { const e = document.querySelector('#son-liste'); return getComputedStyle(e).overflowY === 'auto' && e.getBoundingClientRect().height <= 253; }), 'kendi içinde kayar, kısa kalır');
+    assert.ok(await sayfa.evaluate(() => document.querySelector('#son-kart').getBoundingClientRect().height < 420), 'kart kompakt');
     st.ceviriler.length = 0; st.ceviriler.push(...eskiCev);
     await sayfa.waitForFunction(() => document.querySelectorAll('#son-liste .ceviri-satir').length === 2, null, { timeout: 8000 });
-    await sayfa.waitForSelector('#son-tumu', { state: 'hidden' });
+    adim('son çeviriler: en çok 5 satır, kendi içinde kayar, kart kısa');
     await sayfa.waitForSelector('#guncelleme-bar #guncelle-dugme', { timeout: 8000 });
     assert.match(await sayfa.textContent('#guncelleme-bar'), /Yeni sürüm hazır \(0\.3\.0\)\./);
-    await gor('v3-guncelleme.png');
+    await gor('pano-calisiyor.png');
+    if (SHOTS) {   // tam sayfa (güncelleme bandıyla) ve dar ekran
+      await sayfa.screenshot({ path: path.join(SHOTS, 'pano-tam.png'), fullPage: true });
+      await sayfa.setViewportSize({ width: 390, height: 860 }); await sayfa.waitForTimeout(200);
+      await sayfa.screenshot({ path: path.join(SHOTS, 'pano-dar.png'), fullPage: true });
+      await sayfa.setViewportSize({ width: 1280, height: 900 });
+    }
     await sayfa.click('#guncelle-dugme');
     await sayfa.waitForFunction(() => /indiriliyor/.test(document.querySelector('#guncelleme-metin').textContent));
     assert.ok(await sayfa.locator('#guncelleme-bar [role=progressbar]').count());
@@ -831,15 +944,15 @@ function dilKontrol() {
     assert.ok(st.istekler.includes('POST /api/guncelleme/kur'));
     adim('güncelleme çubuğu: Yeni sürüm hazır → Güncelle → ilerleme → "Program kendini yeniden başlatacak."');
 
-    // bölge kartı (ana ekran): özet, "Çevrilecek yerleri düzenle" → 5. adım tek başına → otomatiğe dön
-    assert.match(await sayfa.textContent('#bolge-ozet'), /4 kare seçili/);
-    await sayfa.click('#bolge-ac');
+    // çevrilecek yerler: Değiştir → 5. adım tek başına → kayıtlı kareler + hedefler geri gelir → otomatiğe dön
+    await sayfa.click('#degistir-bolge');
     await sayfa.waitForSelector('#bolge-sahne:not([hidden])');
     assert.strictEqual(await sayfa.locator('.bolge').count(), 4);
     assert.ok(await sayfa.isHidden('#bolge-ipucu'), 'ipucu yalnız ilk sefer');
     assert.ok(await sayfa.isChecked('#bolge-hedef-0-kendim') && await sayfa.isChecked('#bolge-hedef-2-altyazi') && await sayfa.isChecked('#bolge-hedef-1-ustune'), 'kayıtlı hedefler geri gelir');
     assert.strictEqual(await sayfa.inputValue('#bolge-olcek-0'), '80');
     assert.strictEqual(await sayfa.locator('.bolge-hedef').count(), 1);
+    await gor('pano-degistir.png');
     await sayfa.click('#bolge-otomatik');
     await sayfa.waitForSelector('#dogrula-5:not([hidden])');
     assert.match(await sayfa.textContent('#dogrula-5'), /Otomatik: ekrandaki yazıları kendim bulacağım\./);
@@ -847,24 +960,25 @@ function dilKontrol() {
     assert.strictEqual(await sayfa.locator('.bolge').count(), 0);
     await sayfa.click('#ileri-5');
     await sayfa.waitForSelector('#bolge-ozet');
-    assert.match(await sayfa.textContent('#bolge-ozet'), /Şimdi otomatik/);
-    adim('ana ekran: "Çevrilecek yerleri düzenle" 5. adımı açtı, "Otomatik bulsun" bölgeleri temizledi, ana ekrana dönüldü');
-    await gor('v2-ana.png');
+    assert.match(await sayfa.textContent('#bolge-ozet'), /Otomatik/);
+    assert.strictEqual(await sayfa.locator('#pk-kare-bolge .pk-kutu').count(), 0);
+    adim('Çevrilecek yerler: Değiştir 5. adımı açtı, "Otomatik bulsun" bölgeleri temizledi, ana ekrana dönüldü');
     await sayfa.click('[data-id=a1] .duzelt');
     await sayfa.fill('[data-id=a1] .duzelt-girdi', 'Dün gece neredeydin sen?');
     await sayfa.click('[data-id=a1] .duzelt-kaydet');
     await sayfa.waitForSelector('.tost:has-text("bundan sonra hep böyle")');
     assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/duzelt']), { asil: 'Where were you last night?', ceviri: 'Dün gece neredeydin sen?' });
     assert.match(await sayfa.textContent('[data-id=a1]'), /neredeydin sen/);
-    adim('son çeviriler görünür, Düzelt doğru gövdeyi gönderdi');
-    // öneri kabul
+    adim('son çeviriler: Düzelt doğru gövdeyi gönderdi');
     await sayfa.click('[data-oneri="Vice City"] .kabul');
     await sayfa.waitForSelector('#oneri-kart[hidden]', { state: 'attached' });
     assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/oneriler']), { asil: 'Vice City', kabul: true });
     adim('öneri kabul edildi');
-    // Türkçe dublaj kartı (PROTOKOL 9)
-    await sayfa.waitForSelector('#dublaj-kart #dublaj-motor-pocket');
+    // Türkçe dublaj kartı (PROTOKOL 9): kapalı gelir, açılınca tüm denetimler
     assert.match(await sayfa.textContent('#dublaj-kart h2'), /Türkçe dublaj \(deneysel\)/);
+    assert.match(await sayfa.textContent('#dublaj-ozet'), /Kapalı/);
+    await sayfa.click('#dublaj-kart > summary');
+    await sayfa.waitForSelector('#dublaj-kart #dublaj-motor-pocket');
     assert.match(await sayfa.textContent('#dublaj-ne'), /Karakterler kendi sesleriyle Türkçe konuşur\. Sadece oyunun sesi dinlenir, mikrofon açılmaz, hiçbir ses kaydedilmez\./);
     assert.match(await sayfa.textContent('#dublaj-motor-chatterbox'), /Bilgisayarın için önerilen/);
     assert.match(await sayfa.textContent('#dublaj-motor-chatterbox'), /En iyi kalite, güçlü ekran kartı ister/);
@@ -873,10 +987,11 @@ function dilKontrol() {
     assert.match(await sayfa.textContent('#dublaj-motor-elevenlabs'), /En doğal, ücretli; ses örneği ElevenLabs'e gider/);
     assert.match(await sayfa.textContent('#dublaj-donanim'), /NVIDIA GeForce RTX 3060/);
     assert.strictEqual(await sayfa.locator('#dublaj-hazirla').count(), 0, 'kapalıyken hazırlık düğmesi yok');
-    adim('dublaj kartı: açıklama, öneri rozeti (donanımdan) ve dürüst notlar görünür');
+    adim('dublaj kartı: kapalı gelir; açıklama, öneri rozeti (donanımdan) ve dürüst notlar görünür');
     await sayfa.click('#dublaj-motor-pocket');
     await sayfa.waitForSelector('#dublaj-hazirla');
     assert.strictEqual(st.ayarlar.dublaj.motor, 'pocket');
+    assert.match(await sayfa.textContent('#dublaj-ozet'), /Pocket/);
     assert.ok(await sayfa.isDisabled('#dublaj-dene'), 'hazır olmadan Dene kapalı');
     await sayfa.click('#dublaj-hazirla');
     await sayfa.waitForFunction(() => /İndiriliyor… %/.test((document.querySelector('#dublaj-durum') || {}).textContent || ''));
@@ -916,61 +1031,64 @@ function dilKontrol() {
     assert.strictEqual(st.ayarlar.dublaj.motor, 'kapali'); assert.strictEqual(st.ayarlar.dublaj.elevenlabs_klon_onay, false);
     await gor('3-dublaj.png');
     adim('dublaj: ElevenLabs ancak onayla seçilir; ikinci onay ayrıdır; onay geri alınınca motor kapanır');
-    // gelişmiş ayarlar
-    await sayfa.click('#gelismis > summary');
+    await sayfa.click('#dublaj-kart > summary');
+
+    // gelişmiş ayarlar: tek bağlantının arkasında, ayrı ekran; ana ekrandaki şeyler burada tekrar edilmez
+    await sayfa.click('#gelismis-ac');
+    await sayfa.waitForSelector('#gelismis');
+    assert.match(await metin('h1'), /Gelişmiş ayarlar/);
+    assert.strictEqual(await sayfa.locator('#gelismis #tv-kart, #kalite-ayar, #ekran-olcek-ayar, #aktif-motor').count(), 0, 'tekrar eden denetim yok');
     assert.match(await sayfa.getAttribute('#paket-paylas', 'href'), /\/api\/paket\/rdr3$/);
-    assert.strictEqual(await sayfa.inputValue('#tv-ip'), '192.168.1.30', 'IP hatırlanır');
-    assert.strictEqual(await sayfa.locator('#gelismis #tv-kart').count(), 1);
     await sayfa.click('#guncelleme-denetle-ayar', { force: true });
     await sayfa.waitForTimeout(150);
     assert.strictEqual(st.ayarlar.guncelleme_denetle, false);
     await sayfa.click('#guncelleme-denetle');
     await sayfa.waitForFunction(() => /Yeni sürüm var: 0\.3\.0/.test(document.querySelector('#guncelleme-durum').textContent));
     assert.ok(st.istekler.includes('POST /api/guncelleme/denetle'));
-    adim('ayarlar: güncelleme anahtarı kapandı, "Güncellemeleri denetle" çalıştı, TV kartı ayarlarda');
-    await sayfa.click('#kalite-ayar-hizli');
-    await sayfa.waitForTimeout(150);
-    assert.strictEqual(st.ayarlar.kalite, 'hizli');
     await sayfa.click('#hafiza-sil');
     await sayfa.click('#sil-evet');
     await sayfa.waitForFunction(() => /Hafıza silindi/.test(document.body.textContent));
     assert.ok(st.silindi);
-    await sayfa.fill('#ekran-olcek-ayar', '120');
-    await sayfa.waitForTimeout(500);
-    assert.strictEqual(st.ayarlar.gorunum.ekran_olcek, 1.2, 'ayarlarda ekran ölçeği kaydedildi');
-    adim('ayarlarda kalite, paylaş bağlantısı ve hafıza silme çalıştı');
     await sayfa.click('#ses-cevir', { force: true });
     await sayfa.waitForSelector('#ses-not:not([hidden])');
     assert.strictEqual(st.ayarlar.ses_cevir, true);
     await sayfa.selectOption('#hedef-dil', 'de');
     await sayfa.waitForTimeout(200);
     assert.strictEqual(st.ayarlar.hedef_dil, 'de');
-    adim('ana ekran: başlat, durum, son yazı, ses onayı, hedef dil');
     await sayfa.click('#sozluk-kaydet');
     await sayfa.waitForFunction(() => /Kaydedildi/.test(document.querySelector('#sozluk-durum').textContent));
-    await gor('4-ana.png');
+    await sayfa.waitForFunction(() => /deneme altyazısı/.test(document.querySelector('#son-yazi').textContent));
+    await gor('4-gelismis.png', true);
+    adim('gelişmiş ayarlar (ayrı ekran): güncelleme, hafıza silme, ses onayı, hedef dil, sözlük, altyazı önizlemesi; tekrar eden denetim yok');
 
     await sayfa.click('[data-dil=en]');
-    await sayfa.waitForFunction(() => /Stop/.test(document.querySelector('#baslat-durdur').textContent));
+    await sayfa.waitForFunction(() => /Also translate other on-screen text/.test(document.body.textContent));
     await sayfa.waitForTimeout(200);
     assert.strictEqual(st.ayarlar.arayuz_dili, 'en');
-    assert.match(await sayfa.textContent('body'), /Also translate other on-screen text/);
+    assert.match(await metin('h1'), /Advanced settings/);
+    await sayfa.click('#gelismis-don');
+    await sayfa.waitForFunction(() => /Stop/.test(document.querySelector('#baslat-durdur').textContent));
     assert.match(await sayfa.textContent('#erisim-metin'), /Unlimited access is on ✓/);
     assert.match(await sayfa.textContent('#guncelleme-metin'), /The program will restart by itself\./);
-    assert.match(await sayfa.textContent('#tv-kart h2'), /Install on the TV in one click/);
     assert.match(await sayfa.textContent('#dublaj-kart h2'), /Turkish dubbing \(experimental\)/);
     assert.match(await sayfa.textContent('#dublaj-ne'), /Characters speak Turkish in their own voices\. Only the game's sound is listened to, the microphone is never turned on, and no audio is recorded\./);
-    assert.match(await sayfa.textContent('#rehber-link'), /Connection guides/);
-    await sayfa.click('#rehber-link');
+    assert.match(await sayfa.textContent('#kisayol-ipucu'), /In game: Ctrl\+Shift\+T start \/ stop/);
+    assert.match(await sayfa.textContent('#pk-kisayol h2'), /Hotkeys/);
+    assert.match(await sayfa.getAttribute('#degistir-gosterim', 'aria-label'), /^Change: Where do I see it\?$/);
+    assert.doesNotMatch(await sayfa.textContent('#pano'), /Değiştir|Oyun içinde|Son çeviriler/);
+    await gor('5-ana-en.png');
+    await sayfa.click('#tercih-ac');
+    assert.match(await sayfa.textContent('#rehber-menu'), /Connection guides/);
+    await sayfa.click('#rehber-menu');
     await sayfa.waitForSelector('#rehber-ekran');
     assert.match(await sayfa.textContent('h1'), /Connection guides/);
+    assert.match(await sayfa.textContent('#tv-kart h2'), /Install on the TV in one click/);
     await sayfa.click('#rehber-apple > summary');
     assert.match(await sayfa.textContent('#rehber-apple'), /What is this for\?[\s\S]*no built-in AirPlay[\s\S]*Something wrong\?/);
     assert.doesNotMatch(await sayfa.textContent('#rehber-ekran'), /Nasıl yapılır|Sorun mu var/);
     await sayfa.click('#rehber-geri');
     await sayfa.waitForSelector('#baslat-durdur');
-    await gor('5-ana-en.png');
-    adim('EN diline geçildi ve ayar kaydedildi');
+    adim('EN diline geçildi ve ayar kaydedildi; ana ekran, kısayol ipucu ve rehberler İngilizce');
 
     // güncelleme hata verirse (ör. doğrulanamadı) mesaj ve "Try again" görünür
     st.guncelleme = { asama: 'hata', ilerleme: 0, sayac: 0, mesaj: 'The downloaded file could not be verified and was not installed, please try again later.' };

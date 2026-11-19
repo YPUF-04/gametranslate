@@ -887,7 +887,7 @@
     function ozet(n) {
       if (n === 1) { var k = S.kaynaklar.filter(function (x) { return x.kod === (S.kaynak || a.kaynak); })[0]; return k ? k.ad : ''; }
       if (n === 2) return S.okunan && S.okunan.length ? t('okuma.tamam', { n: S.okunan.length }) : '';
-      if (n === 3) { var m = motorBilgi(S.motor || a.motor); return m ? m.ad : ''; }
+      if (n === 3) { var m = motorBilgi(a.motor || S.motor); return m ? m.ad : ''; }
       if (n === 4) return t('gosterim.' + (S.gosterim || a.gosterim || 'bilgisayar'));
       if (n === 5) return bolgeOzet();
       return '';
@@ -1267,7 +1267,7 @@
         h('p', { class: 'pk-deger', id: 'pk-goruntu-deger', text: kaynak ? kaynak.ad : (a.kaynak || t('pano.secilmedi')) }),
         h('p', { class: 'pk-alt', text: cihaz ? t('cihaz.' + cihaz) : t('pano.cihaz_yok') })])] });
 
-    var m = motorBilgi(S.motor || a.motor);
+    var m = motorBilgi(a.motor || S.motor);
     var motorAlt = !m ? '' : (m.kod === 'yerel' ? t('pano.motor_yerel') : t('pano.kalite', { ad: t('kalite.' + (a.kalite || 'en_iyi')) }));
     var motorK = panoKart({ ad: 'motor', ik: 'ceviri', baslik: t('pano.motor'), degistir: function () { asamaAc(3, 'ana'); },
       govde: [h('p', { class: 'pk-deger', id: 'pk-motor-deger', text: m ? m.ad : t('pano.secilmedi') }), h('p', { class: 'pk-alt', text: motorAlt })] });
@@ -1471,7 +1471,7 @@
         if (dinleyen !== ad) return;
         if (e.key === 'Tab') { dinlemeBitir(); return; }
         e.preventDefault(); e.stopPropagation();
-        if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.shiftKey) { dinlemeBitir(); return; }
+        if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.shiftKey) { s.uyari = null; dinlemeBitir(); return; }
         if ((e.key === 'Backspace' || e.key === 'Delete') && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
           deger[ad] = ''; s.uyari = null; dinlemeBitir(); hepsiniCiz(); duyuru.textContent = t('kisayol.temizlendi', { ad: t('kisayol.' + ad) }); return;
         }
