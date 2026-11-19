@@ -47,15 +47,16 @@ class ClaudeMotoru:
                 system=istem.sistem_bloklari(kaynak, hedef, sozluk, aciklama, baglam),
                 messages=[{"role": "user", "content": istem.kullanici_metni(metinler, baglam)}],
             )
-        except anthropic.AuthenticationError as e:
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
             raise AnahtarHatasi("claude") from e
-        except (anthropic.APIConnectionError, anthropic.APITimeoutError,
-                anthropic.InternalServerError, anthropic.RateLimitError) as e:
+        except anthropic.APIError as e:   # bağlantı, zaman aşımı, 429, 5xx, 400/404 (model yok) ...
             raise AgHatasi(str(type(e).__name__)) from e
+        except (TimeoutError, OSError) as e:
+            raise AgHatasi(type(e).__name__) from e
         if getattr(yanit, "stop_reason", None) == "refusal":
             # Model reddetti: asıl metni olduğu gibi göster
             return [Ceviri(m) for m in metinler]
-        ham = "".join(b.text for b in yanit.content if getattr(b, "type", "") == "text")
+        ham = "".join(str(getattr(b, "text", "")) for b in (yanit.content or []) if getattr(b, "type", "") == "text")
         try:
             sonuc, terimler = istem.yaniti_coz_tam(ham, len(metinler), aciklama)
         except ValueError as e:

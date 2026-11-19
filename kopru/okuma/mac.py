@@ -2,6 +2,8 @@
 """macOS Apple Vision OCR (ocrmac paketi)."""
 from __future__ import annotations
 
+import importlib
+
 import sys
 from typing import Any
 
@@ -12,9 +14,9 @@ def kullanilabilir() -> bool:
     if sys.platform != "darwin":
         return False
     try:
-        import ocrmac  # noqa: F401
+        importlib.import_module("ocrmac")
         return True
-    except ImportError:
+    except Exception:   # eksik ya da bozuk kurulum (ImportError, DLL/OSError)
         return False
 
 

@@ -53,12 +53,13 @@ def anahtar_olustur() -> Path:
         return yol
     yol.parent.mkdir(parents=True, exist_ok=True)
     k = Ed25519PrivateKey.generate()
-    yol.write_bytes(k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
-                                    serialization.NoEncryption()))
-    try:
-        os.chmod(yol, 0o600)
-    except OSError:
-        pass
+    pem = k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                          serialization.NoEncryption())
+    # dosya baştan yalnız sahibine açık oluşur (yaz-sonra-chmod arasındaki açık pencere olmasın);
+    # "x": var olan anahtarın üzerine asla yazılmaz
+    fd = os.open(yol, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(pem)
     return yol
 
 
@@ -146,7 +147,18 @@ class Isleyici(BaseHTTPRequestHandler):
             govde = '<div class="u">%s</div>' % html.escape(hata) + govde
         self._yaz(200, SAYFA.replace("%GOVDE%", govde).encode())
 
+    def _yerel_mi(self) -> bool:
+        """DNS yeniden bağlama / başka siteden gelen istekleri reddeder (yalnız 127.0.0.1 ya da localhost)."""
+        def ad(v: str | None) -> str:
+            v = (v or "").split("://", 1)[-1].split("/", 1)[0]
+            return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
+        izinli = {"127.0.0.1", "localhost"}
+        koken = self.headers.get("Origin")
+        return ad(self.headers.get("Host")) in izinli and (koken is None or ad(koken) in izinli)
+
     def do_GET(self) -> None:
+        if not self._yerel_mi():
+            return self._yaz(403, b"")
         if self.path.startswith("/csv?k="):
             try:
                 kodlar = json.loads(base64.urlsafe_b64decode(self.path[7:]))
@@ -162,7 +174,12 @@ class Isleyici(BaseHTTPRequestHandler):
         self._sayfa()
 
     def do_POST(self) -> None:
-        n = int(self.headers.get("Content-Length") or 0)
+        if not self._yerel_mi():
+            return self._yaz(403, b"")
+        try:
+            n = max(0, int(self.headers.get("Content-Length") or 0))
+        except ValueError:
+            return self._yaz(400, b"")
         from urllib.parse import parse_qs
         f = {k: v[0] for k, v in parse_qs(self.rfile.read(min(n, 4096)).decode()).items()}
         if self.path == "/anahtar":

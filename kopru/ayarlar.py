@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
+import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from .dublaj import VARSAYILAN as VARSAYILAN_DUBLAJ
+
+log = logging.getLogger("kopru.ayarlar")
 
 VARSAYILAN_GORUNUM: dict[str, Any] = {
     "yazi_boyutu": 44, "konum": "alt", "kenar_bosluk": 0.08, "arka_plan": 0.55,
@@ -112,32 +117,137 @@ def _birlestir(taban: dict[str, Any], ek: dict[str, Any]) -> dict[str, Any]:
     return sonuc
 
 
-def yukle() -> dict[str, Any]:
-    yol = ayar_dizini() / "ayarlar.json"
+EN_COK_YEDEK = 5
+
+
+def bozuk_yedekle(yol: Path) -> Path | None:
+    """Okunamayan dosyayı silmeden yanına kopyalar (`<ad>.bozuk-<an>`); en çok 5 yedek tutulur."""
     try:
-        okunan = json.loads(yol.read_text(encoding="utf-8"))
-        if not isinstance(okunan, dict):
-            okunan = {}
-    except (OSError, ValueError):
-        okunan = {}
-    return _birlestir(VARSAYILAN, okunan)
+        hedef = yol.with_name(f"{yol.name}.bozuk-{time.strftime('%Y%m%d-%H%M%S')}")
+        n = 1
+        while hedef.exists():
+            n += 1
+            hedef = yol.with_name(f"{yol.name}.bozuk-{time.strftime('%Y%m%d-%H%M%S')}-{n}")
+        shutil.copy2(yol, hedef)
+        eskiler = sorted(yol.parent.glob(f"{yol.name}.bozuk-*"))
+        for e in eskiler[:-EN_COK_YEDEK]:
+            try:
+                e.unlink()
+            except OSError:
+                pass
+        log.warning("%s okunamadı; kopyası %s olarak saklandı, varsayılanlarla devam ediliyor", yol.name, hedef.name)
+        return hedef
+    except OSError:
+        return None
 
 
-def kaydet(ayar: dict[str, Any]) -> None:
-    """Atomik yazım: geçici dosya + os.replace."""
-    dizin = ayar_dizini()
-    dizin.mkdir(parents=True, exist_ok=True)
-    fd, gecici = tempfile.mkstemp(dir=dizin, suffix=".tmp")
+def atomik_yaz(yol: Path, metin: str, deneme: int = 8) -> None:
+    """Geçici dosya + os.replace. Windows'ta hedef başka bir program (antivirüs, eşitleme) tarafından
+    kilitliyse (PermissionError) kısa aralıklarla yeniden dener."""
+    yol.parent.mkdir(parents=True, exist_ok=True)
+    fd, gecici = tempfile.mkstemp(dir=yol.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(ayar, f, ensure_ascii=False, indent=2)
-        os.replace(gecici, dizin / "ayarlar.json")
+            f.write(metin)
+        for i in range(deneme):
+            try:
+                os.replace(gecici, yol)
+                return
+            except PermissionError:
+                if i == deneme - 1:
+                    raise
+                time.sleep(0.02 * (i + 1))
     except BaseException:
         try:
             os.unlink(gecici)
         except OSError:
             pass
         raise
+
+
+def _tip_duzelt(deger: Any, taban: Any) -> Any:
+    """Dosyadan gelen değeri varsayılanın türüne uydurur; uymuyorsa varsayılanı verir."""
+    if isinstance(taban, dict):
+        if not isinstance(deger, dict):
+            return copy.deepcopy(taban)
+        out = dict(deger)
+        for k, t in taban.items():
+            if k in out:
+                out[k] = _tip_duzelt(out[k], t)
+        return out
+    if isinstance(taban, bool):
+        return deger if isinstance(deger, bool) else taban
+    if isinstance(taban, (int, float)):
+        return deger if isinstance(deger, (int, float)) and not isinstance(deger, bool) else taban
+    if isinstance(taban, str):
+        return deger if isinstance(deger, str) else taban
+    if isinstance(taban, list):
+        return deger if isinstance(deger, list) else copy.deepcopy(taban)
+    return deger   # None: herhangi bir değer olabilir
+
+
+def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
+    """Bozuk ya da elle yanlış yazılmış değerler çökertmesin: türü/aralığı tutmayan alan varsayılana döner."""
+    s = _tip_duzelt(ayar, VARSAYILAN)
+    v = VARSAYILAN
+    if isinstance(ayar, dict) and "yedek_motor" in ayar and ayar["yedek_motor"] is None:
+        s["yedek_motor"] = None    # "yedek yok" geçerli bir seçimdir
+    if not (isinstance(s["kapi"], int) and 1024 <= s["kapi"] <= 65535):
+        s["kapi"] = v["kapi"]
+    if s["arayuz_dili"] not in ("tr", "en"):
+        s["arayuz_dili"] = v["arayuz_dili"]
+    if s["kalite"] not in ("en_iyi", "dengeli", "hizli"):
+        s["kalite"] = v["kalite"]
+    for alan in ("motor",):
+        if not s[alan].strip():
+            s[alan] = v[alan]
+    if s["hafiza_izni"] not in (None, True, False):
+        s["hafiza_izni"] = None
+    if not s["aktif_oyun"].strip():
+        s["aktif_oyun"] = v["aktif_oyun"]
+    s["modeller"] = {str(k): m for k, m in s["modeller"].items() if isinstance(m, str)}
+    s["bolgeler"] = bolgeleri_temizle(s["bolgeler"])
+    b = s["bolge_altyazi"]
+    if not all(_oran(b.get(f)) for f in ("x", "y", "g", "y2")):
+        s["bolge_altyazi"] = copy.deepcopy(v["bolge_altyazi"])
+    if s["gorunum"].get("konum") not in ("alt", "ust"):
+        s["gorunum"]["konum"] = v["gorunum"]["konum"]
+    if s["erisim"].get("ucretsiz_dakika_gun") is not None and not (
+            isinstance(s["erisim"]["ucretsiz_dakika_gun"], int) and 0 <= s["erisim"]["ucretsiz_dakika_gun"] <= 1440):
+        s["erisim"]["ucretsiz_dakika_gun"] = v["erisim"]["ucretsiz_dakika_gun"]
+    from . import dublaj as dublaj_mod
+    d = s["dublaj"]
+    for k in list(d):
+        if k in v["dublaj"] and not dublaj_mod.ayar_gecerli({k: d[k]}):
+            d[k] = v["dublaj"][k]
+    return s
+
+
+def yukle() -> dict[str, Any]:
+    """Ayarları okur. Dosya yok/bozuk/eksikse program yine açılır: bozuk dosyanın kopyası saklanır."""
+    yol = ayar_dizini() / "ayarlar.json"
+    okunan: dict[str, Any] = {}
+    try:
+        ham = yol.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        ham = None
+    except (OSError, UnicodeDecodeError):
+        ham = None
+        bozuk_yedekle(yol)
+    if ham is not None:
+        try:
+            v = json.loads(ham)
+            if not isinstance(v, dict):
+                raise ValueError("sozluk degil")
+            okunan = v
+        except ValueError:
+            bozuk_yedekle(yol)
+    return duzelt(_birlestir(VARSAYILAN, okunan))
+
+
+def kaydet(ayar: dict[str, Any]) -> None:
+    """Atomik yazım: geçici dosya + os.replace (Windows'ta kilitliyse yeniden dener)."""
+    atomik_yaz(ayar_dizini() / "ayarlar.json", json.dumps(ayar, ensure_ascii=False, indent=2))
 
 
 def guncelle(ayar: dict[str, Any], kismi: dict[str, Any]) -> dict[str, Any]:

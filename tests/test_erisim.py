@@ -3,7 +3,6 @@ import importlib.util
 import json
 import re
 import subprocess
-import sys
 import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -402,7 +401,7 @@ def test_saf_dogrulayici_cryptography_ile_uyumlu():
 
 
 def test_uygulama_cryptography_yuklemez():
-    import subprocess, sys
+    import sys
     kod = "import sys, kopru.sunucu; print('cryptography' in sys.modules)"
     cikti = subprocess.run([sys.executable, "-c", kod], capture_output=True, text=True, check=True).stdout.strip()
     assert cikti == "False"

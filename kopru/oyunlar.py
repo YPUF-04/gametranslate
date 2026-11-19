@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import tempfile
 import unicodedata
 from datetime import date
 from pathlib import Path
@@ -51,18 +49,7 @@ def sozluk_yolu(kod: str) -> Path:
 
 
 def _yaz_json(yol: Path, veri: Any) -> None:
-    yol.parent.mkdir(parents=True, exist_ok=True)
-    fd, gecici = tempfile.mkstemp(dir=yol.parent, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(veri, f, ensure_ascii=False, indent=2)
-        os.replace(gecici, yol)
-    except BaseException:
-        try:
-            os.unlink(gecici)
-        except OSError:
-            pass
-        raise
+    ayarlar.atomik_yaz(yol, json.dumps(veri, ensure_ascii=False, indent=2))
 
 
 def _temiz_karakterler(k: Any) -> list[dict[str, str]]:

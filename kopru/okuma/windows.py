@@ -2,6 +2,8 @@
 """Windows 10/11 yerleşik OCR (winocr paketi)."""
 from __future__ import annotations
 
+import importlib
+
 import sys
 from typing import Any
 
@@ -12,9 +14,9 @@ def kullanilabilir() -> bool:
     if sys.platform != "win32":
         return False
     try:
-        import winocr  # noqa: F401
+        importlib.import_module("winocr")
         return True
-    except ImportError:
+    except Exception:   # eksik ya da bozuk kurulum (ImportError, DLL/OSError)
         return False
 
 

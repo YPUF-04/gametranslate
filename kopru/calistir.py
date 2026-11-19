@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
+import socket
 import sys
+import urllib.request
 import webbrowser
 
 from aiohttp import web
 
 from . import ayarlar, metinler
 from .sunucu import DURUM, GUNCELLEME, lan_adresleri, uygulama_olustur
+
+log = logging.getLogger("kopru")
 
 ORNEKLER = [
     ("Hello! This is a test subtitle.", "Merhaba! Bu bir deneme altyazısıdır.", None),
@@ -48,16 +53,85 @@ def yaz(metin: str) -> None:
         pass
 
 
+def gunluk_kur() -> None:
+    """Konsol varsa konsola, yoksa (paketli pencere uygulaması) ayar klasöründeki dosyaya yazar."""
+    bicim = "%(asctime)s %(name)s %(message)s"
+    if sys.stderr is not None:
+        logging.basicConfig(level=logging.INFO, format=bicim)
+        return
+    try:
+        from logging.handlers import RotatingFileHandler
+        dizin = ayarlar.ayar_dizini()
+        dizin.mkdir(parents=True, exist_ok=True)
+        isleyici = RotatingFileHandler(dizin / "kopru.log", maxBytes=512_000, backupCount=2, encoding="utf-8")
+        logging.basicConfig(level=logging.INFO, format=bicim, handlers=[isleyici])
+    except OSError:
+        logging.basicConfig(level=logging.WARNING, handlers=[logging.NullHandler()])
+
+
+KAPI_DENEME = 10   # ayarlı kapı doluysa bu kadar sonraki kapıya bakılır
+
+
+def kapi_bos_mu(kapi: int) -> bool:
+    """Kapıya bağlanabiliyor muyuz (asyncio ile aynı soket seçenekleri: POSIX'te SO_REUSEADDR, Windows'ta yok)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if sys.platform != "win32":
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("0.0.0.0", kapi))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def bizim_mi(kapi: int) -> bool:
+    """Kapıda zaten çalışan bir AltYazıKöprüsü var mı (TV'nin de sorduğu /kopru/merhaba)."""
+    try:
+        acici = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # yerel istek: vekil kullanma
+        with acici.open(f"http://127.0.0.1:{kapi}/kopru/merhaba", timeout=1) as y:
+            return json.loads(y.read(4096)).get("uygulama") == "altyazikoprusu"
+    except Exception:   # noqa: BLE001 — cevap vermeyen/başka program: bizim değil
+        return False
+
+
+def kapi_sec(kapi: int) -> tuple[str, int | None]:
+    """("kullan", kapi) | ("zaten_acik", kapi) | ("yok", None)."""
+    if kapi_bos_mu(kapi):
+        return "kullan", kapi
+    if bizim_mi(kapi):
+        return "zaten_acik", kapi
+    for yeni in range(kapi + 1, min(kapi + 1 + KAPI_DENEME, 65536)):
+        if kapi_bos_mu(yeni):
+            return "kullan", yeni
+    return "yok", None
+
+
 def main() -> None:
     _konsolu_hazirla()
     p = argparse.ArgumentParser(prog="kopru", description="AltYazıKöprüsü")
     p.add_argument("--demo", action="store_true", help="örnek altyazıları döngüyle gönder")
     p.add_argument("--tarayici-acma", action="store_true", help="paneli tarayıcıda açma")
     a = p.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    gunluk_kur()
     ayar = ayarlar.yukle()
-    dil, kapi = ayar["arayuz_dili"], ayar["kapi"]
+    dil, ayarli_kapi = ayar["arayuz_dili"], ayar["kapi"]
+    durum, kapi = kapi_sec(ayarli_kapi)
+    if durum == "zaten_acik":
+        # ikinci kez açıldı: yenisini başlatma, açık olanın panelini göster
+        panel = f"http://127.0.0.1:{kapi}/"
+        yaz(metinler.mesaj("zaten_acik", dil).format(adres=panel))
+        if not a.tarayici_acma:
+            webbrowser.open(panel)
+        return
+    if kapi is None:
+        yaz(metinler.mesaj("kapi_yok", dil).format(kapi=ayarli_kapi))
+        sys.exit(1)
+    if kapi != ayarli_kapi:
+        yaz(metinler.mesaj("kapi_dolu", dil).format(kapi=ayarli_kapi, yeni=kapi))
     app = uygulama_olustur(ayar)
+    app[DURUM].calisan_kapi = kapi
 
     if a.demo:
         async def baslat(app: web.Application) -> None:
@@ -78,13 +152,25 @@ def main() -> None:
     panel = f"http://127.0.0.1:{kapi}/"
     yaz(metinler.mesaj("panel_adres", dil).format(adres=panel))
     if not a.tarayici_acma:
+        def tarayici_ac() -> None:
+            try:
+                webbrowser.open(panel)
+            except Exception:   # noqa: BLE001 — tarayıcı açılamazsa adres zaten yazıldı
+                pass
+
         async def ac(_: web.Application) -> None:
-            webbrowser.open(panel)
+            # sunucu dinlemeye başladıktan sonra; webbrowser.open bloklayabilir: yürütücüde
+            asyncio.get_running_loop().call_later(
+                0.6, lambda: asyncio.get_running_loop().run_in_executor(None, tarayici_ac))
         app.on_startup.append(ac)
     try:
-        web.run_app(app, host="0.0.0.0", port=kapi, print=None)
+        web.run_app(app, host="0.0.0.0", port=kapi, print=None, access_log=None)
     except KeyboardInterrupt:
         pass
+    except OSError as e:   # kapı denetimi ile bağlama arasında biri kapıyı aldı
+        log.error("Sunucu başlatılamadı: %s", e)
+        yaz(metinler.mesaj("kapi_yok", dil).format(kapi=kapi))
+        sys.exit(1)
     yaz(metinler.mesaj("durdu", dil))
 
 

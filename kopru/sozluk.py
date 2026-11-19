@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from . import oyunlar
+from . import ayarlar, oyunlar
 
 
 def yol(oyun: str) -> Path:
@@ -25,13 +25,10 @@ def yukle(oyun: str) -> list[dict[str, str]]:
 
 def kaydet(oyun: str, terimler: list[dict[str, str]]) -> None:
     p = yol(oyun)
-    p.parent.mkdir(parents=True, exist_ok=True)
     temiz = [{"asil": str(t["asil"]).strip(), "ceviri": str(t.get("ceviri", t["asil"])).strip()}
              for t in terimler if str(t.get("asil", "")).strip()]
-    gecici = p.with_suffix(".tmp")
-    gecici.write_text(json.dumps({"oyun": oyunlar.kod_coz(oyun), "terimler": temiz}, ensure_ascii=False, indent=2),
-                      encoding="utf-8")
-    gecici.replace(p)
+    ayarlar.atomik_yaz(p, json.dumps({"oyun": oyunlar.kod_coz(oyun), "terimler": temiz},
+                                     ensure_ascii=False, indent=2))
 
 
 def sozluk_dict(terimler: list[dict[str, str]]) -> dict[str, str]:

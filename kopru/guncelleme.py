@@ -33,6 +33,7 @@ KULLANICI_AJANI = "AltYaziKoprusu-guncelleme"
 IZINLI_SUNUCULAR = {"github.com", "api.github.com", "objects.githubusercontent.com",
                     "release-assets.githubusercontent.com"}
 GUN_SN = 24 * 3600
+HATA_BEKLEME_SN = 15 * 60   # başarısız denetimden sonra otomatik yeniden deneme aralığı (GitHub oran sınırı)
 ZAMAN_ASIMI_SN = 5.0
 KURUCU_DESENI = re.compile(r"^AltYaziKoprusu-Kur-.+\.exe$")
 TOPLAM_ADI = "SHA256SUMS.txt"
@@ -195,6 +196,7 @@ class Guncelleme:
         self.toplam_adresi: str | None = None
         self.kurucu_adi: str | None = None
         self.son_denetim = 0.0
+        self.son_hata_an = -1e9
         self.asama = "bosta"     # bosta | indiriliyor | dogrulaniyor | baslatiliyor | hata
         self.ilerleme = 0
         self.hata_kodu: str | None = None
@@ -213,16 +215,15 @@ class Guncelleme:
             self.son_denetim = float(v.get("zaman", 0))
             self._surum_ata(v.get("surum"), v.get("notlar", ""), int(v.get("boyut", 0)),
                             v.get("kurucu_adresi"), v.get("toplam_adresi"), v.get("kurucu_adi"))
-        except (OSError, ValueError, TypeError):
+        except (OSError, ValueError, TypeError, AttributeError):
             pass
 
     def _durum_yaz(self) -> None:
         try:
-            self._dosya().parent.mkdir(parents=True, exist_ok=True)
-            self._dosya().write_text(json.dumps({
+            ayarlar.atomik_yaz(self._dosya(), json.dumps({
                 "zaman": self.son_denetim, "surum": self.surum, "notlar": self.notlar, "boyut": self.boyut,
                 "kurucu_adresi": self.kurucu_adresi, "toplam_adresi": self.toplam_adresi,
-                "kurucu_adi": self.kurucu_adi}, ensure_ascii=False), encoding="utf-8")
+                "kurucu_adi": self.kurucu_adi}, ensure_ascii=False))
         except OSError:
             log.warning("Güncelleme durumu yazılamadı")
 
@@ -244,7 +245,9 @@ class Guncelleme:
         return self.ayar_al().get("guncelleme_denetle", True) is not False
 
     def denetim_zamani_mi(self) -> bool:
-        return self.simdi() - self.son_denetim >= GUN_SN
+        simdi = self.simdi()
+        # panel her açıldığında/yenilendiğinde başarısız istek yağmasın
+        return simdi - self.son_denetim >= GUN_SN and simdi - self.son_hata_an >= HATA_BEKLEME_SN
 
     # --- denetim ---
     async def denetle(self, elle: bool = False) -> None:
@@ -268,9 +271,12 @@ class Guncelleme:
             self._surum_ata(etiket, str(surum_json.get("body") or ""), boyut, kurucu, toplam, kurucu_adi)
             self.son_denetim = self.simdi()
             self._durum_yaz()
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, OSError, GuncellemeHatasi, AttributeError):
+        except asyncio.CancelledError:
+            raise
+        except Exception:   # ağ, bozuk JSON, beklenmeyen şekil: arka plan görevi sessizce ölmesin
             log.info("Güncelleme denetlenemedi (ağ ya da yanıt hatası)")
             self.denetim_hatasi = "guncelleme_denetlenemedi"
+            self.son_hata_an = self.simdi()
 
     def arka_planda_denetle(self, elle: bool = False) -> None:
         """Panelin takılmaması için denetim arka planda; ikisi birden çalışmaz."""
@@ -322,6 +328,14 @@ class Guncelleme:
     def _hata(self, kod: str) -> None:
         self.asama, self.hata_kodu = "hata", kod
 
+    async def kapat(self) -> None:
+        """Program kapanırken arka plan görevlerini iptal eder ve bekler (geçici klasör temizlenir)."""
+        gorevler = [t for t in (self.denetim_gorevi, self.kur_gorevi) if t and not t.done()]
+        for t in gorevler:
+            t.cancel()
+        if gorevler:
+            await asyncio.gather(*gorevler, return_exceptions=True)
+
     async def _kur(self) -> None:
         dizin = Path(tempfile.mkdtemp(prefix="akp-guncelleme-", dir=self.gecici_kok))
         try:
@@ -338,7 +352,8 @@ class Guncelleme:
             self.asama, self.ilerleme = "dogrulaniyor", 96
             toplamlar = toplamlari_oku(await self.http.metin_al(self.toplam_adresi))
             beklenen = toplamlar.get(adi)
-            if not beklenen or dosya_ozeti(dosya) != beklenen:
+            # onlarca MB'lık özet hesabı olay döngüsünü (SSE, panel) tutmasın
+            if not beklenen or await asyncio.to_thread(dosya_ozeti, dosya) != beklenen:
                 raise GuncellemeHatasi("guncelleme_dogrulanamadi")
             self.asama, self.ilerleme = "baslatiliyor", 100
             try:

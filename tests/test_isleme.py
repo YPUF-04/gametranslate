@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-import pytest
 from PIL import Image
 
 from kopru.ayarlar import VARSAYILAN

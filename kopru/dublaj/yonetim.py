@@ -43,6 +43,7 @@ class DublajYonetici:
         self.isleyici: "Isleyici | None" = None
         self._kaynak: Any = None
         self._gorev: asyncio.Task | None = None
+        self._kapat_gorevleri: set[asyncio.Task] = set()   # unutulmuş görev çöp toplanmasın
         self._hazirla_gorevi: asyncio.Task | None = None
         self._donanim: donanim.Donanim | None = None
         self._calisiyor = False       # çeviri (Başlat) çalışıyor mu
@@ -73,10 +74,20 @@ class DublajYonetici:
     def _motor_birak(self) -> None:
         m, self._motor = self._motor, None
         if m is not None and hasattr(m, "kapat"):
+            self._kapat_baslat(m)   # ElevenLabs geçici klonlarını sil
+
+    def _kapat_baslat(self, motor: Any) -> None:
+        async def kapat() -> None:
             try:
-                asyncio.get_running_loop().create_task(m.kapat())   # ElevenLabs geçici klonlarını sil
-            except RuntimeError:
-                pass
+                await motor.kapat()
+            except Exception:   # noqa: BLE001 — temizlik hatası önemsiz
+                log.debug("Dublaj motoru kapatılamadı", exc_info=True)
+        try:
+            t = asyncio.get_running_loop().create_task(kapat())
+        except RuntimeError:
+            return
+        self._kapat_gorevleri.add(t)
+        t.add_done_callback(self._kapat_gorevleri.discard)
 
     def donanim(self) -> donanim.Donanim:
         if self._donanim is None:
@@ -137,6 +148,18 @@ class DublajYonetici:
         self.son_hata = kod
 
     async def _yurut(self) -> None:
+        """Boru hattını çalıştırır; beklenmeyen hata görevi sessizce öldürmez, `son_hata` olur."""
+        try:
+            await self._yurut_ic()
+        except asyncio.CancelledError:
+            raise
+        except ses_mod.SesHatasi as e:
+            self._hata(e.kod)
+        except Exception:
+            log.exception("Dublaj boru hattı çöktü")
+            self._hata("sunucu_hatasi")
+
+    async def _yurut_ic(self) -> None:
         loop = asyncio.get_running_loop()
         m = self.motor()
         if m is None:
@@ -193,10 +216,7 @@ class DublajYonetici:
                 pass
         self.depo.bosalt()
         if self._motor is not None and hasattr(self._motor, "kapat"):
-            try:
-                asyncio.get_running_loop().create_task(self._motor.kapat())
-            except RuntimeError:
-                pass
+            self._kapat_baslat(self._motor)
 
     # -- "Dene" --
     async def dene(self, metin: str) -> dict[str, Any]:
