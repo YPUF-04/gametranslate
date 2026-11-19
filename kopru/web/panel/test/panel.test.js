@@ -10,7 +10,8 @@ const { chromium } = require('playwright');
 
 const PANEL = path.join(__dirname, '..');
 const SHOTS = process.env.SHOTS_DIR || '';
-const TURLER = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' };
+const TV = path.join(PANEL, '..', 'tv');
+const TURLER = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.woff2': 'font/woff2' };
 
 
 // küçük, örnek bir oyun karesi (PNG): gradyan + altyazı şeridi — sahte /api/kare yanıtı
@@ -57,6 +58,12 @@ function sahteSunucu() {
         const f = url.pathname === '/' ? 'index.html' : url.pathname.slice('/panel/'.length);
         const tam = path.join(PANEL, f);
         if (!tam.startsWith(PANEL) || !fs.existsSync(tam)) { s.writeHead(404); return s.end(); }
+        s.writeHead(200, { 'Content-Type': TURLER[path.extname(tam)] || 'application/octet-stream' });
+        return s.end(fs.readFileSync(tam));
+      }
+      if (url.pathname.startsWith('/statik/')) {   // yazı tipi gibi ortak dosyalar (gerçek sunucuda kopru/web/tv)
+        const tam = path.join(TV, url.pathname.slice('/statik/'.length));
+        if (!tam.startsWith(TV) || !fs.existsSync(tam)) { s.writeHead(404); return s.end(); }
         s.writeHead(200, { 'Content-Type': TURLER[path.extname(tam)] || 'application/octet-stream' });
         return s.end(fs.readFileSync(tam));
       }

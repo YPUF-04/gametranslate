@@ -8,7 +8,7 @@
       ara_ilerleme: 'Ağda aranıyor: %1 / %2',
       ara_bitti: 'Arama bitti.',
       bulunan: 'Bulunan bilgisayarlar',
-      bulunamadi: 'Bilgisayar bulunamadı. Bilgisayarda AltYazıKöprüsü açık ve TV ile aynı ağda mı, bakıp yeniden arayın.',
+      bulunamadi: 'Bilgisayar bulunamadı. Bilgisayarda {marka} açık ve TV ile aynı ağda mı, bakıp yeniden arayın.',
       yeniden: 'Yeniden ara',
       elle: 'Adresi elle gir',
       deneme: 'Deneme (bilgisayarsız)',
@@ -18,7 +18,7 @@
       hdmi_ipucu: 'Bağlı olduğu HDMI numarasını seçin. Seçiminiz hatırlanır.',
       geri: 'Geri',
       elle_baslik: 'Bilgisayarın adresi',
-      elle_ipucu: 'Bilgisayardaki AltYazıKöprüsü ekranında yazan adresi girin. Örnek: 192.168.1.20',
+      elle_ipucu: 'Bilgisayardaki {marka} ekranında yazan adresi girin. Örnek: 192.168.1.20',
       tamam: 'Tamam',
       iptal: 'Vazgeç',
       sil: 'Sil',
@@ -51,7 +51,7 @@
       ara_ilerleme: 'Searching the network: %1 / %2',
       ara_bitti: 'Search finished.',
       bulunan: 'Computers found',
-      bulunamadi: 'No computer found. Check that AltYazıKöprüsü is open on your computer and on the same network as the TV, then search again.',
+      bulunamadi: 'No computer found. Check that {marka} is open on your computer and on the same network as the TV, then search again.',
       yeniden: 'Search again',
       elle: 'Enter address',
       deneme: 'Try without a computer',
@@ -61,7 +61,7 @@
       hdmi_ipucu: 'Pick the HDMI number it is plugged into. Your choice is remembered.',
       geri: 'Back',
       elle_baslik: 'Computer address',
-      elle_ipucu: 'Type the address shown in the AltYazıKöprüsü window on your computer. Example: 192.168.1.20',
+      elle_ipucu: 'Type the address shown in the {marka} window on your computer. Example: 192.168.1.20',
       tamam: 'OK',
       iptal: 'Cancel',
       sil: 'Delete',
@@ -96,7 +96,7 @@
     t: function (k, a) {
       var s = (M[dil][k] !== undefined) ? M[dil][k] : (M.tr[k] !== undefined ? M.tr[k] : k), i;
       if (a) { for (i = 0; i < a.length; i++) { s = s.replace('%' + (i + 1), String(a[i])); } }
-      return s;
+      return s.split('{marka}').join((window.MARKA && window.MARKA.ad) || 'AltYazıKöprüsü');
     },
     uygula: function (kok) {
       var l = (kok || document).querySelectorAll('[data-i]'), i;

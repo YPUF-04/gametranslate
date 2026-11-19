@@ -19,14 +19,17 @@ CIKTI="$KOK/dist/tv"
 ARA="$KOK/dist/ara"
 rm -rf "$CIKTI" "$ARA"; mkdir -p "$CIKTI" "$ARA" "$KOK/tv/paketler"
 
-# 1) Ana uygulama: ortak.js/ortak.css tek kaynaktan (kopru/web/tv/) paketin içine kopyalanır
+# 1) Ana uygulama: ortak bindirme (ortak.js/ortak.css), marka adı (marka.js) ve yazı tipi tek kaynaktan
+#    (kopru/web/tv/) paketin içine kopyalanır. tv/webos içindeki marka.js/yazi-*.woff2 bunlara bağlantıdır (symlink);
+#    cp bağlantıyı izler, pakete gerçek dosya girer.
+ORTAK="ortak.js ortak.css marka.js yazi-latin.woff2 yazi-latin-ext.woff2 yazi-LISANS-OFL.txt"
 hazirla_tv() { # $1=hedef klasör
   mkdir -p "$1"
-  cp "$KOK"/tv/webos/* "$1"/
-  cp "$KOK/kopru/web/tv/ortak.js" "$KOK/kopru/web/tv/ortak.css" "$1"/
+  cp -L "$KOK"/tv/webos/* "$1"/
+  for f in $ORTAK; do cp -L "$KOK/kopru/web/tv/$f" "$1"/; done
 }
 hazirla_tv "$ARA/tv"
-mkdir -p "$ARA/deneme"; cp "$KOK"/tv/lg-test/* "$ARA/deneme"/
+mkdir -p "$ARA/deneme"; cp -L "$KOK"/tv/lg-test/* "$ARA/deneme"/; cp -L "$KOK/kopru/web/tv/marka.js" "$ARA/deneme"/
 
 # 2) requiredACG'siz varyant: sürüm 0.1.1 (ares-package dosya adını sürümden verir)
 hazirla_tv "$ARA/tv-acgsiz"
