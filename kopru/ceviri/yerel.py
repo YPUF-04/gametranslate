@@ -186,7 +186,9 @@ def _yukle(model_dizini: str, sp_yolu: str) -> tuple[Any, Any]:
             import ctranslate2
             import sentencepiece
         except Exception as e:   # noqa: BLE001 — eksik ya da bozuk kurulum (ImportError, DLL/OSError)
-            raise yerel_hata("yerel_bilesen_yok") from e
+            h = yerel_hata("yerel_bilesen_yok")
+            h.ayrinti = f"{type(e).__name__}: {e}"[:300]   # kullanıcı "Ayrıntı"da görür, bize gönderebilir
+            raise h from e
         cevirici = ctranslate2.Translator(model_dizini, device="cpu", inter_threads=1,
                                           intra_threads=max(1, (os.cpu_count() or 2) // 2))
         sp = sentencepiece.SentencePieceProcessor()

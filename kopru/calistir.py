@@ -52,7 +52,7 @@ def ozdenetim_ceviri() -> int:
         try:
             sonuc = asyncio.run(is_())
         except Exception as e:  # noqa: BLE001
-            yaz(f"OZDENETIM HATA: cevrimdisi ceviri basarisiz: {type(e).__name__}: {e} {getattr(e, 'kod', '')}")
+            yaz(f"OZDENETIM HATA: cevrimdisi ceviri basarisiz: {type(e).__name__}: {e} {getattr(e, 'kod', '')} neden={e.__cause__!r} ayrinti={getattr(e, 'ayrinti', '')}")
             return 1
     yaz(f"OZDENETIM ceviri={sonuc!r}")
     return 0 if sonuc.strip() and sonuc.strip().lower() != "hello, how are you?" else 1
