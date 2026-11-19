@@ -159,6 +159,11 @@ def kapi_sec(kapi: int) -> tuple[str, int | None]:
 
 
 def main() -> None:
+    # Ekran katmanı ayrı süreç olarak aynı programla açılır (paketli .exe'de -m kullanılamaz)
+    if len(sys.argv) > 1 and sys.argv[1] == "--katman":
+        _konsolu_hazirla()
+        from .katman import main as katman_main
+        raise SystemExit(katman_main(sys.argv[2:]))
     _konsolu_hazirla()
     p = argparse.ArgumentParser(prog="kopru", description="AltYazıKöprüsü")
     p.add_argument("--demo", action="store_true", help="örnek altyazıları döngüyle gönder")

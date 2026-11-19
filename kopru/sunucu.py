@@ -1123,7 +1123,7 @@ async def _yerel_hazirla(d: Durum, kaynak: str, hedef: str) -> None:
     except asyncio.CancelledError:
         raise
     except Exception as e:   # noqa: BLE001
-        kod = _bilinen_kod(e) or ("yerel_bilesen_yok" if isinstance(e, ImportError) else "yerel_indirme_hata")
+        kod = _bilinen_kod(e) or ("yerel_bilesen_yok" if isinstance(e, ImportError) else "yerel_indirme_hatasi")
         log.warning("Çevrimdışı dil dosyası hazırlanamadı: %s", e)
         ind.update(durum="hata", mesaj=metinler.mesaj(kod, d.dil), ayrinti=_ayrinti(e), kod=kod)
 

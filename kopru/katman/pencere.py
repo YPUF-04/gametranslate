@@ -317,9 +317,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--url", required=True)
     p.add_argument("--ekran", type=int, default=1)
     p.add_argument("--ebeveyn", type=int, default=0, help="ana programın süreç numarası (ölünce çıkılır)")
+    p.add_argument("--ozdenetim", action="store_true", help="pencereyi açıp deneme yazısı çizer, 2 sn sonra kapanır")
     a = p.parse_args(argv)
     try:
-        Katman(a.url, a.ekran, a.ebeveyn).calis()
+        k = Katman(a.url, a.ekran, a.ebeveyn or os.getpid())
+        if a.ozdenetim:
+            k.kuyruk.put(("yazi", {"id": "oz", "metin": "Öz denetim: Türkçe harfler çğıöşü", "sure_ms": 3000}))
+            def _bitti() -> None:
+                print(f"OZDENETIM katman ciziliyor={k._son_imza is not None} boyut={k.G}x{k.Y}", flush=True)
+                k.bitir()
+            k.kok.after(2000, _bitti)
+        k.calis()
     except Exception as e:   # noqa: BLE001 — Tk yok / ekran yok: sunucu yeniden deneme sınırını uygular
         print(f"katman hata: {e}", file=sys.stderr, flush=True)
         return 1

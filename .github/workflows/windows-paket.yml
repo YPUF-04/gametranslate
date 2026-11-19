@@ -65,6 +65,7 @@ jobs:
           --add-data "kopru/web;kopru/web"
           --add-data "tv/paketler;tv/paketler"
           --collect-submodules kopru
+          --hidden-import tkinter
           --hidden-import paramiko
           --collect-all winocr
           --collect-submodules winrt
@@ -79,6 +80,11 @@ jobs:
           cat sunucu.log || true
           taskkill //IM AltYaziKoprusu.exe //F || true
           test "$ok" = 1
+      - name: Bilgisayar ekranı katmanı açılıyor mu (Türkçe yazı çizimi)
+        shell: bash
+        run: |
+          ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --katman --url http://127.0.0.1:9/yok --ozdenetim | tee katman.log
+          grep -q "ciziliyor=True" katman.log
       - name: Paketin içinde ekran yazısı okuma çalışıyor mu
         shell: bash
         run: ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --ozdenetim

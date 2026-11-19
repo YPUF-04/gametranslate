@@ -66,6 +66,7 @@ jobs:
           --add-data "kopru/web:kopru/web"
           --add-data "tv/paketler:tv/paketler"
           --collect-submodules kopru
+          --hidden-import tkinter
           --collect-submodules ocrmac
           --hidden-import paramiko
           --hidden-import keyring.backends.macOS
@@ -98,6 +99,11 @@ jobs:
           echo "---- günlük ----"; cat duman.log
           kill "$PID" 2>/dev/null || true
           if [ "$ok" != 1 ]; then echo "HATA: 30 sn içinde /kopru/merhaba yanıt vermedi." >&2; exit 1; fi
+      - name: Bilgisayar ekranı katmanı açılıyor mu (Türkçe yazı çizimi)
+        shell: bash
+        run: |
+          "dist/AltYazıKöprüsü.app/Contents/MacOS/AltYaziKoprusu" --katman --url http://127.0.0.1:9/yok --ozdenetim | tee katman.log
+          grep -q "ciziliyor=True" katman.log
       - name: Paketin içinde ekran yazısı okuma çalışıyor mu
         run: '"dist/AltYazıKöprüsü.app/Contents/MacOS/AltYaziKoprusu" --ozdenetim'
       - name: Paketin içinde çevrimdışı çeviri çalışıyor mu (en->tr dil dosyasını indirir)

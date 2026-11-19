@@ -209,6 +209,12 @@ HATALAR: dict[str, dict[str, str]] = {
     "yerel_indirme_hata": {
         "tr": "Dil dosyası indirilemedi. İnternet bağlantınızı ve boş disk alanını kontrol edip 'İndir' düğmesine tekrar basın.",
         "en": "The language file could not be downloaded. Check your internet connection and free disk space, then press 'Download' again."},
+    "yerel_indirme_hatasi": {
+        "tr": "Dil dosyası indirilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+        "en": "The language file could not be downloaded. Check your internet connection and try again."},
+    "yerel_ceviri_hatasi": {
+        "tr": "Çevrimdışı çeviri çalışmadı. Dil dosyası bozuk olabilir; yeniden indirmeyi deneyin.",
+        "en": "Offline translation failed. The language file may be corrupt; try downloading it again."},
     "katman_destek_yok": {
         "tr": "Bu bilgisayarda ekran katmanı için gereken Tk bileşeni yok; çeviriyi TV'de ya da tarayıcıda göstermeyi seçin.",
         "en": "The Tk component needed for the on-screen overlay is missing on this computer; choose to show the translation on a TV or in a browser."},
