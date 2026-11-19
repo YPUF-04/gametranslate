@@ -100,7 +100,7 @@ function sahteSunucu() {
       const bm = url.pathname.match(/^\/api\/oyun\/([a-z0-9_]+)\/bilgi-(hazirla|kaydet)$/);
       if (bm && q.method === 'POST') {
         if (bm[2] === 'kaydet') return j({ tamam: true, terim_sayisi: (b.terimler || []).length });
-        if (st.bilgiMod === 'cevrimdisi') return j({ hata: 'cevrimdisi_motor', mesaj: 'Çevrimdışı motor oyun bilgisi hazırlayamaz. İnternetli bir motor seç ve tekrar dene.', ayrinti: 'MotorHatasi: yerel motor LLM değil' }, 409);
+        if (st.bilgiMod === 'cevrimdisi') return j({ hata: 'bilgi_cevrimdisi', mesaj: 'Çevrimdışı motor oyun bilgisi hazırlayamaz. İnternetli bir motor seç ve tekrar dene.', ayrinti: 'MotorHatasi: yerel motor LLM değil' }, 400);
         return setTimeout(() => j({ aciklama: 'Fütüristik bir şehirde geçen aksiyon rol yapma oyunu.', hitap: 'siz', terimler: [
           { asil: 'Night City', ceviri: 'Night City' }, { asil: 'Johnny Silverhand', ceviri: 'Johnny Silverhand' },
           { asil: 'Cyberpsycho', ceviri: 'Siberpsikopat' }, { asil: 'Nomad', ceviri: 'Göçebe' }] }), 700);
@@ -149,7 +149,7 @@ function sahteSunucu() {
         case 'GET /api/kaynaklar': {   // PROTOKOL 12.2: cihaza göre "onerilen" + "tur"
           const cihaz = url.searchParams.get('cihaz') || st.ayarlar.cihaz;
           st.kaynakCihazlar.push(cihaz);
-          const l = [{ kod: 'ekran:1', ad: 'Ekran 1 (1920×1080)', tur: 'ekran', onerilen: false }, { kod: 'pencere:123', ad: 'PS Remote Play', tur: 'pencere', onerilen: cihaz === 'ps5' }];
+          const l = [{ kod: 'ekran:1', ad: 'Ekran 1 (1920×1080)', tur: 'ekran', onerilen: false, haric: false }, { kod: 'pencere:9', ad: 'Mozilla Firefox', tur: 'pencere', onerilen: false, haric: true }, { kod: 'pencere:123', ad: 'PS Remote Play', tur: 'pencere', onerilen: cihaz === 'ps5' }];
           if (cihaz === 'kart' && st.kartVar) l.push({ kod: 'pencere:777', ad: 'Windowed Projector (Kaynak) - Video Capture Device', tur: 'pencere', onerilen: true });
           return j(l);
         }

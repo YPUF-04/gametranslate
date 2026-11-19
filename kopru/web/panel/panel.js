@@ -439,7 +439,7 @@
       });
     }
     function pencereMi(k) { return k.tur ? k.tur === 'pencere' : k.kod.indexOf('pencere') === 0; }
-    function onerilenBul() { return S.kaynaklar.filter(function (k) { return k.onerilen; })[0] || null; }
+    function onerilenBul() { return S.kaynaklar.filter(function (k) { return k.onerilen && !k.haric; })[0] || null; }
     function otoSec(zorla) {   // önerilen pencereyi seç; yenilemede kullanıcının geçerli seçimine dokunma
       var o = onerilenBul();
       if (!o || S.kaynak === o.kod) return false;
@@ -456,8 +456,8 @@
           h('div', { class: 'satir' }, h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'oneri-sec', text: t('kaynak.oneri_sec'), onclick: function () { elle = true; kaynakSec(oner.kod); } }))]));
       }
       // önerilenler başa; sonra diğerleri
-      S.kaynaklar.slice().sort(function (a, b) { return (b.onerilen ? 1 : 0) - (a.onerilen ? 1 : 0); }).forEach(function (k) {
-        kaynakKutu.appendChild(h('button', { type: 'button', class: 'sec', 'data-kaynak': k.kod, 'aria-pressed': String(S.kaynak === k.kod),
+      S.kaynaklar.slice().sort(function (a, b) { return (a.haric ? 1 : 0) - (b.haric ? 1 : 0) || (b.onerilen ? 1 : 0) - (a.onerilen ? 1 : 0); }).forEach(function (k) {
+        kaynakKutu.appendChild(h('button', { type: 'button', class: 'sec' + (k.haric ? ' haric' : ''), 'data-kaynak': k.kod, 'aria-pressed': String(S.kaynak === k.kod),
           onclick: function () { elle = true; kaynakSec(k.kod); } }, [
           h('span', { class: 'sec-ad' }, [h('span', { text: k.ad }), k.onerilen ? h('span', { class: 'rozet sari', text: t('kaynak.onerilen') }) : null]),
           h('span', { class: 'sec-alt', text: t(pencereMi(k) ? 'kaynak.tur.pencere' : 'kaynak.tur.ekran') })]));
