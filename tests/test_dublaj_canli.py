@@ -483,3 +483,9 @@ async def test_api_girisler_paket_yokken_bos_ve_yerel_disi_403(istemci, monkeypa
     for yol in ("/api/dublaj/paket", "/api/dublaj/video", "/api/dublaj/ses-profilleri"):
         assert (await istemci.get(yol)).status == 403
     assert (await istemci.post("/api/dublaj/paket/kur", json={"onay": True})).status == 403
+
+
+def test_yer_ayarla_sesler_ust_uste_binmez_ve_uydurma_suresi():
+    b = mantik.yer_ayarla([1.0, 2.0, 2.5], [1.5, 1.0, 1.0], 20.0)
+    assert b[1] >= b[0] + 1.5 and b[2] >= b[1] + 1.0
+    assert mantik.sacma_uzun_mu(4.0, "Tamam.") and not mantik.sacma_uzun_mu(2.0, "Dün gece neredeydin?")

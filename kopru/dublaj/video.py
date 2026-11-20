@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from .isci.mantik import Satir, kumele, referans_araliklari, satirlara_bol, sigdir_karari, srt, yer_ayarla
+from .isci.mantik import Satir, kumele, sacma_uzun_mu, referans_araliklari, satirlara_bol, sigdir_karari, srt, yer_ayarla
 from .temel import DublajHatasi
 
 log = logging.getLogger("kopru.dublaj.video")
@@ -274,6 +274,9 @@ class VideoIsi:
             ham = self._p(f"tts_{i}.wav")
             r = await self.isci.iste("seslendir", {"metin": metin, "ref_yol": ref, "duygu": duygu, "motor": motor,
                                                    "cikis": str(ham)})
+            if sacma_uzun_mu(float(r["sure_sn"]), metin):    # uydurma: bir kez yeniden üret
+                r = await self.isci.iste("seslendir", {"metin": metin, "ref_yol": ref, "duygu": {**duygu, "canlilik": 0.4},
+                                                       "motor": motor, "cikis": str(ham)})
             karar, oran = sigdir_karari(float(r["sure_sn"]), s.sure, sinir)
             if karar == "kisalt":
                 try:

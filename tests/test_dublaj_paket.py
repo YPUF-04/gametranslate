@@ -306,7 +306,7 @@ def test_ortam_dizini_isletim_sistemine_gore(monkeypatch, tmp_path):
 def test_manifest_sabit_ve_https():
     for a in list(ortam_mod.PYTHON_ARSIVLERI.values()) + [ortam_mod.FFMPEG_WINDOWS]:
         assert ortam_mod.adres_izinli(a.url) and len(a.sha256) == 64 and int(a.sha256, 16) >= 0
-    assert all("==" in p for p in ortam_mod.PAKETLER if p != "huggingface-hub")
+    assert all("==" in p for p in ortam_mod.PAKETLER if p not in ("huggingface-hub", "setuptools<81"))
 
 
 # ---------- işçi kanalı ----------

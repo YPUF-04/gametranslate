@@ -326,7 +326,9 @@ class GercekIsleyici:
             parcalar, bilgi = model.transcribe(pcm, language=dil, vad_filter=True, beam_size=1)
             metin = " ".join(p.text.strip() for p in parcalar).strip()
             return {"metin": metin, "dil": getattr(bilgi, "language", None)}
-        parcalar, bilgi = model.transcribe(v["giris"], language=dil, vad_filter=True, word_timestamps=True,
+        ses, ssr = _ses_oku(v["giris"])          # PyAV sürüm farklarına takılmamak için ses dosyasını kendimiz okuruz
+        girdi = _yeniden_ornekle(ses.mean(0), ssr, STT_SR)
+        parcalar, bilgi = model.transcribe(girdi, language=dil, vad_filter=True, word_timestamps=True,
                                            beam_size=5, condition_on_previous_text=False)
         sure = float(getattr(bilgi, "duration", 0.0) or 0.0)
         kelimeler = []

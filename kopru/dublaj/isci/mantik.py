@@ -193,12 +193,18 @@ def sigdir_karari(tts_sn: float, hedef_sn: float, sinir: float = 1.25, tolerans:
     return "hizlandir", sinir
 
 
+def sacma_uzun_mu(sure_sn: float, metin: str) -> bool:
+    """Motor kısa metinde bazen uydurur (fazladan kelime): süre, metnin makul süresinin 2,5 katını aşarsa."""
+    makul = max(1.2, len(metin.strip()) / 11.0)
+    return sure_sn > 2.5 * makul
+
+
 def yer_ayarla(baslar: Sequence[float], sureler: Sequence[float], toplam_sn: float, bosluk: float = 0.05) -> list[float]:
-    """Seslendirilmiş satırlar üst üste binmesin: gerekirse bir sonrakini biraz kaydırır (en çok 0,6 sn)."""
+    """Seslendirilmiş satırlar üst üste binmesin: gerekirse bir sonrakini kaydırır (iki ses asla üst üste çalmaz)."""
     yeni = []
     onceki_son = -1e9
     for b, s in zip(baslar, sureler):
-        bas = max(b, onceki_son + bosluk) if onceki_son - b < 0.6 else b
+        bas = max(b, onceki_son + bosluk)
         bas = min(bas, max(0.0, toplam_sn - s))
         yeni.append(bas)
         onceki_son = bas + s

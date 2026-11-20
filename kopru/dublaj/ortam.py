@@ -66,7 +66,8 @@ FFMPEG_WINDOWS = Arsiv("https://github.com/GyanD/codexffmpeg/releases/download/9
 TORCH_DIZINI = "https://download.pytorch.org/whl/cu124"
 TORCH = ["torch==2.6.0", "torchaudio==2.6.0"]
 PAKETLER = ["chatterbox-tts==0.1.7", "faster-whisper==1.2.1", "demucs==4.1.0", "pocket-tts==4.0.1",
-            "soundfile==0.14.0", "sounddevice==0.5.6", "soundcard==0.4.6", "huggingface-hub"]
+            "soundfile==0.14.0", "sounddevice==0.5.6", "soundcard==0.4.6", "huggingface-hub",
+            "setuptools<81"]   # resemble-perth (Chatterbox filigranı) hâlâ pkg_resources ister
 PAKETLER_WINDOWS = ["pycaw==20260927", "comtypes==1.5.0", "psutil==7.2.2"]
 PAKETLER_DIGER = ["imageio-ffmpeg==0.8.1"]
 # Yaklaşık boyutlar (MB): panelde "~X GB indirilecek" demek için
