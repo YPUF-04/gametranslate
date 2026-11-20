@@ -666,11 +666,15 @@
   "kisayol.bas": "Tuşlara bas…",
   "kisayol.bas.k": "Ör. Ctrl + Shift + bir harf. Esc: vazgeç, Sil: kapat.",
   "kisayol.cakisma": "Bu tuş \"{ad}\" için de seçili. Birini değiştir.",
-  "kisayol.kayit_aria": "{ad} kısayolu. Değiştirmek için bas, sonra tuşlara bas.",
+  "kisayol.kayit_aria": "Değiştirmek için bas, sonra yeni tuşlara birlikte bas.",
   "kisayol.temizlendi": "{ad} kısayolu kapatıldı.",
   "kisayol.ek_gerekli": "Ctrl, Alt ya da Shift ile birlikte bas; tek tuş oyunla karışır.",
   "kisayol.kaydedildi_tus": "{ad}: {tus}",
   "kisayol.temizle": "Kapat",
   "kisayol.varsayilan": "Varsayılanlara dön",
-  "kurulum.yeniden.k": "Kurulum sihirbazını ilk adımdan açar. Ayarların silinmez."
+  "kurulum.yeniden.k": "Kurulum sihirbazını ilk adımdan açar. Ayarların silinmez.",
+  "enaz.baslik": "Çok kısa yazılar en az bu kadar kalsın",
+  "enaz.deger": "{n} sn",
+  "enaz.k": "Çeviri, oyundaki yazı kadar ekranda kalır. Bir anda kaybolan yazılar en az bu kadar görünür.",
+  "pano.en_az": "en az {n} sn"
 }

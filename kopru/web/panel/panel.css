@@ -684,7 +684,7 @@ body:has(main.pano-ana) .ust{max-width:1100px;padding-left:clamp(16px,4vw,40px);
   background:radial-gradient(700px 240px at 50% -30%,rgba(46,196,182,.15),transparent 70%),linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,0) 50%),var(--kart);
   transition:border-color var(--yavas)}
 .pano-hero.calisiyor{border-color:rgba(46,196,182,.5)}
-.kemer{position:absolute;left:0;right:0;top:6px;width:100%;height:64px;opacity:.35;pointer-events:none;transition:opacity var(--yavas)}
+.kemer{position:absolute;left:0;right:0;top:4px;width:100%;height:26px;opacity:.35;pointer-events:none;transition:opacity var(--yavas)}
 .pano-hero.calisiyor .kemer{opacity:1}
 .pano-hero-sol{position:relative;min-width:0}
 .pano-hero-sag{position:relative}
@@ -771,8 +771,8 @@ kbd{display:inline-grid;place-items:center;min-width:1.95em;height:1.8em;padding
 .pk.dublaj-ac{display:block;margin:0}
 .dublaj-ac>summary{display:flex;align-items:center;gap:12px;min-height:40px;padding:0;color:inherit;list-style:none;cursor:pointer;border-radius:12px}
 .dublaj-ac>summary::-webkit-details-marker{display:none}
-.dublaj-ac>summary h2{flex:none;margin:0;font-size:1rem;font-weight:680;color:var(--soluk)}
-.dublaj-ac>summary .pk-not{flex:1}
+.dublaj-ac>summary h2{flex:0 1 auto;min-width:0;margin:0;font-size:1rem;font-weight:680;color:var(--soluk)}
+.dublaj-ac>summary .pk-not{flex:1;min-width:0}
 .dublaj-ac>summary::after{content:"";flex:none;width:9px;height:9px;margin-right:6px;border-right:2px solid var(--soluk);border-bottom:2px solid var(--soluk);transform:rotate(45deg);transition:transform var(--orta) var(--yay)}
 .dublaj-ac[open]>summary::after{transform:rotate(-135deg)}
 .dublaj-ac>summary:hover h2{color:var(--yazi)}
@@ -821,5 +821,10 @@ kbd{display:inline-grid;place-items:center;min-width:1.95em;height:1.8em;padding
   #son-kart .ceviri-satir .metin{grid-template-columns:1fr}
   .ks-satir{grid-template-columns:1fr}
   .ks-kayit{min-width:0;flex:1}
+  .kisayol-liste li{grid-template-columns:auto minmax(0,1fr);gap:2px 12px;padding:4px 0}
+  .kisayol-liste li .ks-ad{grid-column:1 / -1}
+  .kisayol-liste li .ks-durum.kapali{grid-column:auto;justify-self:start}
 }
 html.buyuk-yazi .pano-izgara{grid-template-columns:1fr}
+.ekran-olcek.en-az{margin-top:18px;padding-top:16px;border-top:1px solid var(--cizgi)}
+.bolum>h2.bolum-baslik{font-size:1.1rem;margin:0 0 .35em;font-weight:700;letter-spacing:-.008em}

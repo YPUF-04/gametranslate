@@ -308,6 +308,7 @@ function dilKontrol() {
     await sayfa.waitForSelector('#kaynak-rehber');
     assert.match(await metin('#kaynak-rehber'), /Yakalama kartı penceresini bulamadım[\s\S]*Pencereli Projektör/);
     assert.strictEqual(await sayfa.locator('#kaynak-rehber .rehber-adim').count(), 5);
+    for (let i = 0; i < 40 && !st.kaynakCihazlar.includes('kart'); i++) await sayfa.waitForTimeout(50);   // rehber önbellekten hemen çizilir; liste isteği ardından gelir
     assert.ok(st.kaynakCihazlar.includes('kart'), 'cihaz seçilince /api/kaynaklar o cihazla çağrıldı');
     st.kartVar = true;
     await sayfa.click('#rehber-yenile');
@@ -741,6 +742,14 @@ function dilKontrol() {
         await sayfa.fill('#ekran-olcek', '120');
         await sayfa.waitForTimeout(450);
         assert.strictEqual(st.ayarlar.gorunum.ekran_olcek, 1.2);
+        // gorunum.en_az_ms (PROTOKOL 13.4): "Çok kısa yazılar en az … sn kalsın"
+        assert.match(await metin('#ekran-olcek-kart'), /Çok kısa yazılar en az bu kadar kalsın[\s\S]*0,8 sn/);
+        await sayfa.fill('#en-az', '1500');
+        await sayfa.waitForFunction(() => document.querySelector('#en-az-deger').textContent === '1,5 sn');
+        await sayfa.waitForTimeout(450);
+        assert.strictEqual(st.ayarlar.gorunum.en_az_ms, 1500);
+        assert.strictEqual(st.ayarlar.gorunum.ekran_olcek, 1.2, 'diğer görünüm ayarları korunur');
+        if (SHOTS) { await sayfa.evaluate(() => document.querySelector('#ekran-olcek-kart').scrollIntoView({ block: 'center', behavior: 'instant' })); await sayfa.screenshot({ path: path.join(SHOTS, 'pano-degistir-gosterim.png') }); }
       }
       await sayfa.click(nasil === 'ana-don' ? '#ana-don' : '#' + nasil + '-' + n);
       await sayfa.waitForSelector('#pano');
@@ -748,7 +757,7 @@ function dilKontrol() {
     }
     assert.strictEqual(st.ayarlar.motor, 'yerel', 'Vazgeç motoru değiştirmez');
     assert.match(await metin('#pk-motor-deger'), /Yerel/);
-    assert.match(await metin('#pk-gosterim'), /Yazı büyüklüğü %120/);
+    assert.match(await metin('#pk-gosterim'), /Yazı büyüklüğü %120 · en az 1,5 sn/);
     adim('Değiştir: Görüntü (Bitti), Çeviri (kalite, Vazgeç), Nerede (ekran ölçeği, Bitti), Çevrilecek yerler (Ana ekran) — her biri tek başına açıldı ve döndü');
 
     // --- Bağlantı rehberleri: yalnız üst menüden; 6 ekran rehberi, hepsi açılır

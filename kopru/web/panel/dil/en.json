@@ -666,11 +666,15 @@
   "kisayol.bas": "Press the keys…",
   "kisayol.bas.k": "E.g. Ctrl + Shift + a letter. Esc: cancel, Delete: turn off.",
   "kisayol.cakisma": "This key is also set for \"{ad}\". Change one of them.",
-  "kisayol.kayit_aria": "{ad} hotkey. Press to change, then press the keys.",
+  "kisayol.kayit_aria": "Press to change, then press the new keys together.",
   "kisayol.temizlendi": "{ad} hotkey turned off.",
   "kisayol.ek_gerekli": "Press it together with Ctrl, Alt or Shift; a single key clashes with the game.",
   "kisayol.kaydedildi_tus": "{ad}: {tus}",
   "kisayol.temizle": "Turn off",
   "kisayol.varsayilan": "Restore defaults",
-  "kurulum.yeniden.k": "Opens the setup wizard from the first step. Your settings are kept."
+  "kurulum.yeniden.k": "Opens the setup wizard from the first step. Your settings are kept.",
+  "enaz.baslik": "Keep very short text on screen at least this long",
+  "enaz.deger": "{n} s",
+  "enaz.k": "A translation stays on screen as long as the game's text. Text that vanishes at once stays at least this long.",
+  "pano.en_az": "at least {n} s"
 }
