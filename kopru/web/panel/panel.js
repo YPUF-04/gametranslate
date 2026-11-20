@@ -1263,7 +1263,7 @@
     var cihaz = S.cihaz || a.cihaz;
     ekran.kareler = [];
     var goruntuK = panoKart({ ad: 'goruntu', ik: 'pc', baslik: t('pano.goruntu'), degistir: function () { asamaAc(1, 'ana'); }, sinif: 'pk-resimli',
-      govde: [panoKucukResim('kare', false), h('div', { class: 'pk-metin' }, [
+      govde: [panoKucukResim('goruntu', false), h('div', { class: 'pk-metin' }, [
         h('p', { class: 'pk-deger', id: 'pk-goruntu-deger', text: kaynak ? kaynak.ad : (a.kaynak || t('pano.secilmedi')) }),
         h('p', { class: 'pk-alt', text: cihaz ? t('cihaz.' + cihaz) : t('pano.cihaz_yok') })])] });
 

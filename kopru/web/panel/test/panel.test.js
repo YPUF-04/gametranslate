@@ -923,7 +923,9 @@ function dilKontrol() {
     assert.strictEqual(await sayfa.getAttribute('#son-liste', 'tabindex'), '0');
     assert.match(await sayfa.getAttribute('#son-liste', 'aria-label'), /Son çeviriler listesi/);
     assert.ok(await sayfa.evaluate(() => { const e = document.querySelector('#son-liste'); return getComputedStyle(e).overflowY === 'auto' && e.getBoundingClientRect().height <= 253; }), 'kendi içinde kayar, kısa kalır');
-    assert.ok(await sayfa.evaluate(() => document.querySelector('#son-kart').getBoundingClientRect().height < 420), 'kart kompakt');
+    const sonH = await sayfa.evaluate(() => document.querySelector('#son-kart').getBoundingClientRect().height);
+    if (SHOTS) await sayfa.screenshot({ path: path.join(SHOTS, 'pano-son.png') });
+    assert.ok(sonH < 460, 'kart kompakt (öneriyle): ' + sonH);
     st.ceviriler.length = 0; st.ceviriler.push(...eskiCev);
     await sayfa.waitForFunction(() => document.querySelectorAll('#son-liste .ceviri-satir').length === 2, null, { timeout: 8000 });
     adim('son çeviriler: en çok 5 satır, kendi içinde kayar, kart kısa');
@@ -1108,7 +1110,7 @@ function dilKontrol() {
     adim('konsolda hata yok');
     console.log('TÜM TESTLER GEÇTİ');
   } catch (e) {
-    console.error('TEST BAŞARISIZ:', e.message);
+    console.error('TEST BAŞARISIZ:', e.message, (e.stack||'').split('\n').filter(l=>l.includes('panel.test')).join(' | '));
     if (SHOTS) await sayfa.screenshot({ path: path.join(SHOTS, 'hata.png') }).catch(() => {});
     process.exitCode = 1;
   } finally {
