@@ -63,6 +63,10 @@ function sahteSunucu() {
     guncelleme: { ilerleme: 0, asama: 'bosta' }, tvIstekleri: [], tvKuyruk: [], tvSon: { asama: 'bosta', mesaj: '', ayrinti: '' },
     erisim: { kalan_dakika: 12, kod: null, bitis: null, ucretsiz_dakika: 30 }, sinir: false, kodlar: [],
     dublajHazir: false, dublajIndirme: { durum: 'bosta', yuzde: 0, hata: null }, dublajDene: [],
+    paket: { durum: 'yok', kurulu: false, tamam: false, gelistirici: false, indirme_mb: 8800, disk_mb: 12760, asama: null, yuzde: 0, mesaj: null, hata: null,
+      konum: 'C:\\Users\\Oyuncu\\AppData\\Local\\AltYaziKoprusu\\dublaj-ortami', destek: true,
+      asamalar: ['python', 'ffmpeg', 'paketler', 'modeller', 'denetim'].map((k) => ({ kod: k, durum: 'bekliyor', yuzde: 0 })) },
+    paketKur: [], video: { durum: 'bosta' }, videoBasla: [], videoGoster: 0, profiller: [{ ad: 'Lucia', sure_sn: 18.2, klip: 3, tarih: '2026-11-20' }], profilSil: [],
     okumaMod: 'iyi', okumaIstekleri: 0, kaynakCihazlar: [], kartVar: false, uyari: null, bilgiMod: 'ok',
     yerel: { hazir: false, boyut_mb: 95, indirme: { durum: 'yok', yuzde: 0, mesaj: null } }, yerelHazirla: 0, yerelDene: 0, yerelAdim: 0,
     katman: { destek: true, acik: false, ekran: 1, ekranlar: [{ no: 1, ad: 'Ekran 1 (1920×1080)' }, { no: 2, ad: 'Ekran 2 (2560×1440)' }] }, katmanDene: [],
@@ -187,11 +191,40 @@ function sahteSunucu() {
         }
         case 'GET /api/tv/lg/durum': if (st.tvKuyruk.length) st.tvSon = st.tvKuyruk.shift(); return j(st.tvSon);
         case 'GET /api/dublaj': {
-          const i = st.dublajIndirme;
+          const i = st.dublajIndirme, pk = st.paket;
+          if (pk.durum === 'kuruluyor') {   // her sorguda bir aşama ilerler
+            const a = pk.asamalar.find((x) => x.durum !== 'bitti');
+            if (a) { if (a.durum === 'suruyor' && a.yuzde >= 50) { a.durum = 'bitti'; a.yuzde = 100; } else { a.durum = 'suruyor'; a.yuzde = 50; pk.asama = a.kod; } }
+            pk.yuzde = Math.round(pk.asamalar.reduce((t, x) => t + x.yuzde, 0) / 5); pk.mesaj = 'torch-2.6.0+cu124';
+            if (pk.asamalar.every((x) => x.durum === 'bitti')) Object.assign(pk, { durum: 'hazir', kurulu: true, tamam: true, asama: null, mesaj: null, indirme_mb: 0 });
+          }
           if (i.durum === 'indiriliyor') { i.yuzde = i.yuzde >= 60 ? 100 : 60; if (i.yuzde === 100) { i.durum = 'bitti'; st.dublajHazir = true; } }
           return j({ motor: st.ayarlar.dublaj.motor, hazir: st.dublajHazir && st.ayarlar.dublaj.motor !== 'kapali', onerilen: 'chatterbox', ekran_karti: 'NVIDIA GeForce RTX 3060', vram_gb: 12, ram_gb: 16,
-            indirme: i, calisiyor: false, son_hata: null, elevenlabs_anahtar: !!st.anahtarlar.elevenlabs, motorlar: [] });
+            indirme: i, calisiyor: false, son_hata: null, elevenlabs_anahtar: !!st.anahtarlar.elevenlabs, motorlar: [],
+            paket: pk, isci: pk.kurulu, tamamen_turkce: false, tamamen_turkce_destek: true, hafif: false,
+            gecikme: pk.kurulu ? { son: { erken: true, stt_ms: 140, ses_ms: 820 }, ortalama_bekleme_ms: 900, olcum_sayisi: 4 } : null });
         }
+        case 'POST /api/dublaj/paket/kur': if (b.onay !== true) return j({ hata: 'dublaj_paket_onay', mesaj: 'Önce onay kutusunu işaretleyin.' }, 400);
+          st.paketKur.push(b); st.paket.durum = 'kuruluyor'; return j(st.paket);
+        case 'POST /api/dublaj/paket/iptal': st.paket.durum = 'iptal'; return j(st.paket);
+        case 'POST /api/dublaj/paket/kaldir': st.paketKaldir = true; return j(st.paket);
+        case 'GET /api/dublaj/girisler': return j({ girisler: [{ ad: 'Elgato HD60 X', kimlik: 'el1', kart: true }] });
+        case 'GET /api/dublaj/ses-profilleri': return j({ izin: !!st.ayarlar.dublaj.ses_profili_izni, oyun: 'gta6', profiller: st.profiller });
+        case 'DELETE /api/dublaj/ses-profilleri': st.profilSil.push(url.searchParams.get('ad')); st.profiller = st.profiller.filter((p) => url.searchParams.get('ad') && p.ad !== url.searchParams.get('ad')); return j({ tamam: true, silinen: 1 });
+        case 'POST /api/dublaj/dosya-sec': return j({ yol: 'D:\\Kayıt\\gta6.mp4', ad: 'gta6.mp4', boyut_mb: 812 });
+        case 'GET /api/dublaj/video': {
+          const v = st.video, kodlar = ['cikar', 'ayir', 'yazi', 'bol', 'konusmaci', 'cevir', 'seslendir', 'karistir', 'birlestir'];
+          if (v.durum === 'calisiyor') {
+            v.adim = (v.adim || 0) + 1;
+            v.asamalar = kodlar.map((k, n) => ({ kod: k, durum: n < v.adim ? 'bitti' : (n === v.adim ? 'suruyor' : 'bekliyor'), yuzde: n < v.adim ? 100 : (n === v.adim ? 40 : 0) }));
+            v.asama = kodlar[v.adim]; v.yuzde = Math.min(99, v.adim * 11); v.kalan_sn = 600 - v.adim * 60; v.satir = { bitti: 12, toplam: 40 }; v.konusmaci_sayisi = 3;
+            if (v.adim >= kodlar.length) Object.assign(v, { durum: 'bitti', yuzde: 100, asama: null, kalan_sn: null, cikti: 'D:\\Kayıt\\gta6 - Türkçe dublaj.mp4' });
+          }
+          return j(v);
+        }
+        case 'POST /api/dublaj/video': st.videoBasla.push(b.yol); st.video = { durum: 'calisiyor', ad: 'gta6.mp4', yuzde: 0, adim: 0, asamalar: [], kalan_sn: 700 }; return j(st.video);
+        case 'POST /api/dublaj/video/iptal': st.video.durum = 'iptal'; st.video.devam_edilebilir = true; return j(st.video);
+        case 'POST /api/dublaj/video/goster': st.videoGoster++; return j({ tamam: true });
         case 'POST /api/dublaj': {
           const m = Object.assign({}, st.ayarlar.dublaj, b);
           if (!m.elevenlabs_onay) { m.elevenlabs_klon_onay = false; if (m.motor === 'elevenlabs') { if (b.motor === 'elevenlabs') return j({ hata: 'dublaj_onay_gerekli', mesaj: 'ElevenLabs için önce onayı işaretleyin.' }, 400); m.motor = 'kapali'; } }
@@ -1042,6 +1075,72 @@ function dilKontrol() {
     assert.strictEqual(st.ayarlar.dublaj.motor, 'kapali'); assert.strictEqual(st.ayarlar.dublaj.elevenlabs_klon_onay, false);
     await gor('3-dublaj.png');
     adim('dublaj: ElevenLabs ancak onayla seçilir; ikinci onay ayrıdır; onay geri alınınca motor kapanır');
+
+    // Türkçe dublaj 2 (PROTOKOL 14): dublaj paketi, canlı seçenekler, video
+    assert.match(await sayfa.textContent('#dublaj-paket-boyut'), /İndirilecek: yaklaşık 8,6 GB · Diskte kaplayacağı yer: yaklaşık 12,5 GB/);
+    assert.ok(await sayfa.isDisabled('#dublaj-paket-kur'), 'onay kutusu işaretlenmeden Kur kapalı');
+    assert.match(await sayfa.textContent('#dublaj-video'), /Önce yukarıdan dublaj paketini kur/);
+    await sayfa.check('#dublaj-paket-onay');
+    await sayfa.click('#dublaj-paket-kur');
+    await sayfa.waitForSelector('#dublaj-paket-ilerleme');
+    assert.deepStrictEqual(st.paketKur, [{ onay: true }]);
+    await sayfa.waitForFunction(() => /Kuruluyor… %\d+ · torch/.test((document.querySelector('#dublaj-paket-durum') || {}).textContent || ''), null, { timeout: 8000 });
+    await sayfa.waitForFunction(() => /Dublaj paketi kurulu ✓/.test((document.querySelector('#dublaj-paket-durum') || {}).textContent || ''), null, { timeout: 30000 });
+    adim('dublaj paketi: boyut gösterildi, onaysız kurulmadı, aşama aşama kuruldu ("kurulu ✓")');
+    await sayfa.click('#dublaj-motor-chatterbox');
+    await sayfa.waitForSelector('#dublaj-diyalog-ipucu');
+    assert.match(await sayfa.textContent('#dublaj-diyalog-ipucu'), /Diyalog sesini %10–20'ye indir/);
+    assert.match(await sayfa.textContent('#dublaj-gecikme'), /altyazıyla önden hazırlandı · ortalama gecikme 0,9 sn · konuşma→yazı 140 ms · seslendirme 820 ms/);
+    assert.match(await sayfa.textContent('#dublaj-profiller'), /Lucia · 18 sn/);
+    await sayfa.click('#dublaj-profil-izin', { force: true });
+    await sayfa.waitForTimeout(200);
+    assert.strictEqual(st.ayarlar.dublaj.ses_profili_izni, true);
+    await sayfa.click('#dublaj-profiller button');
+    await sayfa.waitForFunction(() => !document.querySelector('#dublaj-profiller'));
+    assert.deepStrictEqual(st.profilSil, ['Lucia']);
+    await sayfa.click('#dublaj-cikis-bilgisayar');
+    await sayfa.waitForSelector('#dublaj-orijinal-tamamen_turkce');
+    assert.strictEqual(await sayfa.locator('#dublaj-diyalog-ipucu').count(), 0);
+    await sayfa.click('#dublaj-orijinal-tamamen_turkce');
+    await sayfa.waitForFunction(() => document.querySelector('#dublaj-orijinal-tamamen_turkce').getAttribute('aria-pressed') === 'true');
+    assert.strictEqual(st.ayarlar.dublaj.orijinal_ses, 'tamamen_turkce');
+    await sayfa.click('#dublaj-giris-yukle');
+    await sayfa.waitForSelector('#dublaj-giris option[value="el1"]', { state: 'attached' });
+    await sayfa.selectOption('#dublaj-giris', 'el1');
+    await sayfa.waitForTimeout(200);
+    assert.strictEqual(st.ayarlar.dublaj.ses_girisi, 'el1');
+    if (process.env.AXE) {   // isteğe bağlı erişilebilirlik denetimi: AXE=/yol/axe.min.js
+      await sayfa.addScriptTag({ path: process.env.AXE });
+      const ihlal = await sayfa.evaluate(() => window.axe.run(document.querySelector('#dublaj-kart')).then((r) => r.violations.map((v) => v.id + ': ' + v.nodes.map((n) => n.target.join(' ')).join(', '))));
+      assert.deepStrictEqual(ihlal, [], 'axe: ' + ihlal.join(' | '));
+      adim('axe: dublaj kartında 0 erişilebilirlik ihlali');
+    }
+    adim('canlı dublaj: TV için diyalog ipucu, gecikme ölçümü, ses profili (izin + sil), orijinal ses seçimi, yakalama kartı girişi');
+    await sayfa.click('#dublaj-video-sec');
+    await sayfa.waitForFunction(() => /gta6\.mp4 · 812 MB/.test((document.querySelector('#dublaj-video-dosya') || {}).textContent || ''));
+    await sayfa.click('#dublaj-video-basla');
+    await sayfa.waitForSelector('#dublaj-video-ilerleme');
+    assert.deepStrictEqual(st.videoBasla, ['D:\\Kayıt\\gta6.mp4']);
+    await sayfa.waitForFunction(() => /kalan yaklaşık \d+ dk/.test((document.querySelector('#dublaj-video-durum') || {}).textContent || ''), null, { timeout: 8000 });
+    await gor('3b-video-dublaj.png');
+    await sayfa.waitForSelector('#dublaj-video-goster', { timeout: 30000 });
+    assert.match(await sayfa.textContent('#dublaj-video-cikti'), /Hazır: gta6 - Türkçe dublaj\.mp4/);
+    assert.match(await sayfa.textContent('#dublaj-video-asamalar'), /Karakterler tanınıyor ✓ \(3 karakter\)/);
+    await sayfa.click('#dublaj-video-goster');
+    await sayfa.waitForTimeout(150);
+    assert.strictEqual(st.videoGoster, 1);
+    assert.match(await sayfa.textContent('#dublaj-video'), /yayınlamak \(YouTube vb\.\) oyunun ve seslendirme sanatçılarının haklarına tabidir/);
+    if (process.env.AXE) {
+      const ihlal2 = await sayfa.evaluate(() => window.axe.run(document.querySelector('#dublaj-kart')).then((r) => r.violations.map((v) => v.id + ': ' + v.nodes.map((n) => n.target.join(' ')).join(', '))));
+      assert.deepStrictEqual(ihlal2, [], 'axe (video): ' + ihlal2.join(' | '));
+    }
+    adim('video dublaj: dosya seçildi, aşama aşama ilerleme + kalan süre, bitti, "Klasörde göster"');
+    await sayfa.click('#dublaj-paket-kaldir-ac > summary');
+    await sayfa.click('#dublaj-paket-kaldir');
+    await sayfa.waitForTimeout(200);
+    assert.ok(st.paketKaldir);
+    await sayfa.click('#dublaj-motor-kapali');
+    await sayfa.waitForTimeout(150);
     await sayfa.click('#dublaj-kart > summary');
 
     // gelişmiş ayarlar: tek bağlantının arkasında, ayrı ekran; ana ekrandaki şeyler burada tekrar edilmez
@@ -1084,6 +1183,7 @@ function dilKontrol() {
     assert.match(await sayfa.textContent('#dublaj-kart h2'), /Turkish dubbing \(experimental\)/);
     assert.match(await sayfa.textContent('#dublaj-ne'), /Characters speak Turkish in their own voices\. Only the game's sound is listened to, the microphone is never turned on, and no audio is recorded\./);
     assert.match(await sayfa.textContent('#kisayol-ipucu'), /In game: Ctrl\+Shift\+T start \/ stop/);
+    await sayfa.waitForFunction(() => /Dub a video in Turkish/.test((document.querySelector('#dublaj-video-baslik') || {}).textContent || ''), null, { timeout: 6000 });
     assert.match(await sayfa.textContent('#pk-kisayol h2'), /Hotkeys/);
     assert.match(await sayfa.getAttribute('#degistir-gosterim', 'aria-label'), /^Change: Where do I see it\?$/);
     assert.doesNotMatch(await sayfa.textContent('#pano'), /Değiştir|Oyun içinde|Son çeviriler/);

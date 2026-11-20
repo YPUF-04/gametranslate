@@ -828,3 +828,25 @@ kbd{display:inline-grid;place-items:center;min-width:1.95em;height:1.8em;padding
 html.buyuk-yazi .pano-izgara{grid-template-columns:1fr}
 .ekran-olcek.en-az{margin-top:18px;padding-top:16px;border-top:1px solid var(--cizgi)}
 .bolum>h2.bolum-baslik{font-size:1.1rem;margin:0 0 .35em;font-weight:700;letter-spacing:-.008em}
+
+/* ---- Türkçe dublaj 2: paket kurulumu, canlı seçenekler, video (PROTOKOL 14) ---- */
+.dublaj-adim{margin:14px 0 6px;padding:14px 16px;border:1px solid var(--cizgi);border-radius:var(--r-karo);background:var(--zemin2)}
+.dublaj-adim .ilerleme,.dublaj-video .ilerleme{flex:none;width:100%;margin:8px 0}
+.asama-liste{list-style:none;margin:8px 0;padding:0;display:grid;gap:4px;font-size:.93rem}
+.asama-liste li{display:flex;gap:6px;align-items:baseline;color:var(--soluk)}
+.asama-liste li::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--cizgi2);transform:translateY(-1px)}
+.asama-liste li.asama-suruyor{color:var(--yazi)}
+.asama-liste li.asama-suruyor::before{background:var(--ana);box-shadow:0 0 0 3px rgba(46,196,182,.25)}
+.asama-liste li.asama-bitti::before{background:var(--iyi)}
+.asama-liste li.asama-hata{color:var(--hata)}
+.asama-liste li.asama-hata::before{background:var(--hata)}
+.onay-satir{display:flex;gap:10px;align-items:flex-start;margin:10px 0;cursor:pointer;line-height:1.4}
+.onay-satir input{width:20px;height:20px;flex:none;margin-top:1px;accent-color:var(--ana)}
+.bilgi-kutu{margin:14px 0;padding:12px 16px;border-radius:14px;border:1px solid rgba(255,209,102,.35);background:rgba(255,209,102,.07)}
+.bilgi-kutu strong{display:block;color:var(--vurgu);margin-bottom:4px}
+.bilgi-kutu p{margin:0;color:var(--soluk);font-size:.93rem;line-height:1.5}
+.profil-liste{list-style:none;margin:6px 0;padding:0;display:grid;gap:4px;font-size:.93rem}
+.profil-liste li{display:flex;justify-content:space-between;gap:10px;padding:6px 10px;border-radius:10px;background:var(--zemin2)}
+.dublaj-video{margin-top:22px;padding-top:6px;border-top:1px solid var(--cizgi)}
+.kucuk-ac summary{cursor:pointer;color:var(--sessiz);font-size:.9rem;margin-top:6px}
+#dublaj-giris{width:100%;max-width:420px}

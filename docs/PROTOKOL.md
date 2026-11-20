@@ -413,13 +413,34 @@ olmalıdır, değilse süreç kapatılır. İşçi kendi stdout'unu stderr'e yö
 | `seslendir` | `{"metin","ref_pcm","ref_sr","duygu":{"canlilik":0.5,"cfg":0.5},"motor":"chatterbox"}` ya da `ref_yol`/`cikis` | Türkçe ses |
 | `karistir` | `{"arka":yol,"satirlar":[{"yol","bas"}],"cikis":yol}` | dublaj ses izi |
 | `video_cikar` / `video_birlestir` | ffmpeg ile ses çıkarma / video+ses birleştirme | dosya yolları |
-| `canli_baslat` | `{"pid":1234\|null,"ayirma":true,"tamamen_turkce":false}` | `parca` olayları başlar |
+| `canli_baslat` | `{"pid":1234\|null,"ayirma":true,"tamamen_turkce":false,"giris":""}` | `parca` olayları (`{"pcm","temiz","sr","sure_sn","kaynak":"surec"\|"giris"\|"sistem"}`), `olcum` (`ayirma_ms`) başlar |
+| `seslendir_cal` | `seslendir` + `{"hedef_sn","hiz_siniri","seviye","kis","pid"}` | akışlı seslendirip çalar → `{"ilk_ses_ms","toplam_ms","hiz","sure_sn"}` |
+| `girisler` | — | ses girişlerinin adları (açılmaz) |
+| `izler` / `referans_kaydet` / `hizlandir` | video aşamaları (14.4) | dosya yolları |
 | `canli_durdur` | — | yakalama durur, oyun sesi eski hâline döner |
 | `oynat` | `{"pcm","sr","seviye":1.0,"kis":0.25,"pid":1234\|null}` | çalar (çalarken oyun sesini kısar) |
 | `iptal` | `{"hedef":7}` | süren işi bırakır (`hata:"iptal"`) |
 | `kapat` | — | süreç biter |
 
 ### 14.3 Canlı dublaj (§9.1'e ek)
+**Ana kurulum (hedef):** PS5 → HDMI → LG TV (görüntü ve İngilizce ses TV'den, gecikmesiz). Bilgisayar PS5'e
+ikinci bir PSN hesabıyla Remote Play ile arka planda bağlanır; bu akış yalnız yazı okuma (OCR) ve ses
+çözümleme içindir. Türkçe altyazı bugünkü gibi TV uygulamasında çıkar; dublaj bunun YANINA eklenen bir
+katmandır (altyazı davranışı değişmez). Türkçe ses **TV'den** çalar (`cikis:"tv"`, SSE `ses`).
+- İngilizce sesi TV'den bilgisayar silemez. Önerilen: oyunun ayarlarında **Diyalog sesi %10–20**
+  (0 değil): İngilizce Türkçenin altında neredeyse duyulmaz, ama Remote Play akışında kısık da olsa
+  durur → ayrılır, düzeyi eşitlenir (en çok +30 dB) ve klon örneği olur. Panel bunu adım olarak söyler.
+- Ses profili açıksa (§14.5) yeterli ses toplanınca Diyalog 0 yapılabilir; profili olmayan karakter
+  motorun nötr Türkçe sesiyle konuşur.
+- **Metin önce altyazıdan:** ekranda altyazı belirdiği anda (cümle bitmeden) çeviri + seslendirme başlar;
+  hazır olunca TV'ye hemen gönderilir (`cikis:"tv"` ya da İngilizce çıkarılıyorsa). Konuşma parçası
+  sonra gelince aynı satır tekrar çalınmaz, yalnız karakterin sesi örneklenir. Altyazısı olmayan
+  konuşmada Whisper yedektir.
+- TV uygulaması gelen sesleri **sıraya** koyar (öncekini kesmez), 6 sn'den eski kalanı atar; Web Audio
+  ile çalar (HDMI `<video>` medya hattına ikinci bir medya kaynağı açmaz), yoksa `<audio>` sırası.
+  Gerçek LG TV'de HDMI üstünde ses çalma DOĞRULANMADI; çalmazsa yedek: `cikis:"bilgisayar"` +
+  Bluetooth hoparlör / LG Sound Share.
+
 - **Yalnız oyunun sesi**: Windows 10 2004+ üzerinde, seçili oyun penceresinin süreci için WASAPI
   *process loopback* (`AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK`, `PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE`)
   kullanılır; olmazsa bugünkü tüm-sistem loopback'e düşülür (`parca.kaynak:"surec"|"sistem"`). Mikrofon ASLA.
@@ -428,12 +449,23 @@ olmalıdır, değilse süreç kapatılır. İşçi kendi stdout'unu stderr'e yö
   durur, diske yazılmaz.
 - Duygu: orijinal parçanın ses yüksekliği/enerjisi ve perde değişkenliğinden `canlilik` (Chatterbox
   `exaggeration`, 0.25–1.2) ve `cfg` (0.3–0.7) hesaplanır: bağırma bağırma, fısıltı fısıltı kalır (motorun izin verdiği ölçüde).
-- `dublaj.orijinal_ses`: `"kis"` (varsayılan; Türkçe çalarken oyun sesi kısılır) | `"tamamen_turkce"`
-  (**deneysel**, yalnız Windows + process loopback: oyunun ses oturumu 0'a çekilir, işçi oyunun sesinden
-  konuşmayı ayırıp yalnız arka planı (müzik/efekt) ~2 sn gecikmeyle çalar, Türkçe ses üstüne biner).
-  Desteklenmiyorsa `"kis"` gibi davranır ve `GET /api/dublaj` → `tamamen_turkce_destek:false`.
-- Hafif mod (`dublaj.hafif_mod`): Whisper `small` (int8), ayırma kapalı. Ekran kartı belleği 8 GB'tan azsa önerilir.
-  Normal mod: Chatterbox fp32 ağırlık + fp16 hesap (autocast), Whisper `large-v3-turbo` (int8_float16), modeller bellekte kalır.
+- `dublaj.orijinal_ses` (yalnız ses BİLGİSAYARDAN duyuluyorsa anlamlı): `"otomatik"` (varsayılan:
+  Remote Play penceresi (`cihaz` ps5/xbox) ya da yakalama kartı girişi seçiliyse tamamen, oyun bu
+  bilgisayardaysa kıs) | `"kis"` | `"tamamen_turkce"` (**deneysel**): oyunun ses oturumu kapatılır, işçi
+  sesi 0,25 sn'lik bloklarla ayırıp yalnız arka planı (müzik/efekt) çalar (gecikme ≈ 0,25 sn + ayırma
+  süresi; `olcum` olayıyla ölçülür), Türkçe ses üstüne biner. Remote Play'de önce ölçülür: yakalama oturum
+  sesinden önceyse oyun tamamen susar; sonraysa oturum −30 dB'e çekilip yakalanan ses telafi edilir;
+  ölçülemezse "kıs"a dönülür. Yakalama kartında kartın görüntü programının (OBS vb.) oturumu kapatılır.
+- Yakalama kartı sesi (`dublaj.ses_girisi`): kartın ses girişi YALNIZ kullanıcı listeden adıyla açıkça
+  seçerse açılır (`GET /api/dublaj/girisler` → `{"girisler":[{"ad","kimlik","kart":true}]}`, hiçbiri açılmaz).
+  Varsayılan giriş/mikrofon kendiliğinden ASLA açılmaz.
+- Hafif mod (`dublaj.hafif_mod`: `"kapali"` varsayılan | `"acik"` | `"otomatik"` = ≤ 8,5 GB'ta açık): Whisper
+  `small`, Chatterbox dil modeli yarım hassas. Oyun PS5'te çalıştığından dizüstünün ekran kartı boştur:
+  varsayılan tam kalite (Whisper `large-v3-turbo` int8_float16, fp16 hesap). 180 sn boşta kalınca ses motoru
+  ekran kartından indirilir, ilk istekte geri yüklenir.
+- Akışlı seslendirme (`seslendir_cal`): metin cümleciklere bölünür, ilk cümlecik hazır olur olmaz çalar
+  (bilgisayar çıkışı). Ölçümler `GET /api/dublaj` → `gecikme`: `{"son":{"stt_ms","ceviri_ms","ses_ms",
+  "ilk_ses_ms","bekleme_ms","erken"},"ortalama_bekleme_ms"}` (bekleme = İngilizce parça bitişinden Türkçe sesin başlamasına).
 
 ### 14.4 Video dublaj
 Akış (her aşamanın çıktısı iş klasöründe saklanır; iptal edilen iş kaldığı aşamadan sürer):
@@ -467,13 +499,22 @@ SSE `dublaj-video`: `GET /api/dublaj/video` ile aynı gövde (değişince). `kal
 ölçülen hızdan tahmin (ilk aşamalarda kaba tahmin).
 
 ### 14.5 Ayarlar (`dublaj` içine eklenenler)
-`orijinal_ses`: `"kis"` | `"tamamen_turkce"` (varsayılan `"kis"`); `hafif_mod`: bool (`false`);
-`ayirma`: bool (`true`; canlıda konuşmayı arka plandan ayır); `video_srt`: bool (`true`);
-`video_motor`: `"chatterbox"` | `"pocket"` (`"chatterbox"`). Bilinmeyen değer `400 gecersiz_ayar`.
-`GET /api/dublaj` ek alanları: `paket` (14.1 gövdesi), `tamamen_turkce_destek`, `hafif_oneri` (bool).
+`orijinal_ses`: `"otomatik"` | `"kis"` | `"tamamen_turkce"` (`"otomatik"`); `hafif_mod`: `"kapali"` | `"acik"` |
+`"otomatik"` (`"kapali"`); `ayirma`: bool (`true`); `erken_seslendir`: bool (`true`; altyazıyla önden hazırlık);
+`ses_girisi`: metin ≤ 200 (`""`); `ses_profili_izni`: bool (`false`); `video_srt`: bool (`true`);
+`video_motor`: `"chatterbox"` | `"pocket"`. Bilinmeyen değer `400 gecersiz_ayar`.
+`GET /api/dublaj` ek alanları: `paket` (14.1 gövdesi), `isci` (paket kullanılıyor mu), `tamamen_turkce`,
+`tamamen_turkce_destek`, `hafif`, `gecikme`.
+
+**Ses profili (tek istisna):** `ses_profili_izni:true` iken her karakterin (OCR'daki konuşan adı) en uzun 3
+örneği (her biri ≤ 10 sn) bu bilgisayarda `<ayar_dizini>/oyunlar/<oyun>/sesler/` altında WAV olarak saklanır
+(aynı karakter için en sık 30 sn'de bir yazılır) ve oturum başında belleğe alınır. Hiçbir yere gönderilmez.
+`GET /api/dublaj/ses-profilleri` → `{"izin":false,"oyun":"gta6","profiller":[{"ad":"Lucia","sure_sn":18.2,"klip":3,"tarih":"..."}]}`;
+`DELETE /api/dublaj/ses-profilleri[?ad=Lucia]` → `{"tamam":true,"silinen":1}`. İzin kapalıyken hiçbir ses diske yazılmaz.
 
 ### 14.6 Kurallar
-- Mikrofon asla. Canlı ses örnekleri yalnız bellekte. Video modunda ara dosyalar yalnız iş klasöründe,
+- Mikrofon asla (yakalama kartı girişi yalnız kullanıcı adıyla seçerse). Canlı ses örnekleri yalnız
+  bellekte; tek istisna izinli "Ses profili" (§14.5). Video modunda ara dosyalar yalnız iş klasöründe,
   iş bitince silinir; çıktı videosu kullanıcının dosyasıdır.
 - API anahtarları işçiye verilmez (çeviri ana programda yapılır); günlükte anahtar yoktur.
 - Gerçek kişilerin seslerini taklit eden hazır ses paketi yoktur; yalnız videodaki/oyundaki karakterin kendi sesi örneklenir.

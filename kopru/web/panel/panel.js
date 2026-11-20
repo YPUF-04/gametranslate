@@ -2502,7 +2502,167 @@
   function dublajAyar() { return (S.ayarlar && S.ayarlar.dublaj) || {}; }
   function dublajSecim() { return S.dublajSecim || dublajAyar().motor || 'kapali'; }
   function dublajYukle() {
-    return api('GET', '/api/dublaj').then(function (b) { S.dublaj = b; dublajCiz(); return b; }).catch(function () {});
+    return Promise.all([
+      api('GET', '/api/dublaj').then(function (b) { S.dublaj = b; }),
+      api('GET', '/api/dublaj/video').then(function (v) { S.dublajVideo = v; }).catch(function () {})
+    ]).then(function () { dublajCiz(); return S.dublaj; }).catch(function () {});
+  }
+  function profilYukle() {
+    return api('GET', '/api/dublaj/ses-profilleri').then(function (p) { S.dublajProfil = p; dublajImza = ''; dublajCiz(); }).catch(function () {});
+  }
+  function girisYukle() {
+    return api('GET', '/api/dublaj/girisler').then(function (g) { S.dublajGiris = g.girisler || []; dublajImza = ''; dublajCiz(); }).catch(function () {});
+  }
+  function sureYaz(sn) {
+    if (sn == null) return '';
+    if (sn < 90) return t('dublaj.sure.sn', { n: Math.max(1, Math.round(sn)) });
+    if (sn < 5400) return t('dublaj.sure.dk', { n: Math.round(sn / 60) });
+    return t('dublaj.sure.sa', { n: (sn / 3600).toFixed(1).replace('.', ',') });
+  }
+  function gbYaz(mb) { return (Math.round(mb / 102.4) / 10).toFixed(1).replace('.', ','); }
+  function ilerlemeCubugu(id, yuzde, gizli, etiket) {
+    var bar = h('div', { class: 'ilerleme', role: 'progressbar', 'aria-label': etiket, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(yuzde || 0)), id: id, hidden: !!gizli }, h('i'));
+    bar.firstChild.style.width = Math.round(yuzde || 0) + '%';
+    return bar;
+  }
+  // 1) Dublaj paketi (PROTOKOL 14.1): onay, boyut, aşamalar, iptal, kaldır
+  function dublajPaketCiz(k, b) {
+    var pk = b.paket; if (!pk) return;
+    var bol = h('div', { class: 'bolum dublaj-adim', id: 'dublaj-paket' });
+    bol.appendChild(h('h3', { class: 'ara-baslik', text: t('dublaj.paket.baslik') }));
+    if (!pk.destek) { bol.appendChild(h('p', { class: 'not', id: 'dublaj-paket-yok', text: pk.mesaj_hata || t('dublaj.paket.destek_yok') })); k.appendChild(bol); return; }
+    if (pk.kurulu && pk.tamam) {
+      bol.appendChild(h('p', { class: 'sessiz', id: 'dublaj-paket-durum', role: 'status', text: t(pk.gelistirici ? 'dublaj.paket.hazir_gel' : 'dublaj.paket.hazir') }));
+      bol.appendChild(h('details', { class: 'kucuk-ac', id: 'dublaj-paket-kaldir-ac' }, [
+        h('summary', { text: t('dublaj.paket.kaldir') }),
+        h('p', { class: 'sessiz', text: t('dublaj.paket.kaldir.k', { konum: pk.konum }) }),
+        h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'dublaj-paket-kaldir', text: t('dublaj.paket.kaldir.evet'), onclick: function () {
+          api('POST', '/api/dublaj/paket/kaldir', { onay: true }, 60000).then(function () { toast(t('dublaj.paket.kaldirildi')); dublajImza = ''; return dublajYukle(); }).catch(hataGoster);
+        } })
+      ]));
+      k.appendChild(bol); return;
+    }
+    var suruyor = pk.durum === 'kuruluyor';
+    bol.appendChild(h('p', { class: 'ne', text: t('dublaj.paket.ne') }));
+    bol.appendChild(h('p', { class: 'sessiz', id: 'dublaj-paket-boyut', text: t('dublaj.paket.boyut', { gb: gbYaz(pk.indirme_mb), disk: gbYaz(pk.disk_mb) }) }));
+    var liste = h('ol', { class: 'asama-liste', id: 'dublaj-paket-asamalar' });
+    (pk.asamalar || []).forEach(function (a) {
+      liste.appendChild(h('li', { class: 'asama-' + a.durum, 'data-asama': a.kod }, [
+        h('span', { text: t('dublaj.paket.a.' + a.kod) }),
+        h('span', { class: 'sessiz', text: a.durum === 'bitti' ? ' ✓' : (a.durum === 'suruyor' ? ' %' + a.yuzde : (a.durum === 'hata' ? ' ✗' : '')) })]));
+    });
+    bol.appendChild(liste);
+    if (suruyor) {
+      bol.appendChild(ilerlemeCubugu('dublaj-paket-ilerleme', pk.yuzde, false, t('dublaj.paket.baslik')));
+      bol.appendChild(h('p', { class: 'sessiz', id: 'dublaj-paket-durum', role: 'status', 'aria-live': 'polite', text: t('dublaj.paket.suruyor', { n: pk.yuzde }) + (pk.mesaj ? ' · ' + pk.mesaj : '') }));
+      bol.appendChild(h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'dublaj-paket-iptal', text: t('dublaj.paket.iptal'), onclick: function () {
+        api('POST', '/api/dublaj/paket/iptal', {}, 30000).then(function () { dublajImza = ''; return dublajYukle(); }).catch(hataGoster);
+      } }));
+    } else {
+      if (pk.durum === 'hata' && pk.mesaj_hata) bol.appendChild(h('p', { class: 'not', id: 'dublaj-paket-hata', role: 'alert', text: pk.mesaj_hata }));
+      if (pk.durum === 'iptal') bol.appendChild(h('p', { class: 'sessiz', text: t('dublaj.paket.durdu') }));
+      var onay = h('input', { type: 'checkbox', id: 'dublaj-paket-onay' });
+      var kur = h('button', { type: 'button', class: 'dugme kucuk', id: 'dublaj-paket-kur', disabled: true, text: t(pk.yuzde > 0 ? 'dublaj.paket.surdur' : 'dublaj.paket.kur'), onclick: function () {
+        api('POST', '/api/dublaj/paket/kur', { onay: true }).then(function (r) { S.dublaj.paket = r; dublajImza = ''; dublajCiz(); }).catch(hataGoster);
+      } });
+      onay.addEventListener('change', function () { kur.disabled = !onay.checked; });
+      bol.appendChild(h('label', { class: 'onay-satir', for: 'dublaj-paket-onay' }, [onay, h('span', { text: t('dublaj.paket.onay', { gb: gbYaz(pk.indirme_mb) }) })]));
+      bol.appendChild(h('div', { class: 'satir' }, [kur]));
+    }
+    k.appendChild(bol);
+  }
+  // 2) Canlı dublaj ayarları (PROTOKOL 14.3/14.5)
+  function dublajCanliCiz(k, b, a) {
+    var cikis = a.cikis || 'bilgisayar';
+    if (cikis === 'tv') {
+      k.appendChild(h('div', { class: 'bilgi-kutu', id: 'dublaj-diyalog-ipucu' }, [
+        h('strong', { text: t('dublaj.diyalog.baslik') }), h('p', { text: t('dublaj.diyalog.k') })]));
+    } else {
+      k.appendChild(h('h3', { class: 'ara-baslik', text: t('dublaj.orijinal') }));
+      var ol = h('div', { class: 'liste', role: 'group', 'aria-label': t('dublaj.orijinal') });
+      ['otomatik', 'kis', 'tamamen_turkce'].forEach(function (o) {
+        ol.appendChild(h('button', { type: 'button', class: 'sec', id: 'dublaj-orijinal-' + o, 'aria-pressed': String((a.orijinal_ses || 'otomatik') === o), onclick: function () { dublajKaydet({ orijinal_ses: o }); } }, [
+          h('span', { class: 'sec-ad', text: t('dublaj.orijinal.' + o) }), h('span', { class: 'sec-alt', text: t('dublaj.orijinal.' + o + '.k') })]));
+      });
+      k.appendChild(ol);
+      if (b.tamamen_turkce && !b.tamamen_turkce_destek) k.appendChild(h('p', { class: 'not', text: t('dublaj.orijinal.destek_yok') }));
+      var gl = S.dublajGiris;
+      if (b.isci) {
+        var sec = h('select', { id: 'dublaj-giris', 'aria-label': t('dublaj.giris'), onchange: function () { dublajKaydet({ ses_girisi: sec.value }); } },
+          [h('option', { value: '', text: t('dublaj.giris.yok') })].concat((gl || []).map(function (g) { return h('option', { value: g.kimlik, text: g.ad + (g.kart ? ' ★' : '') }); })));
+        sec.value = a.ses_girisi || '';
+        k.appendChild(h('div', { style: 'margin-top:8px' }, [h('label', { class: 'etiket', for: 'dublaj-giris', text: t('dublaj.giris') }), sec,
+          h('p', { class: 'sessiz', text: t('dublaj.giris.k') }),
+          gl ? null : h('button', { type: 'button', class: 'baglanti', id: 'dublaj-giris-yukle', text: t('dublaj.giris.listele'), onclick: girisYukle })]));
+      }
+    }
+    k.appendChild(anahtar(t('dublaj.profil'), t('dublaj.profil.k'), a.ses_profili_izni, function (v) { dublajKaydet({ ses_profili_izni: v }).then(profilYukle); }, 'dublaj-profil-izin'));
+    var pr = S.dublajProfil;
+    if (pr && pr.profiller && pr.profiller.length) {
+      var pl = h('ul', { class: 'profil-liste', id: 'dublaj-profiller' });
+      pr.profiller.forEach(function (p) {
+        pl.appendChild(h('li', {}, [h('span', { text: p.ad + ' · ' + t('dublaj.sure.sn', { n: Math.round(p.sure_sn) }) }),
+          h('button', { type: 'button', class: 'baglanti', 'aria-label': t('dublaj.profil.sil_ad', { ad: p.ad }), text: t('dublaj.profil.sil'), onclick: function () {
+            api('DELETE', '/api/dublaj/ses-profilleri?ad=' + encodeURIComponent(p.ad)).then(profilYukle).catch(hataGoster);
+          } })]));
+      });
+      k.appendChild(pl);
+      k.appendChild(h('button', { type: 'button', class: 'baglanti', id: 'dublaj-profil-hepsi', text: t('dublaj.profil.hepsi'), onclick: function () {
+        api('DELETE', '/api/dublaj/ses-profilleri').then(function () { toast(t('dublaj.profil.silindi')); return profilYukle(); }).catch(hataGoster);
+      } }));
+    }
+    k.appendChild(anahtar(t('dublaj.hafif'), t('dublaj.hafif.k'), a.hafif_mod === 'acik', function (v) { dublajKaydet({ hafif_mod: v ? 'acik' : 'kapali' }); }, 'dublaj-hafif'));
+    var g = b.gecikme;
+    if (g && g.son) {
+      var s2 = g.son, parcalar = [];
+      if (s2.erken) parcalar.push(t('dublaj.gecikme.erken'));
+      if (g.ortalama_bekleme_ms != null) parcalar.push(t('dublaj.gecikme.ort', { n: (g.ortalama_bekleme_ms / 1000).toFixed(1).replace('.', ',') }));
+      ['stt_ms', 'ceviri_ms', 'ses_ms', 'ilk_ses_ms'].forEach(function (x) { if (s2[x] != null) parcalar.push(t('dublaj.gecikme.' + x, { n: s2[x] })); });
+      k.appendChild(h('p', { class: 'sessiz', id: 'dublaj-gecikme', text: parcalar.join(' · ') }));
+    }
+  }
+  // 3) Videoyu Türkçe dublajla (PROTOKOL 14.4)
+  function dublajVideoCiz(k, b) {
+    var v = S.dublajVideo || { durum: 'bosta' }, pk = b.paket || {};
+    var bol = h('section', { class: 'bolum dublaj-video', id: 'dublaj-video', 'aria-labelledby': 'dublaj-video-baslik' });
+    bol.appendChild(h('h3', { class: 'ara-baslik', id: 'dublaj-video-baslik', text: t('dublaj.video.baslik') }));
+    bol.appendChild(h('p', { class: 'sessiz', text: t('dublaj.video.ne') }));
+    if (!pk.kurulu) { bol.appendChild(h('p', { class: 'sessiz', id: 'dublaj-video-paket', text: t('dublaj.video.paket_once') })); k.appendChild(bol); return; }
+    var calisiyor = v.durum === 'calisiyor';
+    var secilen = S.dublajVideoSecim;
+    if (!calisiyor) {
+      bol.appendChild(h('div', { class: 'satir' }, [
+        h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'dublaj-video-sec', text: t('dublaj.video.sec'), onclick: function () {
+          api('POST', '/api/dublaj/dosya-sec', {}, 610000).then(function (r) { if (r && r.yol) { S.dublajVideoSecim = r; dublajImza = ''; dublajCiz(); } }).catch(hataGoster);
+        } }),
+        secilen ? h('span', { class: 'sessiz', id: 'dublaj-video-dosya', text: secilen.ad + ' · ' + secilen.boyut_mb + ' MB' }) : null,
+        h('button', { type: 'button', class: 'dugme kucuk', id: 'dublaj-video-basla', disabled: !secilen, text: t(v.devam_edilebilir ? 'dublaj.video.surdur' : 'dublaj.video.basla'), onclick: function () {
+          api('POST', '/api/dublaj/video', { yol: secilen.yol }).then(function (r) { S.dublajVideo = r; dublajImza = ''; dublajCiz(); }).catch(hataGoster);
+        } })
+      ]));
+    }
+    if (v.durum !== 'bosta') {
+      bol.appendChild(h('p', { class: 'sessiz', id: 'dublaj-video-durum', role: 'status', 'aria-live': 'polite', text:
+        (v.ad ? v.ad + ' · ' : '') + t('dublaj.video.d.' + v.durum) + (calisiyor ? ' · %' + v.yuzde + (v.kalan_sn != null ? ' · ' + t('dublaj.video.kalan', { s: sureYaz(v.kalan_sn) }) : '') : '') }));
+      if (calisiyor) bol.appendChild(ilerlemeCubugu('dublaj-video-ilerleme', v.yuzde, false, t('dublaj.video.baslik')));
+      var al = h('ol', { class: 'asama-liste', id: 'dublaj-video-asamalar' });
+      (v.asamalar || []).forEach(function (a) {
+        var ek = a.durum === 'suruyor' ? ' %' + a.yuzde : (a.durum === 'bitti' ? ' ✓' : '');
+        if (a.kod === 'seslendir' && a.durum === 'suruyor' && v.satir && v.satir.toplam) ek = ' ' + v.satir.bitti + '/' + v.satir.toplam;
+        if (a.kod === 'konusmaci' && a.durum === 'bitti' && v.konusmaci_sayisi) ek += ' (' + t('dublaj.video.karakter', { n: v.konusmaci_sayisi }) + ')';
+        al.appendChild(h('li', { class: 'asama-' + a.durum, 'data-asama': a.kod }, [h('span', { text: t('dublaj.video.a.' + a.kod) }), h('span', { class: 'sessiz', text: ek })]));
+      });
+      bol.appendChild(al);
+      if (calisiyor) bol.appendChild(h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'dublaj-video-iptal', text: t('dublaj.video.iptal'), onclick: function () {
+        api('POST', '/api/dublaj/video/iptal', {}, 30000).then(function (r) { S.dublajVideo = r; dublajImza = ''; dublajCiz(); }).catch(hataGoster);
+      } }));
+      if (v.durum === 'hata' && v.mesaj) bol.appendChild(h('p', { class: 'not', id: 'dublaj-video-hata', role: 'alert', text: v.mesaj }));
+      if (v.durum === 'bitti') bol.appendChild(h('div', { class: 'satir' }, [
+        h('span', { class: 'sessiz', id: 'dublaj-video-cikti', text: t('dublaj.video.hazir', { ad: (v.cikti || '').split(/[\\/]/).pop() }) }),
+        h('button', { type: 'button', class: 'dugme kucuk', id: 'dublaj-video-goster', text: t('dublaj.video.goster'), onclick: function () { api('POST', '/api/dublaj/video/goster', {}).catch(hataGoster); } })]));
+    }
+    bol.appendChild(h('p', { class: 'sessiz', text: t('dublaj.video.yasal') }));
+    k.appendChild(bol);
   }
   function dublajKaydet(parca) {
     if (S.ayarlar) S.ayarlar.dublaj = Object.assign({}, dublajAyar(), parca);
@@ -2516,19 +2676,24 @@
     dublajImza = '';
     dublajCiz();
     dublajYukle();
+    profilYukle();
     return dublajKok;
   }
   function dublajCiz() {
     if (!dublajKok || !document.body.contains(dublajKok) && dublajKok.dataset.kuruldu) return;
     var b = S.dublaj || {}, a = dublajAyar(), sec = dublajSecim(), ind = b.indirme || {};
+    var pk = b.paket || {}, vd = S.dublajVideo || {};
     var imza = [sec, b.hazir, b.onerilen, b.ekran_karti, ind.durum, ind.yuzde, ind.hata, b.son_hata, b.elevenlabs_anahtar,
-      a.elevenlabs_onay, a.elevenlabs_klon_onay, a.cikis, dublajMesaj, dil].join('|');
+      a.elevenlabs_onay, a.elevenlabs_klon_onay, a.cikis, dublajMesaj, dil, a.orijinal_ses, a.hafif_mod, a.ses_profili_izni, a.ses_girisi,
+      pk.durum, pk.yuzde, pk.kurulu, pk.tamam, pk.mesaj, JSON.stringify(pk.asamalar || []), b.tamamen_turkce, JSON.stringify(b.gecikme || null),
+      vd.durum, vd.yuzde, vd.kalan_sn, vd.asama, vd.satir && vd.satir.bitti, vd.cikti, vd.mesaj, S.dublajVideoSecim && S.dublajVideoSecim.yol].join('|');
     if (imza === dublajImza) return;   // değişmediyse yeniden çizme (yazı/odak kaybolmasın)
     dublajImza = imza;
     var k = dublajKok; k.dataset.kuruldu = '1'; k.textContent = '';
     var oz = $('#dublaj-ozet'); if (oz) oz.textContent = t('dublaj.' + (a.motor || 'kapali')) + (a.motor && a.motor !== 'kapali' && b.hazir ? ' · ' + t('dublaj.hazir') : '');
     k.appendChild(h('p', { class: 'ne', id: 'dublaj-ne', text: t('dublaj.ne') }));
     k.appendChild(h('p', { class: 'sessiz', text: t('dublaj.gecikme') }));
+    dublajPaketCiz(k, b);
     if (b.motor !== undefined) {
       k.appendChild(h('p', { class: 'sessiz', id: 'dublaj-donanim', text: b.ekran_karti ? t('dublaj.donanim', { kart: b.ekran_karti + (b.vram_gb ? ' (' + b.vram_gb + ' GB)' : '') }) : t('dublaj.donanim_yok') }));
     }
@@ -2603,7 +2768,9 @@
         ]));
       });
       k.appendChild(cl);
+      if (b.paket && b.paket.kurulu && sec !== 'elevenlabs') dublajCanliCiz(k, b, a);
     }
+    dublajVideoCiz(k, b);
     k.appendChild(h('p', { class: 'sessiz', style: 'margin-top:16px', text: t('dublaj.haklar') }));
   }
 
