@@ -157,7 +157,8 @@ async def istemci(aiohttp_client, uygulama_ayari, katman_surec_yok):
     return await aiohttp_client(app)
 
 
-async def test_api_kisayollar_destek_yok(istemci):
+async def test_api_kisayollar_destek_yok(aiohttp_client, uygulama_ayari):
+    istemci = await aiohttp_client(sunucu.uygulama_olustur(uygulama_ayari, kisayol_destek=False))
     r = await istemci.get("/api/kisayollar")
     j = await r.json()
     assert r.status == 200 and j["destek"] is False and j["kayitli"] == {} and j["hata"] == {}
