@@ -150,6 +150,7 @@ class VideoIsi:
         if self.calisiyor():
             return
         self._iptal = False
+        self.durum = "calisiyor"
         self._gorev = asyncio.get_running_loop().create_task(self.calis())
 
     async def iptal(self) -> None:
