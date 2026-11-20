@@ -404,21 +404,79 @@
 
     // ---------- Türkçe dublaj sesi (olay `ses` / `ses-dur`) ----------
     function taban() { var m = /^(https?:\/\/[^\/]+)/.exec(url || ''); return m ? m[1] : ''; }   // PC adresi (TV uygulaması file:// kökenlidir)
-    function sesDurdur() {
-      var a = sesNesne;
-      sesNesne = null;
-      if (a) { try { a.pause(); } catch (x) { /* yok say */ } try { a.removeAttribute('src'); } catch (y) { /* yok say */ } }
+    // Sıra: yeni ses öncekini KESMEZ, arkasına eklenir (konuşmalar art arda). Çok gecikmiş (bekleyen
+    // > SES_BAYAT_MS) ses atılır. Web Audio varsa onunla çalınır: webOS'te HDMI görüntüsü bir <video>
+    // medya hattıdır; Web Audio ikinci bir medya kaynağı açmadığı için HDMI'yi durdurma riski daha düşüktür.
+    // (Gerçek LG TV'de DOĞRULANMADI.) Yoksa <audio> sırasıyla çalınır.
+    var SES_BAYAT_MS = 6000, sesSira = [], sesCtx = null, sesSon = 0, sesKaynaklar = [];
+    function sesBaglam() {
+      if (sesCtx) { return sesCtx; }
+      var C = pencere.AudioContext || pencere.webkitAudioContext;
+      if (!C || sec.webAudio === false) { return null; }
+      try { sesCtx = new C(); } catch (x) { sesCtx = null; }
+      return sesCtx;
     }
-    function sesCal(v) {
-      var a, p;
-      if (!v || typeof v.url !== 'string' || v.url.charAt(0) !== '/') { return; }   // yalnız PC'nin kendi yolu
-      sesDurdur();                                    // öncekini kes: iki ses üst üste binmesin
-      a = new pencere.Audio(taban() + v.url);
-      a.onended = function () { if (sesNesne === a) { sesNesne = null; } };
+    function sesDurdur() {
+      var a = sesNesne, i;
+      sesNesne = null; sesSira = [];
+      if (a) { try { a.pause(); } catch (x) { /* yok say */ } try { a.removeAttribute('src'); } catch (y) { /* yok say */ } }
+      for (i = 0; i < sesKaynaklar.length; i++) { try { sesKaynaklar[i].stop(0); } catch (z) { /* yok say */ } }
+      sesKaynaklar = []; sesSon = 0;
+    }
+    function sesSonraki() {
+      var v, a, p;
+      if (sesNesne) { return; }
+      while (sesSira.length && Date.now() - sesSira[0].gelis > SES_BAYAT_MS) { sesSira.shift(); }
+      v = sesSira.shift();
+      if (!v) { return; }
+      a = new pencere.Audio();
+      a.preload = 'auto';
+      a.src = taban() + v.url;
+      a.onended = function () { if (sesNesne === a) { sesNesne = null; sesSonraki(); } };
+      a.onerror = function () { if (sesNesne === a) { sesNesne = null; bildir('onSesHata', v); sesSonraki(); } };
       sesNesne = a;
-      try { p = a.play(); if (p && p.catch) { p.catch(function () { if (sesNesne === a) { sesNesne = null; } bildir('onSesHata', v); }); } }
+      try { p = a.play(); if (p && p.catch) { p.catch(function () { if (sesNesne === a) { sesNesne = null; } bildir('onSesHata', v); sesSonraki(); }); } }
       catch (x) { sesNesne = null; bildir('onSesHata', v); }
       bildir('onSes', v);
+    }
+    function sesWebAudio(ctx, v) {
+      var x = new pencere.XMLHttpRequest(), gelis = Date.now();
+      x.open('GET', taban() + v.url, true);
+      x.responseType = 'arraybuffer';
+      x.onload = function () {
+        if (x.status !== 200) { bildir('onSesHata', v); return; }
+        var bitti = function (tampon) {
+          var k, bas;
+          if (Date.now() - gelis > SES_BAYAT_MS) { return; }
+          if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (r) { /* yok say */ } }
+          k = ctx.createBufferSource(); k.buffer = tampon; k.connect(ctx.destination);
+          bas = Math.max(ctx.currentTime + 0.02, sesSon);
+          sesSon = bas + tampon.duration;
+          k.onended = function () { var i = sesKaynaklar.indexOf(k); if (i >= 0) { sesKaynaklar.splice(i, 1); } };
+          sesKaynaklar.push(k);
+          try { k.start(bas); } catch (s1) { bildir('onSesHata', v); return; }
+          bildir('onSes', v);
+        };
+        try {
+          var p = ctx.decodeAudioData(x.response, bitti, function () { bildir('onSesHata', v); });
+          if (p && p.catch) { p.catch(function () { /* hata geri çağrısı bildirdi */ }); }
+        } catch (d) { bildir('onSesHata', v); }
+      };
+      x.onerror = function () { bildir('onSesHata', v); };
+      x.send();
+    }
+    // Tarayıcılar sesi kullanıcı bir tuşa basana dek askıda tutabilir: ilk tuşta açılır
+    if (pencere.document && pencere.document.addEventListener) {
+      pencere.document.addEventListener('keydown', function () { if (sesCtx && sesCtx.resume) { try { sesCtx.resume(); } catch (x) { /* yok say */ } } }, false);
+    }
+    function sesCal(v) {
+      var ctx;
+      if (!v || typeof v.url !== 'string' || v.url.charAt(0) !== '/') { return; }   // yalnız PC'nin kendi yolu
+      ctx = sesBaglam();
+      if (ctx && ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (r) { /* yok say */ } }
+      if (ctx && ctx.state !== 'suspended') { sesWebAudio(ctx, v); return; }
+      sesSira.push({ url: v.url, id: v.id, yazi_id: v.yazi_id, gelis: Date.now() });
+      sesSonraki();
     }
 
     function olayVeri(ev) { var v = null; try { v = JSON.parse(ev.data); } catch (x) { v = null; } return v; }

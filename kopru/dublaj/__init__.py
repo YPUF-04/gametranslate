@@ -21,7 +21,23 @@ VARSAYILAN: dict[str, Any] = {
     "elevenlabs_klon_onay": False,   # 2) kendi sesimin klonunu o hesapta oluştur (ikinci onay)
     "elevenlabs_ses_kimligi": "",    # kullanıcının seçtiği hazır ses (voice_id)
     "elevenlabs_model": "eleven_multilingual_v2",
+    # PROTOKOL 14.5
+    # "otomatik": PS5/Xbox Remote Play penceresi ya da yakalama kartı sesi varsa İngilizce ses tamamen
+    # çıkarılır, yoksa kısılır | "kis" | "tamamen_turkce"
+    "orijinal_ses": "otomatik",
+    # Oyun konsolda (PS5) çalıştığı için ekran kartı boştur: varsayılan tam kalite. "acik": hafif modeller
+    "hafif_mod": "kapali",
+    "ses_girisi": "",
+    # Ses profili (§14.5): izinle karakter örnekleri bu bilgisayarda saklanır (silinebilir). Varsayılan KAPALI
+    "ses_profili_izni": False,                # yakalama kartının ses girişi (yalnız kullanıcı açıkça seçerse; mikrofon değil)
+    "ayirma": True,                  # canlıda konuşmayı arka plandan ayır (temiz klon + yazı)
+    "erken_seslendir": True,         # ekrandaki altyazı görünür görünmez Türkçe sesi hazırlamaya başla
+    "video_srt": True,
+    "video_motor": "chatterbox",
 }
+ORIJINAL_SES = ("otomatik", "kis", "tamamen_turkce")
+HAFIF_MOD = ("otomatik", "acik", "kapali")
+VIDEO_MOTORLARI = ("chatterbox", "pocket")
 
 
 def ayar_gecerli(d: Any) -> bool:
@@ -44,7 +60,17 @@ def ayar_gecerli(d: Any) -> bool:
             return False
         if k == "hiz_siniri" and not 1.0 <= v <= 1.5:
             return False
-        if k in ("elevenlabs_onay", "elevenlabs_klon_onay") and not isinstance(v, bool):
+        if k == "orijinal_ses" and v not in ORIJINAL_SES:
+            return False
+        if k == "hafif_mod" and v not in HAFIF_MOD:
+            return False
+        if k == "ses_girisi" and (not isinstance(v, str) or len(v) > 200):
+            return False
+        if k == "video_motor" and v not in VIDEO_MOTORLARI:
+            return False
+        if k in ("elevenlabs_onay", "elevenlabs_klon_onay", "ayirma", "erken_seslendir", "video_srt",
+                 "ses_profili_izni") \
+                and not isinstance(v, bool):
             return False
         if k in ("elevenlabs_ses_kimligi", "elevenlabs_model"):
             if not isinstance(v, str) or len(v) > 100 or (k == "elevenlabs_model" and not v.strip()):
@@ -88,3 +114,18 @@ def ayar_duzelt(mevcut: dict[str, Any], parca: dict[str, Any]) -> tuple[dict[str
                 return d, "dublaj_onay_gerekli"
             d["motor"] = "kapali"
     return d, None
+
+
+def tamamen_turkce_mu(ayar: dict[str, Any]) -> bool:
+    """İngilizce sesin tamamen çıkarılması istenip istenmediği (PROTOKOL 14.3).
+
+    "otomatik": ses bilgisayardan geçiyorsa evet: PS5/Xbox Remote Play penceresi seçili ya da
+    yakalama kartının ses girişi seçili. Oyun bu bilgisayarda çalışıyorsa (pc) hayır: kısma.
+    """
+    d = ayar.get("dublaj") or {}
+    secim = d.get("orijinal_ses", "otomatik")
+    if secim != "otomatik":
+        return secim == "tamamen_turkce"
+    if d.get("ses_girisi"):
+        return True
+    return ayar.get("cihaz") in ("ps5", "xbox", "kart") and str(ayar.get("kaynak") or "").startswith("pencere:")

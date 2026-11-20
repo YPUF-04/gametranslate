@@ -225,3 +225,28 @@ def dublaj_ipucu(sure_sn: float, onceki: str | None = None) -> str:
         p += (f' Your previous attempt was too long to say in that time: "{_kes(onceki, 300)}". '
               "Give a clearly SHORTER version that keeps the core meaning.")
     return p
+
+
+def video_dublaj_ipucu(sureler: list[float], konusanlar: list[str] | None = None,
+                       onceki: list[tuple[str, str]] | None = None, kisalt: dict[int, str] | None = None) -> str:
+    """Video dublajı (PROTOKOL 14.4/6): bütün satırlar bir arada; her satırın süresi ve konuşanı verilir."""
+    satirlar = []
+    for i, s in enumerate(sureler):
+        azami = max(8, int(s * 13))
+        k = f", speaker {konusanlar[i]}" if konusanlar and i < len(konusanlar) and konusanlar[i] else ""
+        ek = ""
+        if kisalt and i in kisalt:
+            ek = f', previous attempt too long: "{_kes(kisalt[i], 200)}" -> make it clearly SHORTER'
+        satirlar.append(f"#{i + 1}: {s:.1f}s, max ~{azami} chars{k}{ek}")
+    p = ("VIDEO DUBBING MODE: every line in the array is dialogue from a recorded gameplay video and will be "
+         "SPOKEN ALOUD in Turkish by the same character's cloned voice, replacing the original speech. "
+         "Ignore the subtitle line-length rules above. For each line write natural, speakable Turkish "
+         "(söylenebilir, doğal konuşma dili) that fits the original duration, keeps the speaker's tone "
+         "(slang stays slang, shouting stays forceful), without stage directions, symbols or line breaks; "
+         "spell out numbers as words. Keep names untranslated unless the glossary says otherwise. "
+         "Use the neighbouring lines as context so pronouns and jokes stay consistent.\n"
+         "Line timing:\n" + "\n".join(satirlar))
+    if onceki:
+        p += "\nPrevious lines (already translated, for context only):\n" + "\n".join(
+            f"- {_kes(a, 160)} => {_kes(c, 160)}" for a, c in onceki[-8:])
+    return p

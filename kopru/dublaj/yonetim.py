@@ -5,11 +5,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from pathlib import Path
+import sys
 from typing import TYPE_CHECKING, Any, Callable
 
 from .. import ses as ses_mod
-from . import MOTORLAR, donanim, motor_olustur
-from .cikis import BilgisayarCikis, SesDeposu, TvCikis
+from . import MOTORLAR, donanim, motor_olustur, tamamen_turkce_mu
+from .cikis import BilgisayarCikis, SesDeposu, TvCikis, _pencere_islemi
+from .isci_istemci import (IsciCikis, IsciIstemci, IsciMotoru, IsciSesKaynagi, IsciSTT, isci_komutu,
+                           kod_kopyala)
+from .ortam import DublajOrtami
 from .temel import DublajHatasi
 
 if TYPE_CHECKING:
@@ -25,17 +30,28 @@ class DublajYonetici:
                  stt_fabrika: Callable[[dict[str, Any]], Any] | None = None,
                  kaynak_fabrika: Callable[..., Any] | None = None,
                  bilgisayar_cikis: Any = None, saat: Callable[[], float] = time.monotonic,
-                 donanim_fn: Callable[[], donanim.Donanim] = donanim.algila) -> None:
+                 donanim_fn: Callable[[], donanim.Donanim] = donanim.algila,
+                 ortam: DublajOrtami | None = None, isci: IsciIstemci | None = None) -> None:
         self.ayar = ayar_getir
         self.yayin = yayin
         self.yonetici_getir = yonetici_getir
-        self.motor_fabrika = motor_fabrika
-        self.stt_fabrika = stt_fabrika or (lambda a: ses_mod.WhisperSTT("small", a.get("hedef_dil") or "tr"))
-        self.kaynak_fabrika = kaynak_fabrika or ses_mod.SesKaynagi
+        # Dublaj paketi (PROTOKOL 14.1) ve işçi süreci (14.2). Testler kendi sahtelerini verir.
+        self.ortam = ortam or DublajOrtami()
+        self.isci = isci or IsciIstemci(self._isci_komutu)
+        self.ortam.model_indirici = self._modelleri_indir
+        self.ortam.isci_denetci = self._isci_denetle
+        self._fabrika_verildi = motor_fabrika is not motor_olustur
+        self.motor_fabrika = motor_fabrika if self._fabrika_verildi else self._varsayilan_motor
+        self._stt_verildi = stt_fabrika is not None
+        self.stt_fabrika = stt_fabrika or self._varsayilan_stt
+        self._kaynak_verildi = kaynak_fabrika is not None
+        self.kaynak_fabrika = kaynak_fabrika or self._varsayilan_kaynak
         self.saat = saat
         self.donanim_fn = donanim_fn
         self.depo = SesDeposu(saat=saat)
+        self._bilgisayar_verildi = bilgisayar_cikis is not None
         self._bilgisayar = bilgisayar_cikis or BilgisayarCikis()
+        self._isci_cikis = IsciCikis(self.isci, self._oyun_pid)
         self._tv = TvCikis(self.depo, yayin)
         self._motor: Any = None
         self._motor_imza: tuple = ()
@@ -48,6 +64,82 @@ class DublajYonetici:
         self._donanim: donanim.Donanim | None = None
         self._calisiyor = False       # çeviri (Başlat) çalışıyor mu
         self.son_hata: str | None = None
+
+    # -- dublaj paketi / işçi --
+    def isci_kullan(self) -> bool:
+        """Ağır işler işçide mi yapılsın: dublaj paketi kuruluysa evet."""
+        return self.ortam.kurulu()
+
+    def _isci_komutu(self) -> Any:
+        o = self.ortam
+        if o.gelistirici:
+            kok = Path(__file__).resolve().parent.parent.parent      # depo kökü: kopru/ burada
+        else:
+            kok = kod_kopyala(o.kok / "kod")
+        return isci_komutu(o.python_yolu(), kok, o.model_dizini(), o.ffmpeg_yolu(), o.kok / "isci.log")
+
+    def hafif(self) -> bool:
+        from .isci.mantik import hafif_mi
+        return hafif_mi(self._d().get("hafif_mod", "kapali"), self._donanim.vram_gb if self._donanim else None)
+
+    def _yukle_ayari(self) -> dict[str, Any]:
+        h = self.hafif()
+        return {"stt": "small" if h else "large-v3-turbo", "hafif": h,
+                "ayirma": bool(self._d().get("ayirma", True)) or tamamen_turkce_mu(self.ayar())}
+
+    async def _modelleri_indir(self, cb: Callable[[float, str], None] | None) -> None:
+        await self.isci.iste("modeller", {"liste": ["tts", "stt", "ayirma"],
+                                          "stt": self._yukle_ayari()["stt"]}, ilerleme=cb)
+
+    async def _modeller_hazir_mi(self, cb: Callable[[float, str], None] | None) -> None:
+        """Model aşaması bitmemişse (ör. geliştirici kipi) önce indirir."""
+        if self.ortam.bilgi_.asamalar["modeller"].durum != "bitti":
+            await self._modelleri_indir(cb)
+            self.ortam.bilgi_.asamalar["modeller"].durum = "bitti"
+            self.ortam._durum_yaz()
+
+    async def _isci_denetle(self) -> dict[str, Any]:
+        b = await self.isci.baslat()
+        return {**b, "anahtar_dogru": True}
+
+    def _oyun_pid(self) -> int | None:
+        return _pencere_islemi(str(self.ayar().get("kaynak") or ""))
+
+    def _varsayilan_motor(self, kod: str, ayar: dict[str, Any]) -> Any:
+        if kod in ("chatterbox", "pocket") and self.isci_kullan():
+            return IsciMotoru(kod, self.isci, self.ortam.kurulu, self._yukle_ayari, self._modeller_hazir_mi,
+                              self._oyun_pid)
+        return motor_olustur(kod, ayar)
+
+    def _varsayilan_stt(self, ayar: dict[str, Any]) -> Any:
+        if self.isci_kullan():
+            return IsciSTT(self.isci, ayar.get("hedef_dil") or "tr")
+        return ses_mod.WhisperSTT("small", ayar.get("hedef_dil") or "tr")
+
+    def _varsayilan_kaynak(self, parca_cb: Any, saat: Any, hata_cb: Any = None) -> Any:
+        if self.isci_kullan():
+            return IsciSesKaynagi(parca_cb, saat, self.isci, self.ayar, self._oyun_pid, hata_cb)
+        return ses_mod.SesKaynagi(parca_cb, saat, hata_cb=hata_cb)
+
+    async def girisler(self) -> list[dict[str, Any]]:
+        if not self.isci_kullan():
+            return []
+        return (await self.isci.iste("girisler", {})).get("girisler") or []
+
+    def gecikme(self) -> dict[str, Any] | None:
+        isl = self.isleyici
+        if isl is None or not isl.olcumler:
+            return None
+        son = dict(isl.olcumler[-1])
+        bekle = [o["bekleme_ms"] for o in isl.olcumler if o.get("bekleme_ms") is not None]
+        return {"son": son, "ortalama_bekleme_ms": int(sum(bekle) / len(bekle)) if bekle else None,
+                "olcum_sayisi": len(isl.olcumler)}
+
+    def profiller(self) -> Any:
+        from .. import ayarlar
+        from .profil import SesProfilleri
+        oyun = str(self.ayar().get("aktif_oyun") or "varsayilan")
+        return SesProfilleri(ayarlar.ayar_dizini() / "oyunlar" / oyun / "sesler")
 
     # -- yardımcılar --
     def _d(self) -> dict[str, Any]:
@@ -102,6 +194,10 @@ class DublajYonetici:
         return {"motor": self.motor_kodu(), "hazir": bool(m and m.hazir()), "onerilen": donanim.onerilen(dn),
                 "ekran_karti": dn.ekran_karti, "vram_gb": dn.vram_gb, "ram_gb": dn.ram_gb,
                 "indirme": dict(self.indirme), "calisiyor": self._gorev is not None and not self._gorev.done(),
+                "paket": self.ortam.bilgi(), "isci": bool(self.isci_kullan()),
+                "tamamen_turkce": tamamen_turkce_mu(self.ayar()),
+                "tamamen_turkce_destek": sys.platform == "win32" or bool(self._d().get("ses_girisi")),
+                "hafif": self.hafif(), "gecikme": self.gecikme(),
                 "son_hata": self.son_hata or (self.isleyici.son_hata if self.isleyici else None)}
 
     # -- model hazırlama (indirme) --
@@ -180,6 +276,13 @@ class DublajYonetici:
             return
         stt = self.stt_fabrika(self.ayar())
         isleyici = Isleyici(stt, self.yonetici_getir(), self.motor, self.cikis, self.yayin, self.ayar, self.saat)
+        if self._d().get("ses_profili_izni"):       # yalnız izinle: karakter sesleri diskte (yerel, silinebilir)
+            profiller = self.profiller()
+            try:
+                isleyici.profil_yukle(await asyncio.to_thread(profiller.yukle))
+            except Exception:   # noqa: BLE001
+                log.debug("ses profilleri okunamadı", exc_info=True)
+            isleyici.profil_kaydet = profiller.kaydet
         self.isleyici = isleyici
         self.yayin.dinle(isleyici.olay)
         kaynak = self.kaynak_fabrika(lambda p: loop.call_soon_threadsafe(isleyici.kuyruga_at, p), self.saat,
@@ -199,7 +302,11 @@ class DublajYonetici:
             isleyici.temizle()
 
     def cikis(self, ad: str) -> Any:
-        return self._tv if ad == "tv" else self._bilgisayar
+        if ad == "tv":
+            return self._tv
+        if not self._bilgisayar_verildi and self.isci_kullan():
+            return self._isci_cikis
+        return self._bilgisayar
 
     def durdur(self) -> None:
         self._calisiyor = False
@@ -245,3 +352,43 @@ class DublajYonetici:
         await self.cikis(cikis).oynat(pcm, psr, ayar, None)
         return {"tamam": True, "sure_ms": int(len(pcm) / psr * 1000), "uretim_ms": int((self.saat() - t0) * 1000),
                 "cikis": cikis}
+
+    # -- video dublajı (PROTOKOL 14.4) --
+    video_isi: Any = None
+
+    def video_bilgi(self) -> dict[str, Any]:
+        if self.video_isi is None:
+            return {"durum": "bosta"}
+        b = self.video_isi.bilgi()
+        if b.get("hata"):
+            from .. import metinler
+            b["mesaj"] = metinler.mesaj(b["hata"], self.ayar().get("arayuz_dili") or "tr")
+        return b
+
+    def video_baslat(self, yol: Path, cevirmen: Any, is_koku: Path | None = None) -> dict[str, Any]:
+        from .video import VideoIsi
+        if self.video_isi is not None and self.video_isi.calisiyor():
+            raise DublajHatasi("video_suruyor")
+        if not self.isci_kullan():
+            raise DublajHatasi("dublaj_paket_yok")
+        if self._gorev is not None and not self._gorev.done():
+            raise DublajHatasi("video_canli_acik")     # tek ekran kartı: canlı dublaj açıkken video olmaz
+        self.video_isi = VideoIsi(yol, self.isci, cevirmen, self.ayar, is_koku, self.saat,
+                                  lambda b: self.yayin.yayinla("dublaj-video", b))
+        self.video_isi.baslat()
+        return self.video_bilgi()
+
+    async def video_iptal(self) -> None:
+        if self.video_isi is not None:
+            await self.video_isi.iptal()
+            if self.isci.calisiyor():
+                await self.isci.iptal()
+
+    async def kapat_tum(self) -> None:
+        """Program kapanıyor: video işi, kurulum ve işçi süreci kapanır."""
+        self.durdur()
+        if self.video_isi is not None:
+            await self.video_isi.iptal()
+        self.ortam.iptal()
+        await self.ortam.bekle()
+        await self.isci.kapat()

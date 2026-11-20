@@ -192,6 +192,9 @@ def main() -> None:
         _konsolu_hazirla()
         from .katman import main as katman_main
         raise SystemExit(katman_main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "--dosya-sec":     # video dublajı: yerel "Dosya aç" penceresi
+        from .dosya_sec import main as dosya_main
+        raise SystemExit(dosya_main())
     _konsolu_hazirla()
     p = argparse.ArgumentParser(prog="kopru", description="AltYazıKöprüsü")
     p.add_argument("--demo", action="store_true", help="örnek altyazıları döngüyle gönder")

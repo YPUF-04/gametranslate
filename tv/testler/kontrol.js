@@ -19,7 +19,7 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
 
 (async function () {
   var s = sahte.olustur(); await new Promise(function (r) { s.listen(8642, '0.0.0.0', r); });
-  var b = await pw.chromium.launch();
+  var b = await pw.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   try {
     // ---------- 1) tv.html ----------
     console.log('tv.html');
@@ -198,10 +198,32 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     assert.strictEqual(await pr.$$eval('.ak-oge', function (l) { return l.length; }), 0); ok('reduced-motion: ekran öğeleri anında kalktı');
     assert.deepStrictEqual(hr, []); await cr.close();
 
-    // ---------- 1c) Türkçe dublaj sesi (PROTOKOL 9.4: `ses` / `ses-dur`) ----------
-    console.log('dublaj sesi');
+    // ---------- 1c) Türkçe dublaj sesi (PROTOKOL 9.4 / 14.3: `ses` / `ses-dur`, sıralı çalma) ----------
+    console.log('dublaj sesi (Web Audio)');
+    var cw = await b.newContext({ locale: 'tr-TR', viewport: { width: 1920, height: 1080 } });
+    await cw.addInitScript(function () { // Web Audio çağrılarını kaydet
+      window.__wa = [];
+      var bas = AudioBufferSourceNode.prototype.start, dur = AudioBufferSourceNode.prototype.stop;
+      AudioBufferSourceNode.prototype.start = function (t) { window.__wa.push({ t: 'start', zaman: t, uz: this.buffer.duration, simdi: this.context.currentTime }); return bas.apply(this, arguments); };
+      AudioBufferSourceNode.prototype.stop = function () { window.__wa.push({ t: 'stop' }); return dur.apply(this, arguments); };
+    });
+    var pw2 = await cw.newPage(), hw = hatalar(pw2); onceki = s.istemciSayisi();
+    await pw2.goto('http://127.0.0.1:8642/tv'); await pw2.waitForFunction(function () { return window.AKOverlay; });
+    for (i = 0; i < 50 && s.istemciSayisi() <= onceki; i++) { await bekle(100); }
+    s.yayinla('ses', { id: 's1', url: '/kopru/ses/s1.wav', sure_ms: 400, yazi_id: 'a9' });
+    s.yayinla('ses', { id: 's2', url: '/kopru/ses/s2.wav', sure_ms: 400, yazi_id: 'a10' });
+    await pw2.waitForFunction(function () { return window.__wa.filter(function (x) { return x.t === 'start'; }).length >= 2; }, null, { timeout: 4000 });
+    var wa = await pw2.evaluate(function () { return window.__wa.slice(); });
+    assert(wa[1].zaman >= wa[0].zaman + wa[0].uz - 0.001, 'ikinci ses birincinin bitişine sıralanmadı: ' + JSON.stringify(wa)); ok('Web Audio: ikinci ses birincinin ARKASINA sıralandı (kesmedi)');
+    s.yayinla('ses-dur'); await pw2.waitForFunction(function () { return window.__wa.some(function (x) { return x.t === 'stop'; }); }, null, { timeout: 3000 }); ok('ses-dur sıradaki sesleri durdurdu');
+    s.yayinla('ses', { id: 's3', url: 'http://kotu.example/x.wav', sure_ms: 400 }); await bekle(300);
+    assert.strictEqual(await pw2.evaluate(function () { return window.__wa.filter(function (x) { return x.t === 'start'; }).length; }), 2); ok('PC dışı (mutlak) adresler çalınmaz');
+    assert.deepStrictEqual(hw.filter(function (x) { return x.indexOf('pageerror') === 0; }), []); await cw.close();
+
+    console.log('dublaj sesi (<audio> yedeği)');
     var cd = await b.newContext({ locale: 'tr-TR', viewport: { width: 1920, height: 1080 } });
-    await cd.addInitScript(function () { // <audio> çağrılarını kaydet (başsız tarayıcıda çıkış aygıtı olmayabilir)
+    await cd.addInitScript(function () { // Web Audio yok (eski TV): <audio> sırası; çağrıları kaydet
+      window.AudioContext = undefined; window.webkitAudioContext = undefined;
       window.__ses = [];
       var oynat = HTMLMediaElement.prototype.play, durdur = HTMLMediaElement.prototype.pause;
       HTMLMediaElement.prototype.play = function () { window.__ses.push('play:' + this.src); try { return oynat.call(this); } catch (e) { return Promise.resolve(); } };
@@ -212,16 +234,17 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     for (i = 0; i < 50 && s.istemciSayisi() <= onceki; i++) { await bekle(100); }
     s.yayinla('yazi', { id: 'a9', metin: 'Altyazı önce gelir', sure_ms: 3000 });
     s.yayinla('ses', { id: 's1', url: '/kopru/ses/s1.wav', sure_ms: 400, yazi_id: 'a9' });
+    s.yayinla('ses', { id: 's2', url: '/kopru/ses/s2.wav', sure_ms: 400, yazi_id: 'a9' });
     await pd.waitForFunction(function () { return window.__ses.some(function (x) { return /^play:.*\/kopru\/ses\/s1\.wav$/.test(x); }); }, null, { timeout: 3000 });
     var ilkSes = await pd.evaluate(function () { return window.__ses.filter(function (x) { return x.indexOf('play:') === 0; })[0]; });
     assert(/^play:http:\/\/127\.0\.0\.1:8642\/kopru\/ses\/s1\.wav$/.test(ilkSes), ilkSes); ok('ses olayı bir <audio> oluşturup PC adresinden çalmaya başladı');
-    s.yayinla('ses', { id: 's2', url: '/kopru/ses/s2.wav', sure_ms: 400, yazi_id: 'a9' });
-    await pd.waitForFunction(function () { return window.__ses.some(function (x) { return /^play:.*s2\.wav$/.test(x); }); }, null, { timeout: 3000 });
+    await pd.waitForFunction(function () { return window.__ses.some(function (x) { return /^play:.*s2\.wav$/.test(x); }); }, null, { timeout: 4000 });
     var gunluk = await pd.evaluate(function () { return window.__ses.slice(); });
-    assert(gunluk.some(function (x) { return /^pause:.*s1\.wav$/.test(x); }), 'önceki ses durmadı: ' + gunluk.join(',')); ok('yeni ses gelince önceki ses durduruldu');
-    s.yayinla('ses-dur'); await pd.waitForFunction(function () { return window.__ses.some(function (x) { return /^pause:.*s2\.wav$/.test(x); }); }, null, { timeout: 3000 }); ok('ses-dur çalan sesi durdurdu');
-    s.yayinla('ses', { id: 's3', url: 'http://kotu.example/x.wav', sure_ms: 400 }); await bekle(300);
-    assert(!(await pd.evaluate(function () { return window.__ses.some(function (x) { return x.indexOf('kotu.example') >= 0; }); })), 'dış adres çalındı'); ok('PC dışı (mutlak) adresler çalınmaz');
+    assert(!gunluk.some(function (x) { return /^pause:.*s1\.wav$/.test(x); }), 'önceki ses kesildi: ' + gunluk.join(','));
+    assert(gunluk.indexOf('play:http://127.0.0.1:8642/kopru/ses/s2.wav') > gunluk.indexOf(ilkSes)); ok('<audio>: ikinci ses birinci bitince çaldı (kesmeden sıra)');
+    s.yayinla('ses', { id: 's4', url: '/kopru/ses/s4.wav', sure_ms: 400 });
+    s.yayinla('ses-dur'); await bekle(300);
+    assert(!(await pd.evaluate(function () { return window.__ses.some(function (x) { return /^play:.*s4\.wav$/.test(x); }) && !window.__ses.some(function (x) { return /^pause:/.test(x); }); }))); ok('ses-dur çalanı ve sırayı durdurdu');
     assert.deepStrictEqual(hdl.filter(function (x) { return x.indexOf('pageerror') === 0; }), []); await cd.close();
 
     // ---------- 2) obs.html saydam ----------

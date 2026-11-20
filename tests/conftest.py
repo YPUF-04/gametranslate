@@ -62,3 +62,9 @@ def katman_surec_yok(monkeypatch):
     baslatilanlar = []
     monkeypatch.setattr(yonetim, "surec_baslat", lambda cmd: baslatilanlar.append(SahteSurec(cmd)) or baslatilanlar[-1])
     return baslatilanlar
+
+
+@pytest.fixture(autouse=True)
+def dublaj_ortami_gecici(tmp_path, monkeypatch):
+    """Testler gerçek dublaj paketi klasörüne dokunmasın."""
+    monkeypatch.setenv("KOPRU_DUBLAJ_ORTAMI", str(tmp_path / "dublaj-ortami"))

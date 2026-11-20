@@ -12,7 +12,7 @@ from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import normallestir
 from ..onbellek import Onbellek
-from .istem import SON_SATIR_ADEDI, dublaj_ipucu
+from .istem import SON_SATIR_ADEDI, dublaj_ipucu, video_dublaj_ipucu
 from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri, ModelBulunamadi, MotorHatasi
 
 log = logging.getLogger("kopru.ceviri")
@@ -280,6 +280,23 @@ class CeviriYoneticisi:
             except _Iptal:
                 (sonuc[m],) = (await self._ucustaki([m], kaynak, hedef, aciklama)).values()
         return sonuc
+
+    async def video_cevir(self, metinler: list[str], sureler: list[float], kaynak: str, hedef: str,
+                          konusanlar: list[str] | None = None, onceki: list[tuple[str, str]] | None = None,
+                          kisalt: dict[int, str] | None = None) -> list[str]:
+        """Video dublajı için bir grup satırı tek istekte çevirir (PROTOKOL 14.4/6).
+
+        Altyazı hafızası/önbelleği okunmaz/yazılmaz (dublaj metni farklıdır). Sözlük ve oyun bilgisi kullanılır.
+        """
+        if not metinler:
+            return []
+        if not self.erisim_izni():
+            raise ErisimSiniri()
+        ipucu = video_dublaj_ipucu(sureler, konusanlar, onceki, kisalt)
+        sonuc, _ = await self._motorla(list(metinler), kaynak, hedef, False, ipucu)
+        if len(sonuc) != len(metinler):
+            raise MotorHatasi("Çeviri sayısı uyuşmuyor")
+        return [sozluk_mod.son_kontrol(m, " ".join(c.metin.split()), self.terimler) for m, c in zip(metinler, sonuc)]
 
     async def dublaj_cevir(self, metin: str, kaynak: str, hedef: str, sure_sn: float,
                            onceki: str | None = None) -> Ceviri:

@@ -150,14 +150,59 @@ HATALAR: dict[str, dict[str, str]] = {
     "ucretsiz_bitti": {
         "tr": "Bugünkü ücretsiz süre doldu. Erişim kodunu girin ya da yarın devam edin.",
         "en": "Today's free time is used up. Enter an access code or continue tomorrow."},
+    "dublaj_paket_onay": {
+        "tr": "Dublaj paketini kurmak (ya da kaldırmak) için önce onay kutusunu işaretleyin.",
+        "en": "Please tick the confirmation box first to install (or remove) the dubbing package."},
+    "dublaj_paket_desteklenmiyor": {
+        "tr": "Dublaj paketi bu bilgisayarda desteklenmiyor (64 bit Windows, Linux ya da Apple Silicon Mac gerekir).",
+        "en": "The dubbing package is not supported on this computer (64-bit Windows, Linux or an Apple Silicon Mac is needed)."},
+    "dublaj_paket_indirme": {
+        "tr": "Dublaj paketi indirilemedi, internet bağlantınızı kontrol edip \"Kur\"a yeniden basın (kaldığı yerden sürer).",
+        "en": "The dubbing package could not be downloaded, check your internet connection and press \"Install\" again (it resumes)."},
+    "dublaj_paket_dogrulama": {
+        "tr": "İndirilen dosya doğrulanamadı ve kurulmadı, lütfen biraz sonra yeniden deneyin.",
+        "en": "The downloaded file could not be verified and was not installed, please try again later."},
+    "dublaj_paket_bozuk": {
+        "tr": "İndirilen paket bozuk ya da güvensiz göründüğü için açılmadı, lütfen yeniden deneyin.",
+        "en": "The downloaded package looked broken or unsafe and was not opened, please try again."},
+    "dublaj_paket_pip": {
+        "tr": "Dublaj paketinin bir parçası kurulamadı, \"Kur\"a yeniden basın; olmazsa kurulum günlüğünü bize gönderin.",
+        "en": "Part of the dubbing package could not be installed, press \"Install\" again; if it keeps failing, send us the install log."},
+    "dublaj_paket_hata": {
+        "tr": "Dublaj paketi kurulurken beklenmeyen bir sorun oldu, \"Kur\"a yeniden basın.",
+        "en": "Something unexpected went wrong while installing the dubbing package, press \"Install\" again."},
+    "dublaj_isci_hata": {
+        "tr": "Dublaj motoru açılamadı ya da kapandı, biraz bekleyip yeniden deneyin; sürerse dublaj paketini kaldırıp yeniden kurun.",
+        "en": "The dubbing engine could not start or stopped, wait a moment and try again; if it persists, remove and reinstall the dubbing package."},
+    "dublaj_isci_zaman": {
+        "tr": "Dublaj motoru zamanında yanıt vermedi, lütfen yeniden deneyin.",
+        "en": "The dubbing engine did not answer in time, please try again."},
+    "dublaj_bellek": {
+        "tr": "Ekran kartının belleği yetmedi, \"Hafif mod\"u açıp yeniden deneyin.",
+        "en": "The graphics card ran out of memory, turn on \"Light mode\" and try again."},
+    "dublaj_ffmpeg_yok": {
+        "tr": "Video aracı (ffmpeg) bulunamadı, dublaj paketini kaldırıp yeniden kurun.",
+        "en": "The video tool (ffmpeg) was not found, remove and reinstall the dubbing package."},
+    "dublaj_ffmpeg_hata": {
+        "tr": "Video okunamadı ya da yazılamadı; dosyanın bozuk olmadığından ve diskte yer olduğundan emin olun.",
+        "en": "The video could not be read or written; make sure the file is not broken and there is free disk space."},
+    "video_gecersiz": {
+        "tr": "Bu dosya dublajlanamaz, lütfen bir video dosyası seçin (mp4, mkv, mov, webm ya da avi).",
+        "en": "This file cannot be dubbed, please pick a video file (mp4, mkv, mov, webm or avi)."},
+    "video_suruyor": {
+        "tr": "Bir video zaten dublajlanıyor, bitmesini bekleyin ya da durdurun.",
+        "en": "A video is already being dubbed, wait for it to finish or stop it."},
+    "video_canli_acik": {
+        "tr": "Canlı dublaj açıkken video dublajlanamaz (aynı ekran kartı), önce çeviriyi durdurun.",
+        "en": "A video cannot be dubbed while live dubbing is on (same graphics card), stop translating first."},
+    "iptal": {
+        "tr": "İşlem durduruldu.", "en": "Stopped."},
     "dublaj_motor_yok": {
         "tr": "Önce dublaj için bir ses motoru seçin (Chatterbox, Pocket veya ElevenLabs), sonra tekrar deneyin.",
         "en": "First pick a voice engine for dubbing (Chatterbox, Pocket or ElevenLabs), then try again."},
     "dublaj_paket_yok": {
-        "tr": "Dublaj için gereken ek paket kurulu değil. Komut satırında şunu çalıştırıp programı yeniden açın: "
-              "pip install \"altyazikoprusu[dublaj]\"",
-        "en": "The extra package needed for dubbing is not installed. Run this in a terminal and reopen the "
-              "program: pip install \"altyazikoprusu[dublaj]\""},
+        "tr": "Dublaj paketi kurulu değil. Türkçe dublaj kartında \"Dublaj paketini kur\"a basın.",
+        "en": "The dubbing package is not installed. Press \"Install dubbing package\" in the Turkish dubbing card."},
     "dublaj_hazir_degil": {
         "tr": "Ses motoru henüz hazır değil, lütfen önce \"Hazırla\" düğmesine basın ve bitmesini bekleyin.",
         "en": "The voice engine is not ready yet, please press \"Prepare\" first and wait until it finishes."},

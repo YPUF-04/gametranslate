@@ -76,7 +76,14 @@ class Durum:
                  katman_baslatici: Callable[[list[str]], Any] | None = None,
                  katman_destek: Callable[[], bool] | None = None,
                  kisayol_dinleyici: Callable[[], Any] | None = None,
-                 kisayol_destek: bool | None = None) -> None:
+                 kisayol_destek: bool | None = None,
+                 dosya_secici: Callable[[], Awaitable[str | None]] | None = None,
+                 klasorde_goster: Callable[[str], None] | None = None,
+                 video_is_koku: Path | None = None) -> None:
+        from . import dosya_sec as dosya_sec_mod
+        self.dosya_secici = dosya_secici or dosya_sec_mod.sec
+        self.klasorde_goster = klasorde_goster or dosya_sec_mod.klasorde_goster
+        self.video_is_koku = video_is_koku
         self.ayar = ayar
         self.erisim = erisim or erisim_mod.Erisim(lambda: self.ayar)
         self.yayin = Yayin()
@@ -336,6 +343,10 @@ class Durum:
             t.cancel()
         if gorevler:
             await asyncio.gather(*gorevler, return_exceptions=True)
+        try:
+            await self.dublaj.kapat_tum()     # işçi süreci, kurulum ve video işi
+        except Exception:   # noqa: BLE001 — kapanışta temizlik hatası önemsiz
+            log.debug("dublaj kapatılamadı", exc_info=True)
         self.onbellek.kapat()
         self.hafiza.kapat()
         self.oneriler.bitir()
@@ -1078,7 +1089,8 @@ async def api_oneriler_yaz(request: web.Request) -> web.Response:
 DUBLAJ_DURUMLARI = {"dublaj_hazir_degil": 409, "dublaj_paket_yok": 400, "dublaj_motor_yok": 400,
                     "dublaj_onay_gerekli": 400, "dublaj_eleven_anahtar_yok": 400,
                     "dublaj_eleven_onay_yok": 400, "dublaj_eleven_klon_onay_yok": 400,
-                    "dublaj_eleven_ses_yok": 400, "dublaj_eleven_anahtar_gecersiz": 400}
+                    "dublaj_eleven_ses_yok": 400, "dublaj_eleven_anahtar_gecersiz": 400,
+                    "video_suruyor": 409, "video_canli_acik": 409, "dublaj_isci_hata": 502}
 
 
 def _dublaj_hata(e: DublajHatasi, request: web.Request) -> web.Response:
@@ -1131,6 +1143,117 @@ async def api_dublaj_dene(request: web.Request) -> web.Response:
         return web.json_response(await d.dublaj.dene(metin.strip()))
     except DublajHatasi as e:
         return _dublaj_hata(e, request)
+
+
+# ---------- dublaj paketi ve video dublajı (PROTOKOL 14) ----------
+
+def _paket_bilgi(d: Durum) -> dict[str, Any]:
+    b = d.dublaj.ortam.bilgi()
+    if b.get("hata"):
+        b["mesaj_hata"] = metinler.mesaj(b["hata"], d.dil)
+    return b
+
+
+async def api_paket_al(request: web.Request) -> web.Response:
+    return web.json_response(_paket_bilgi(request.app[DURUM]))
+
+
+async def api_paket_kur(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    if v.get("onay") is not True:
+        return hata("dublaj_paket_onay", 400, request)
+    if not d.dublaj.ortam.destek()[0]:
+        return hata("dublaj_paket_desteklenmiyor", 400, request)
+    d.dublaj.ortam.kur_baslat()
+    await asyncio.sleep(0)
+    return web.json_response(_paket_bilgi(d))
+
+
+async def api_paket_iptal(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    d.dublaj.ortam.iptal()
+    await d.dublaj.ortam.bekle()
+    return web.json_response(_paket_bilgi(d))
+
+
+async def api_paket_kaldir(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    if v.get("onay") is not True:
+        return hata("dublaj_paket_onay", 400, request)
+    d.dublaj.durdur()
+    await d.dublaj.isci.kapat()
+    await d.dublaj.ortam.kaldir()
+    return web.json_response(_paket_bilgi(d))
+
+
+async def api_dublaj_girisler(request: web.Request) -> web.Response:
+    """Yakalama kartı sesi için girişlerin YALNIZ adları (hiçbiri açılmaz)."""
+    d: Durum = request.app[DURUM]
+    try:
+        return web.json_response({"girisler": await d.dublaj.girisler()})
+    except DublajHatasi as e:
+        return _dublaj_hata(e, request)
+
+
+async def api_profiller_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    p = d.dublaj.profiller()
+    return web.json_response({"izin": bool(d.ayar["dublaj"].get("ses_profili_izni")),
+                              "oyun": d.ayar.get("aktif_oyun"), "profiller": await asyncio.to_thread(p.liste)})
+
+
+async def api_profiller_sil(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    ad = request.query.get("ad") or None
+    n = await asyncio.to_thread(d.dublaj.profiller().sil, ad)
+    return web.json_response({"tamam": True, "silinen": n})
+
+
+async def api_dosya_sec(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    from .dublaj import video as video_mod
+    yol = await d.dosya_secici()
+    if not yol:
+        return web.json_response({"yol": None})
+    p = video_mod.video_gecerli(yol)
+    if p is None:
+        return hata("video_gecersiz", 400, request)
+    return web.json_response({"yol": str(p), "ad": p.name, "boyut_mb": round(p.stat().st_size / 1048576)})
+
+
+async def api_video_al(request: web.Request) -> web.Response:
+    return web.json_response(request.app[DURUM].dublaj.video_bilgi())
+
+
+async def api_video_baslat(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    from .dublaj import video as video_mod
+    v = await _json(request)
+    p = video_mod.video_gecerli(v.get("yol"))
+    if p is None:
+        return hata("video_gecersiz", 400, request)
+    try:
+        b = d.dublaj.video_baslat(p, d.yonetici, d.video_is_koku)
+    except DublajHatasi as e:
+        return hata(e.kod, 409 if e.kod in ("dublaj_paket_yok", "video_suruyor", "video_canli_acik") else 400, request)
+    return web.json_response(b)
+
+
+async def api_video_iptal(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    await d.dublaj.video_iptal()
+    return web.json_response(d.dublaj.video_bilgi())
+
+
+async def api_video_goster(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    b = d.dublaj.video_bilgi()
+    if not b.get("cikti"):
+        return hata("bulunamadi", 404, request)
+    await asyncio.to_thread(d.klasorde_goster, b["cikti"])
+    return web.json_response({"tamam": True})
 
 
 async def kopru_ses(request: web.Request) -> web.Response:
@@ -1400,6 +1523,18 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/dublaj", api_dublaj_yaz)
     r.add_post("/api/dublaj/hazirla", api_dublaj_hazirla)
     r.add_post("/api/dublaj/dene", api_dublaj_dene)
+    r.add_get("/api/dublaj/paket", api_paket_al)
+    r.add_post("/api/dublaj/paket/kur", api_paket_kur)
+    r.add_post("/api/dublaj/paket/iptal", api_paket_iptal)
+    r.add_post("/api/dublaj/paket/kaldir", api_paket_kaldir)
+    r.add_get("/api/dublaj/girisler", api_dublaj_girisler)
+    r.add_get("/api/dublaj/ses-profilleri", api_profiller_al)
+    r.add_delete("/api/dublaj/ses-profilleri", api_profiller_sil)
+    r.add_post("/api/dublaj/dosya-sec", api_dosya_sec)
+    r.add_get("/api/dublaj/video", api_video_al)
+    r.add_post("/api/dublaj/video", api_video_baslat)
+    r.add_post("/api/dublaj/video/iptal", api_video_iptal)
+    r.add_post("/api/dublaj/video/goster", api_video_goster)
 
     async def durum_dongusu() -> None:
         while True:
