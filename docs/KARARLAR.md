@@ -22,3 +22,20 @@
   Bilgisayarda reklam için başka bir reklam ağı ya da telefondan "süre kazanma" gerekir — araştırılacak.
 - AGPL açık kaynak: başkası kodu alıp reklamsız sürüm yayınlayabilir; bu yasal ve engellenemez.
 - Reklam ağları veri toplayabilir; yalnız kişiselleştirilmemiş reklam seçilecek ve gizlilik belgesinde yazılacak.
+
+## Türkçe dublaj 2 (canlı + video, ücretsiz yerel) — teknik kararlar (2026-11)
+Hedef donanım: RTX 4060 dizüstü (8 GB ekran kartı belleği), Windows. Ayrıntılı sözleşme: PROTOKOL §14.
+
+| Konu | Karar | Neden |
+|---|---|---|
+| Ana program / dublaj ayrımı | Ana exe küçük kalır; dublaj için ayrı **"Dublaj paketi"** (kendi Python'u + paketler + modeller) kullanıcı onayıyla `%LOCALAPPDATA%` altına kurulur, ağır işler **ayrı işçi sürecinde** (stdin/stdout JSON satırları + rastgele anahtar) | torch+CUDA ~3 GB; exe'ye konursa 120 MB → 3 GB+. İşçi çökse de program çökmez; VRAM yalnız işçide |
+| Python | python-build-standalone `3.13.18+20261110` (SHA256 sabit) | Tek klasöre açılır, kurulum/yönetici izni istemez. 3.13: chatterbox-tts 0.1.7 burada numpy 2 ister → pocket-tts (numpy≥2) ile birlikte kurulabilir (3.11/3.12'de çakışır) |
+| torch | `2.6.0+cu124` (PyTorch dizini) | chatterbox-tts 0.1.7, Python < 3.14 için `torch==2.6.0` sabitliyor; cu124 RTX 40 (sm_89) destekler, cuDNN 9 torch'un içinde gelir (faster-whisper/CTranslate2 de onu kullanır) |
+| Ses motoru (varsayılan) | **Chatterbox Multilingual** (MIT, Türkçe dahil 23 dil, `exaggeration` ile duygu) | Türkçe sıfır-örnek klon + duygu denetimi + 8 GB'a sığıyor (~3–4 GB). Ağustos 2026'dan beri bakımı yok ama çalışıyor; sürüm sabitlendi |
+| Değerlendirilen ama seçilmeyenler | VoxCPM2 (Apache-2.0, Türkçe var) ~8 GB VRAM ister → oyunla birlikte sığmaz; Higgs TTS 3 (9,3 GB) sığmaz; Fish Audio S2 Pro araştırma lisansı + büyük → eklenmedi | 8 GB dizüstünde oyunla yan yana çalışmalı; lisans temiz olmalı |
+| Ayırma (konuşma / arka plan) | **HT-Demucs-ft konuşma uzmanı** (MIT), `demucs==4.1.0` ile **torch üzerinde** | ONNX sürümü onnxruntime-gpu ister; onnxruntime-gpu ile faster-whisper'ın onnxruntime'ı aynı modül adını paylaşır ve CUDA/cuDNN sürüm eşleşmesi Windows'ta kırılgan. torch zaten CUDA'lı → ek risk yok. Yalnız 4'lü torbanın konuşma modeli kullanılır (4 kat hızlı) |
+| Konuşmadan yazıya | faster-whisper: video `large-v3-turbo` (kelime zamanlı), canlı `large-v3-turbo` / hafif modda `small` | turbo, large-v3 kalitesine yakın ve ~8 kat hızlı |
+| Konuşmacı gruplama | Chatterbox'ın kendi ses kodlayıcısı (256 boyut) + kosinüs eşikli birleştirmeli kümeleme | Ek model yok; aynı kodlayıcı klonda da kullanılıyor |
+| ffmpeg | Windows: gyan.dev `9.1 essentials` (SHA256 sabit); macOS/Linux: pip `imageio-ffmpeg` | Ana exe'ye girmez; sürüm sabit |
+| Ses ayrımı ile canlı "tamamen Türkçe" | **Deneysel**, ayrı düğme. Windows'ta doğrulanmadı | Oyun sesini 0'a çekip ayrılmış arka planı ~2 sn gecikmeyle çalmak oyunu geciktirir; varsayılan "oyun sesini kıs" |
+| Yasal | Dublaj kişisel kullanım içindir; yayınlamak hak sahiplerine tabidir (panelde ve PROTOKOL §14.6'da yazar). Ünlü/gerçek kişi ses paketi yok | Kural |

@@ -338,3 +338,144 @@ Her altyazı satırı için: kaynak ekrana gelme anı `t_gel`, kaybolma anı `t_
 - Bu kural §7.2 kural 1–3'ün ve §13.2 altyazı kuralının yerine geçer. Silme olayı `yazi-sil` artık `{"id": ...}` taşır; istemci başka id'li silmeyi yok sayar.
 - İstemciler kendi süre sayacıyla silmez (sunucu karar verir); bağlantı koparsa diye 15 sn güvenlik süresi vardır.
 - Deneme/demo yazıları `"otomatik_sil": true` taşır: istemci bunları `sure_ms` sonunda kendisi siler.
+
+## 14. Türkçe dublaj 2: dublaj paketi, canlı ve video (sürüm 0.9)
+
+Amaç: Tamer Yeşildağ'ın GTA 6 dublajındaki gibi karakterler KENDİ sesleri ve duygularıyla Türkçe
+konuşsun. İki kullanım: **canlı** (oynarken; Türkçe ses ~2 sn geç gelir) ve **video** (kaydedilmiş
+oyun videosundan Türkçe dublajlı kopya). Varsayılan motor ücretsiz ve yereldir (Chatterbox, NVIDIA
+ekran kartında); bulut motorları (ElevenLabs) seçilebilir kalır. §9 geçerlidir; bu bölüm onu genişletir.
+
+### 14.1 Dublaj paketi (ayrı çalışma ortamı)
+Ana program küçük kalır (torch/chatterbox/faster-whisper içermez). Dublaj için gereken her şey,
+kullanıcı **açıkça onaylarsa**, ayrı bir klasöre indirilir:
+
+| Sistem | Klasör (`KOPRU_DUBLAJ_ORTAMI` ortam değişkeni önceliklidir) |
+|---|---|
+| Windows | `%LOCALAPPDATA%\AltYaziKoprusu\dublaj-ortami\` |
+| macOS | `~/Library/Application Support/AltyaziKoprusu/dublaj-ortami/` |
+| Linux | `$XDG_DATA_HOME/altyazikoprusu/dublaj-ortami/` (yoksa `~/.local/share/...`) |
+
+İçerik: `python/` (bağımsız Python 3.13, python-build-standalone), `ffmpeg/` (yalnız Windows: sabit
+sürüm ffmpeg; diğerlerinde pip `imageio-ffmpeg`), `modeller/` (`HF_HOME`; ses modelleri), `kod/`
+(işçi kodunun kopyası), `indirilen/` (yarım indirmeler `*.part`, devam ettirilebilir),
+`durum.json` (`{"surum":"1","asamalar":{"python":"bitti",...}}`), `kurulum.log`.
+
+Sabitlenmiş sürümler (`kopru/dublaj/ortam.py` → `MANIFEST`): Python `3.13.18+20261110`, torch/torchaudio
+`2.6.0` (Windows/Linux: `cu124` dizini), `chatterbox-tts==0.1.7`, `faster-whisper==1.2.1`,
+`demucs==4.1.0`, ffmpeg `9.1` (gyan.dev essentials). Arşivler **SHA256 ile doğrulanmadan açılmaz**;
+pip paketleri PyPI/PyTorch dizinlerinin verdiği özetlerle pip tarafından doğrulanır. Arşiv açarken
+mutlak yol, `..`, sembolik/sabit bağlantı ve aygıt dosyası reddedilir (yol aşımı yok).
+
+Aşamalar (sırayla; biten aşama `durum.json`'a yazılır, yeniden kurulumda atlanır):
+`python` → `ffmpeg` → `paketler` → `modeller` → `denetim`.
+- `indir` adımları HTTP `Range` ile yarım kalan yerden sürer; 3 kez artan beklemeyle yeniden dener.
+- `modeller`: işçi süreci Chatterbox çok dilli, Whisper `large-v3-turbo`, HT-Demucs-ft modellerini indirir.
+- `denetim`: işçi açılır, `merhaba` + ekran kartı bilgisi alınır.
+- Geliştirici kipi: programı çalıştıran Python'da `torch` + `chatterbox` zaten kuruluysa paket
+  "kurulu" sayılır ve işçi o Python ile çalışır (`gelistirici: true`); yalnız `modeller` gerekir.
+
+| Yöntem | Yol | Ne yapar |
+|---|---|---|
+| GET | `/api/dublaj/paket` | `{"durum":"yok"\|"kuruluyor"\|"hazir"\|"hata"\|"iptal"\|"kaldiriliyor","kurulu":false,"gelistirici":false,"indirme_mb":8900,"disk_mb":12500,"asama":"paketler"\|null,"asamalar":[{"kod":"python","durum":"bekliyor"\|"suruyor"\|"bitti"\|"hata","yuzde":0}],"yuzde":37,"mesaj":null,"hata":null,"konum":"C:\\...\\dublaj-ortami","destek":true}` |
+| POST | `/api/dublaj/paket/kur` | `{"onay":true}` zorunlu (yoksa `400 dublaj_paket_onay`). Arka planda kurar/sürdürür; kurulum sürüyorsa aynı gövdeyi döner |
+| POST | `/api/dublaj/paket/iptal` | Kurulumu durdurur (yarım indirmeler saklanır, sonra sürdürülür) |
+| POST | `/api/dublaj/paket/kaldir` | `{"onay":true}` → işçiyi kapatır, YALNIZ dublaj-ortami klasörünü siler (`durum:"yok"`) |
+`destek:false` (ör. 32 bit / ARM Windows): `mesaj` nedenini söyler, kur düğmesi gösterilmez.
+
+### 14.2 İşçi süreci (worker) ve kanal
+Ağır işler (ayırma, yazıya çevirme, seslendirme, video karıştırma, canlı ses yakalama ve çalma)
+ayrı bir süreçte çalışır: `<paket>/python/python -E -s -m kopru.dublaj.isci` (`cwd = <paket>/kod`;
+geliştirici kipinde programın kendi Python'u). Ana program işçi yoksa/çökerse ÇÖKMEZ; `son_hata`
+olur ve bir sonraki istekte işçi yeniden başlatılır (dakikada en çok 3).
+
+Kanal: işçinin **stdin/stdout'u üzerinden JSON satırları** (UTF-8, satır başına bir nesne, ≤ 64 MB).
+Başka süreçler bu borulara erişemez; ayrıca ana program her başlatmada rastgele 32 baytlık bir
+anahtar üretir ve `KOPRU_ISCI_ANAHTAR` ortam değişkeniyle verir; işçinin ilk satırı
+`{"olay":"merhaba","anahtar":"<aynısı>","surum":"1","cihaz":"cuda","ekran_karti":"...","vram_gb":8.0}`
+olmalıdır, değilse süreç kapatılır. İşçi kendi stdout'unu stderr'e yönlendirir (kütüphanelerin
+`print`'i kanalı bozamaz); stderr `kurulum.log`'a değil, ayrı `isci.log`'a yazılır (anahtar asla yazılmaz).
+
+İstek: `{"no":7,"komut":"seslendir",...}` → yanıt `{"no":7,"tamam":true,"sonuc":{...}}` ya da
+`{"no":7,"tamam":false,"hata":"dublaj_uretim_hata","ayrinti":"..."}`. Ara olaylar:
+`{"olay":"ilerleme","no":7,"yuzde":40,"mesaj":"..."}`, `{"olay":"parca",...}` (canlı ses parçası),
+`{"olay":"gunluk","seviye":"bilgi","mesaj":"..."}`. Ses verisi: `{"pcm":"<base64 float32 LE mono>","sr":24000}`.
+
+| Komut | Girdi | Sonuç |
+|---|---|---|
+| `merhaba` | — | işçi/cihaz bilgisi |
+| `modeller` | `{"liste":["tts","stt","ayirma"],"stt":"large-v3-turbo"}` | indirir (ilerleme olaylı) |
+| `yukle` | `{"tts":"chatterbox","stt":"large-v3-turbo"\|"small","ayirma":true,"hafif":false}` | modelleri belleğe alır |
+| `birak` | — | modelleri boşaltır (VRAM serbest) |
+| `ayir` | `{"pcm","sr"}` ya da `{"giris":yol,"ses_cikis":yol,"arka_cikis":yol}` | konuşma sesi / arka plan |
+| `yaziya` | `{"pcm","sr"}` ya da `{"giris":yol,"cikis":yol}` | metin, dil, kelimeler `[{"k":"Hey","b":1.2,"s":1.5}]` |
+| `izler` | `{"giris":yol,"araliklar":[[b,s],...]}` | konuşmacı izleri (256 boyutlu, birim vektör) |
+| `seslendir` | `{"metin","ref_pcm","ref_sr","duygu":{"canlilik":0.5,"cfg":0.5},"motor":"chatterbox"}` ya da `ref_yol`/`cikis` | Türkçe ses |
+| `karistir` | `{"arka":yol,"satirlar":[{"yol","bas"}],"cikis":yol}` | dublaj ses izi |
+| `video_cikar` / `video_birlestir` | ffmpeg ile ses çıkarma / video+ses birleştirme | dosya yolları |
+| `canli_baslat` | `{"pid":1234\|null,"ayirma":true,"tamamen_turkce":false}` | `parca` olayları başlar |
+| `canli_durdur` | — | yakalama durur, oyun sesi eski hâline döner |
+| `oynat` | `{"pcm","sr","seviye":1.0,"kis":0.25,"pid":1234\|null}` | çalar (çalarken oyun sesini kısar) |
+| `iptal` | `{"hedef":7}` | süren işi bırakır (`hata:"iptal"`) |
+| `kapat` | — | süreç biter |
+
+### 14.3 Canlı dublaj (§9.1'e ek)
+- **Yalnız oyunun sesi**: Windows 10 2004+ üzerinde, seçili oyun penceresinin süreci için WASAPI
+  *process loopback* (`AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK`, `PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE`)
+  kullanılır; olmazsa bugünkü tüm-sistem loopback'e düşülür (`parca.kaynak:"surec"|"sistem"`). Mikrofon ASLA.
+- Her parça işçide ayırıcıdan geçer (`ayirma:true`): **temiz konuşma sesi** hem yazıya çevirmede hem
+  ses örneği (klon) olarak kullanılır. Konuşmacı örnekleri YALNIZ işçinin ve ana programın belleğinde
+  durur, diske yazılmaz.
+- Duygu: orijinal parçanın ses yüksekliği/enerjisi ve perde değişkenliğinden `canlilik` (Chatterbox
+  `exaggeration`, 0.25–1.2) ve `cfg` (0.3–0.7) hesaplanır: bağırma bağırma, fısıltı fısıltı kalır (motorun izin verdiği ölçüde).
+- `dublaj.orijinal_ses`: `"kis"` (varsayılan; Türkçe çalarken oyun sesi kısılır) | `"tamamen_turkce"`
+  (**deneysel**, yalnız Windows + process loopback: oyunun ses oturumu 0'a çekilir, işçi oyunun sesinden
+  konuşmayı ayırıp yalnız arka planı (müzik/efekt) ~2 sn gecikmeyle çalar, Türkçe ses üstüne biner).
+  Desteklenmiyorsa `"kis"` gibi davranır ve `GET /api/dublaj` → `tamamen_turkce_destek:false`.
+- Hafif mod (`dublaj.hafif_mod`): Whisper `small` (int8), ayırma kapalı. Ekran kartı belleği 8 GB'tan azsa önerilir.
+  Normal mod: Chatterbox fp32 ağırlık + fp16 hesap (autocast), Whisper `large-v3-turbo` (int8_float16), modeller bellekte kalır.
+
+### 14.4 Video dublaj
+Akış (her aşamanın çıktısı iş klasöründe saklanır; iptal edilen iş kaldığı aşamadan sürer):
+1. `cikar`: ffmpeg → 44,1 kHz stereo WAV.
+2. `ayir`: HT-Demucs-ft (konuşma uzmanı) → `ses.wav` (konuşma) + `arka.wav` (müzik/efekt). 8 GB'a
+   sığmak için 7,8 sn'lik pencerelerle, %25 bindirmeli parça parça.
+3. `yazi`: Whisper `large-v3-turbo`, kelime zaman damgalı.
+4. `bol`: kelimeler cümlelere (≤ 8 sn, sessizlik ≥ 0,6 sn ya da noktalama → yeni satır).
+5. `konusmaci`: her satırın konuşmacı izi → kosinüs benzerliğiyle (eşik 0,72) gruplama; her karaktere
+   en temiz/uzun 3–10 sn'lik örneklerinden bir klon sesi.
+6. `cevir`: TÜM satırlar bağlamıyla (oyun bilgisi + sözlük + önceki satırlar), 40'lık gruplar hâlinde,
+   seçili çeviri motoruyla (Gemini…); her satıra "söylenebilir, X sn'ye sığan" kuralı.
+7. `seslendir`: her satır, kendi karakterinin sesi ve duygusuyla. Süreye sığdırma: en çok
+   `hiz_siniri` (1,25×) perdesiz hızlandırma; yine uzunsa bir kez daha kısa çeviri istenir.
+8. `karistir`: Türkçe sesler arka plan izinin üstüne; konuşma boyunca arka plan −6 dB yumuşakça kısılır
+   (sidechain), seslere hafif EQ (80 Hz altı kesilir) + tepe sınırlayıcı.
+9. `birlestir`: ffmpeg ile görüntü kopyalanır (yeniden kodlanmaz) + yeni ses (AAC 192k) →
+   `<ad> - Türkçe dublaj.mp4` asıl videonun yanına (asıl dosya ASLA değişmez; ad doluysa ` (2)` eklenir).
+   `dublaj.video_srt:true` ise yanına `<ad> - Türkçe dublaj.srt`.
+İş klasörü: `<sistem geçici klasörü>/AltYaziKoprusu-dublaj/<iş kimliği>/` (kimlik = yol+boyut+değişme
+zamanı özeti); iş başarıyla bitince silinir.
+
+| Yöntem | Yol | Ne yapar |
+|---|---|---|
+| POST | `/api/dublaj/dosya-sec` | Bu bilgisayarda yerel "Dosya aç" penceresi açar → `{"yol":"D:\\Kayıt\\gta.mp4","ad":"gta.mp4","boyut_mb":812}` ya da `{"yol":null}` (vazgeçti) |
+| POST | `/api/dublaj/video` | `{"yol":"..."}` → işi başlatır/sürdürür. Hatalar: `400 video_gecersiz` (yok, uzantı mp4/mkv/mov/webm/avi değil, klasör), `409 dublaj_paket_yok`, `409 video_suruyor` |
+| GET | `/api/dublaj/video` | `{"durum":"bosta"\|"calisiyor"\|"bitti"\|"hata"\|"iptal","ad":"gta.mp4","asama":"seslendir","asamalar":[{"kod":"cikar","durum":"bitti","yuzde":100}],"yuzde":63,"kalan_sn":420,"satir":{"bitti":120,"toplam":190},"konusmaci_sayisi":4,"cikti":"D:\\Kayıt\\gta - Türkçe dublaj.mp4","srt":"...","hata":null,"mesaj":null,"devam_edilebilir":false}` |
+| POST | `/api/dublaj/video/iptal` | Durdurur; ara çıktılar saklanır (`devam_edilebilir:true`) |
+| POST | `/api/dublaj/video/goster` | Bitmiş videoyu dosya yöneticisinde seçili gösterir |
+SSE `dublaj-video`: `GET /api/dublaj/video` ile aynı gövde (değişince). `kalan_sn`: aşama başına
+ölçülen hızdan tahmin (ilk aşamalarda kaba tahmin).
+
+### 14.5 Ayarlar (`dublaj` içine eklenenler)
+`orijinal_ses`: `"kis"` | `"tamamen_turkce"` (varsayılan `"kis"`); `hafif_mod`: bool (`false`);
+`ayirma`: bool (`true`; canlıda konuşmayı arka plandan ayır); `video_srt`: bool (`true`);
+`video_motor`: `"chatterbox"` | `"pocket"` (`"chatterbox"`). Bilinmeyen değer `400 gecersiz_ayar`.
+`GET /api/dublaj` ek alanları: `paket` (14.1 gövdesi), `tamamen_turkce_destek`, `hafif_oneri` (bool).
+
+### 14.6 Kurallar
+- Mikrofon asla. Canlı ses örnekleri yalnız bellekte. Video modunda ara dosyalar yalnız iş klasöründe,
+  iş bitince silinir; çıktı videosu kullanıcının dosyasıdır.
+- API anahtarları işçiye verilmez (çeviri ana programda yapılır); günlükte anahtar yoktur.
+- Gerçek kişilerin seslerini taklit eden hazır ses paketi yoktur; yalnız videodaki/oyundaki karakterin kendi sesi örneklenir.
+- **Yasal not (panelde de yazar):** Dublaj kişisel kullanım içindir. Dublajlı videoyu yayınlamak
+  (YouTube vb.) oyunun ve seslendirme sanatçılarının haklarına tabidir; izin almak kullanıcının sorumluluğundadır.
