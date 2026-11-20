@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
+from ..onbellek import normallestir
 from ..onbellek import Onbellek
 from .istem import SON_SATIR_ADEDI, dublaj_ipucu
 from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri, ModelBulunamadi, MotorHatasi
@@ -40,6 +41,8 @@ class CeviriYoneticisi:
         self.yedek_neden: dict[str, str] | None = None   # yedeğe geçilme sebebi {"kod","mesaj"} (panel gösterir)
         self._yedek_zamani = 0.0
         self._ucusta: dict[tuple, asyncio.Future] = {}
+        # Motorun bu oturumda (güncel istemle) bilerek çevirmeden bıraktığı satırlar: gerçek isim sayılır.
+        self._degismez_onayli: set[str] = set()
         self.terimler: dict[str, str] = {}
         self.son_satirlar: deque[tuple[str, str]] = deque(maxlen=SON_SATIR_ADEDI)
         self.gecmis: deque[dict[str, str]] = deque(maxlen=30)   # /api/son-ceviriler (yalnız RAM)
@@ -185,15 +188,23 @@ class CeviriYoneticisi:
                 self.oneriler.ekle(asil, ceviri)
 
     # -- arama / çeviri --
+    def _cevrilmemis(self, metin: str, ceviri: str) -> bool:
+        """Kayıtlı çeviri asıl metnin aynısı mı (ör. eski sürümün "KILLER" => "KILLER" hatası)?
+        Sözlükteki terimler ve bu oturumda motorun yeniden onayladığı isimler sayılmaz."""
+        n = normallestir(metin)
+        return (bool(n) and normallestir(ceviri) == n and n not in self._degismez_onayli
+                and metin.strip().casefold() not in {a.casefold() for a in self.terimler})
+
     def ara(self, metin: str, kaynak: str, hedef: str, aciklama: bool = False) -> Ceviri | None:
-        """Hafıza/önbellekte varsa anında sonuç (motor çağrılmaz)."""
+        """Hafıza/önbellekte varsa anında sonuç (motor çağrılmaz). Çevrilmeden saklanmış satırlar
+        (kullanıcı düzeltmesi değilse) yok sayılır: motor bir kez daha sorulur."""
         if self.hafiza and not aciklama:
             vur = self.hafiza.bul(metin)
-            if vur:
+            if vur and (vur[1] == "kullanici" or not self._cevrilmemis(metin, vur[0])):
                 return Ceviri(vur[0], None, vur[1])
         if self.onbellek:
             vur = self.onbellek.al(metin, kaynak, hedef, self.oyun, aciklama)
-            if vur:
+            if vur and not self._cevrilmemis(metin, vur[0]):
                 return Ceviri(vur[0], vur[1])
         return None
 
@@ -243,6 +254,8 @@ class CeviriYoneticisi:
                     raise MotorHatasi("Çeviri sayısı uyuşmuyor")
                 for m, c in zip(yeni, ceviriler):
                     c = Ceviri(sozluk_mod.son_kontrol(m, c.metin, self.terimler), c.aciklama)
+                    if normallestir(c.metin) == normallestir(m):
+                        self._degismez_onayli.add(normallestir(m))
                     if self.onbellek and c.metin:
                         self.onbellek.koy(m, kaynak, hedef, self.oyun, c.metin, c.aciklama, aciklama)
                     if self.hafiza and c.metin and not aciklama and motor_kodu:

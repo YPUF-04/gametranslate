@@ -166,6 +166,15 @@ async def _bildir(cb: Callable[[int], Any], y: int) -> None:
 
 # ---- çeviri ----------------------------------------------------------------------------------
 _YER_DESEN = re.compile(r"\[\s*\[\s*T(\d+)\s*\]\s*\]")
+
+
+def _hepsi_buyuk(m: str) -> bool:
+    harfler = [c for c in m if c.isalpha()]
+    return len(harfler) >= 2 and all(c.isupper() for c in harfler)
+
+
+def _tr_buyuk(s: str) -> str:
+    return s.replace("i", "İ").replace("ı", "I").upper()
 _CUMLE_DESEN = re.compile(r"(?<=[.!?…])\s+")
 _cevirici_onbellek: dict[str, tuple[Any, Any]] = {}
 _cevirici_kilit = threading.Lock()
@@ -257,6 +266,9 @@ class YerelMotor:
         out = []
         try:
             for m in metinler:
+                buyuk = _hepsi_buyuk(m)
+                if buyuk:   # "KILLER" gibi büyük harfli yazıyı model isim sanmasın: küçült, çevir, büyüt
+                    m = m.lower().capitalize()
                 korunan, harita = sozluk_mod.koru(m, sozluk)
                 s = metni_cevir(cevirici, sp, korunan)
                 if harita and not all(_yer_var(s, y) for y in harita):
@@ -264,7 +276,7 @@ class YerelMotor:
                     s = sozluk_mod.son_kontrol(m, metni_cevir(cevirici, sp, m), sozluk)
                 else:
                     s = sozluk_mod.geri_koy(_YER_DESEN.sub(lambda x: f"[[T{x.group(1)}]]", s), harita)
-                out.append(s)
+                out.append(_tr_buyuk(s) if buyuk and hedef == "tr" else s.upper() if buyuk else s)
         except MotorHatasi:
             raise
         except Exception as e:   # noqa: BLE001
