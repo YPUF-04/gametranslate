@@ -64,3 +64,37 @@ Hedef donanım: RTX 4060 dizüstü (8 GB ekran kartı belleği), Windows. Ayrın
 | Doğrulama | Velopack her paketin SHA256'sını `releases.win.json`'dan denetler; SHA256SUMS.txt eski yol ve elle indirenler için durur | |
 | Yedek yol | `velopack` yoksa / program Velopack'la kurulu değilse (geliştirme, macOS, zip) eski tam-kurucu yolu | Hiçbir senaryo güncellemesiz kalmaz |
 | İmza | Velopack paketleri imzasız (sertifika yok); SmartScreen uyarısı eskisi gibi | |
+
+## PS5 gizli bağlantı (2026-11) — teknik kararlar
+Sözleşme: PROTOKOL §15. Neden: gerçek denemede resmî PS Remote Play uygulaması (laptopta İKİNCİ hesapla
+açıkken bile) kontrolü laptopun klavyesine aldı, TV'deki DualSense oyunu kontrol edemedi.
+
+| Konu | Karar | Neden |
+|---|---|---|
+| Nasıl bağlanıyoruz | chiaki-ng'nin `libchiaki`'si (AGPL-3.0, **v1.10.1**, commit `f30da0a`) üstüne **kendi küçük C yardımcımız** `ayk-uzaktan.exe` (`uzaktan/ayk_uzaktan.c`) | GameTranslator da libchiaki kullanır (GameTranslator.RemotePlay + yerel DLL); kodlarını kopyalamadık, yaklaşımı inceleyip kendimiz yazdık. chiaki-ng ve biz AGPL: kütüphaneyi kullanmak serbest |
+| ctypes + DLL yerine ayrı süreç | Yardımcı ayrı bir **süreç**; Python onunla stdin/stdout borularıyla konuşur | libchiaki'nin iş parçacıkları/çökmesi ana programı düşürmez; geri çağrı (callback) ve yapı (struct) düzenini Python'da kopyalamak gerekmez (sürüm değişince sessizce bozulur); kolay yeniden başlatma = otomatik yeniden bağlanma; sahte yardımcıyla tam sınanabilir |
+| Gizli değerler | Hesap kimliği, kayıt anahtarları, PIN **komut satırında değil stdin'de**; kasada (keyring) saklanır, ayar dosyasında yok | Başka süreçler komut satırını görebilir; API anahtarlarıyla aynı kural |
+| Kareler | Yardımcı her kareyi çözer (H.264 akışı kesintisiz çözülmeli) ama **yalnız istenince** BGRA'ya çevirip yollar | OCR saniyede birkaç kare ister; 720p BGRA ≈ 3,7 MB, sürekli göndermek boşa yük |
+| Görüntü | PS5'ten 720p/30 H.264 (ayar: 540/720/1080, h264/hevc) | Altyazı okumaya yeter, yazılımla çözmesi ucuz; dizüstünün ekran kartı dublaja kalır |
+| Ses | Opus → 48 kHz stereo → **16 kHz mono** (yardımcıda) → ana programın 127.0.0.1 kapısı (oturum başına rastgele anahtar) → dublaj işçisi | İşçi zaten 16 kHz bekliyor; ses bilgisayarda çalınmaz (TV çalıyor) |
+| FFmpeg | Kaynaktan, yalnız `h264`+`hevc` çözücü ve swscale, **LGPL** (`--enable-gpl` yok), statik | Tek dosya, ek DLL yok; lisans uyumlu |
+| Windows derlemesi | GitHub Actions `windows-latest` + MSYS2 MINGW64, `-static` → **tek ~10 MB exe**, yalnız Windows sistem DLL'lerine bağlı; paketin `_internal/uzaktan/` klasöründe, Velopack paketlemesinden ÖNCE | CI'da `--help`, `ozdenetim` ve paketlenmiş programın `--ozdenetim-uzaktan` adımı çalışır |
+| PSN hesap kimliği | chiaki-ng'nin belgelediği resmî Remote Play OAuth girişi; kullanıcı Sony sayfasında girer, yönlendirme adresini panele yapıştırır | Uygulama içi tarayıcımız yok (panel bir web sayfası); şifre programa hiç girmez, belirteç saklanmaz |
+| Anahtar biçimi | Yardımcı libchiaki'nin çözülmüş 16 baytını 32 hex olarak verir; Python yalnız bu biçimi kabul eder | GameTranslator'ın düzelttiği hata: anahtarı metin olarak saklamak oturumu `0x80108b26` ile reddettirir |
+
+### Kol (DualSense) neden TV'de kalmalı — bulgular ve kalan risk (dürüstçe)
+- **libchiaki ne gönderir (kaynaktan doğrulandı):** `lib/src/feedbacksender.c` oturum boyunca en geç 200 ms'de bir
+  "geri bildirim durumu" paketi yollar; içinde `chiaki_controller_state_set_idle` ile kurulmuş **boştaki kol** vardır.
+  Kol durumu yalnız `chiaki_session_set_controller_state` çağrılınca değişir; yardımcımız bunu **hiç** çağırmaz
+  (testle korunuyor: `tests/test_ps5.py::test_yardimci_kol_girdisi_gondermez`). Klavye ve DualSense özellikleri kapalı açılır.
+  Yani PS5'e giden tek "kol" verisi: hiç tuşa basılmamış, çubukları ortada bir kol.
+- **Resmî uygulamada neden kontrol kaydı (tahmin, doğrulanmadı):** resmî PC uygulaması klavyeyi/fareyi ve bağlı kolu
+  gerçek bir DualSense gibi PS5'e yollar; pencere odaktayken her tuş gerçek girdidir. PS5 de son girdiyi veren uzak
+  kullanıcıyı öne alabilir / oyun girdiyi "aktif" kola bağlayabilir. Bizim istemcide gerçek girdi hiç olmadığı için bu
+  tetiklenmemeli. Ancak PS5'in oturum açılırken odağı uzaktaki kullanıcıya **kendiliğinden** verip vermediğini (ör. ikinci
+  kullanıcıyı öne almak) Sony'nin kapalı yazılımı belirler; kaynak kodda göremeyiz.
+- **GameTranslator'ın notu:** "İkinci hesap sayesinde kol kopmaz" der; ama Windows dağıtımı resmî chiaki-ng uygulamasını
+  da paketliyor ve bu iddianın ölçümü yayınlanmamış. Bizim kullanıcımızın denemesi ikinci hesabın tek başına yetmediğini gösterdi.
+- **Kalan risk:** gerçek PS5'te hiç denenmedi. Kol yine bırakırsa: panel bağlantı testinde sorar ("Kolun TV'de çalışıyor mu?"),
+  "Hayır"da PS tuşu → ana hesap seçimini önerir. Sonraki deneme adımı: libchiaki'ye küçük bir yama ile geri bildirim
+  paketlerini tamamen kapatmak (oturumun bunsuz açık kalıp kalmadığı da bilinmiyor; o yüzden şimdilik yapılmadı).

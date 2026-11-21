@@ -57,9 +57,10 @@ Neden: LG, mağaza dışından uygulama kurmak için TV'de **Developer Mode** (g
 1. **AltYazıKöprüsü'nü kur:** kurulum dosyasını indir → çift tıkla → **İleri → Kur → Bitir**.
    Mavi "Windows bilgisayarınızı korudu" penceresi çıkarsa: **Ek bilgi → Yine de çalıştır**.
 2. **Güvenlik duvarı sorusu** çıkarsa: **"Özel ağlar"** kutusunu işaretle → **Erişime izin ver**. (Yoksa TV laptopa ulaşamaz.)
-3. **PS Remote Play** uygulamasını Sony'nin sitesinden ([remoteplay.dl.playstation.net](https://remoteplay.dl.playstation.net)) indir ve kur.
-4. PS Remote Play'i aç → **ikinci PSN hesabıyla** giriş yap → **PS5** → bağlanmasını bekle.
-   Bağlanınca laptop ekranında PS5'in görüntüsü çıkar. Bu pencereyi **açık bırak, simge durumuna küçültme** (arkada kalabilir).
+3. **PS Remote Play uygulamasını kurman GEREKMEZ.** AltYazıKöprüsü PS5'e kendisi, **gizlice** bağlanır:
+   pencere açmaz, PS5'e **hiçbir kol/klavye tuşu göndermez**; TV'deki kolun oyunda kalır.
+   (Resmî PS Remote Play uygulaması bir denemede kontrolü laptopa aldı; bu yüzden artık yalnız yedek yoldur.)
+   Bağlantıyı Bölüm 5'te panel adım adım kurar.
 
 ---
 
@@ -86,7 +87,15 @@ Neden: LG, mağaza dışından uygulama kurmak için TV'de **Developer Mode** (g
 
 ## Bölüm 5 — Paneldeki kurulum (oyun açıkken)
 
-1. **Görüntü:** cihaz olarak **PS5**, pencere olarak **PS Remote Play** penceresini seç.
+1. **Görüntü:** cihaz olarak **PS5**'i seç. **"PS5'e gizli bağlan"** kartı açılır, 3 adım:
+   1. **İkinci hesapla giriş:** **Sony girişini aç**'a bas → açılan Sony sayfasında **ikinci** hesapla gir.
+      Sayfa sonunda boş ya da hata gibi görünebilir, normal. **Adres çubuğundaki adresin tamamını** kopyala → panele yapıştır → **Kaydet**.
+      (Şifren yalnız Sony'ye gider; program yalnız hesap kimliğini, şifreli olarak saklar.)
+   2. **8 haneli kod:** PS5'te **ikinci kullanıcıya geç** → **Ayarlar → Sistem → Uzaktan Oynatma → Cihazı Bağla**.
+      Ekranda 8 haneli kod çıkar. Panelde PS5'ini seç, kodu yaz → **Bağla**. Bitince PS5'te **kendi (ana) hesabına geri dön**.
+   3. **Bağlantı testi:** **Bağlan ve dene** → küçük canlı görüntü gelir. Panel sorar: **"Kolun TV'de çalışmaya devam ediyor mu?"**
+      Kolunla bir tuşa bas: çalışıyorsa **Evet** (kaynak "PS5 (gizli bağlantı)" seçilir), çalışmıyorsa **Hayır** (panel ne yapacağını söyler).
+   PS5 dinlenme modundaysa program onu kendisi uyandırır; bağlantı koparsa kendisi yeniden bağlanır.
 2. **Yazı okuma:** önizlemede yazılar kutularla gösterilir. Gerekirse "İngilizce okuma paketini kur"a bas.
 3. **Çeviri:** **Gemini** seç → anahtarını yapıştır → **Dene**.
 4. **Nerede göreyim?** → **LG TV**.
@@ -124,8 +133,10 @@ Neden: LG, mağaza dışından uygulama kurmak için TV'de **Developer Mode** (g
 | TV uygulaması laptopu bulamıyor | Aynı Wi-Fi'da mısınız? Güvenlik duvarında "Özel ağlar"a izin verdin mi? |
 | TV'de uygulama açılınca oyun görüntüsü kayboluyor | Fotoğrafını çekip gönder (en önemli test noktası). |
 | Dublajda TV'den ses gelmiyor | Bölüm 6, adım 3'teki yedek yolu kullan ve bana haber ver. |
-| Remote Play bağlanmıyor | PS5 açık ya da dinlenme modunda mı? Bölüm 2'deki ayarlar açık mı? |
-| Kolum TV'den koptu | Laptopun **ikinci hesapla** bağlandığından emin ol. |
+| PS5'e bağlanmıyor | PS5 açık ya da dinlenme modunda mı? Bölüm 2'deki ayarlar açık mı? Laptop ve PS5 aynı ağda mı? |
+| "PS5 kodu kabul etmedi" | Cihazı Bağla ekranını kapatıp yeniden aç, **yeni** kodu yaz. Kod ikinci kullanıcıdayken alınmalı. |
+| "PS5 bu PSN hesabını tanımadı" | 1. adımda **ikinci** hesapla girdiğinden ve o hesabın PS5'e kullanıcı olarak eklendiğinden emin ol. |
+| Kolum TV'de çalışmıyor | Kolundaki **PS tuşuna** bas ve TV'de **ana hesabını** seç. Olmuyorsa panelde **Bağlantıyı kes**, bize bildir; o arada yedek yol: resmî PS Remote Play penceresi ([ps5-remote-play.md](ps5-remote-play.md)). |
 | Yazılar çevrilmiyor | Kutunun altyazıyı kapsadığından emin ol; İngilizce okuma paketini kur. |
 
 **Bana gönderirken ekle:** TV modeli ve webOS sürümü (TV'de Ayarlar → Genel → Cihaz Bilgisi), ekranın fotoğrafı, panelde **Ayrıntıyı göster** yazısı.

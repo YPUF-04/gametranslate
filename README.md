@@ -30,6 +30,7 @@
 - **Oyun sesi** (deneysel, varsayılan olarak kapalı): konuşmayı yazıya çevirip çevirir
 
 > 🎮📺 **PS5 + laptop + LG TV (altyazı + Türkçe dublaj) ile ilk deneme mi?** Her şey tek sayfada, sırayla: **[İlk deneme rehberi](docs/kurulum/ilk-deneme.md)** — hangi hesapları açacağın (ikinci PSN hesabı, LG geliştirici hesabı, Gemini anahtarı), PS5 / laptop / LG TV ayarları ve dublaj.
+> PS5'e artık **gizli bağlanıyoruz**: pencere açılmaz, PS5'e kol tuşu gönderilmez, TV'deki kolun oyunda kalır ([PS5 kurulumu](docs/kurulum/ps5-remote-play.md)).
 
 ## Kurulum — adım adım (Windows)
 
@@ -80,7 +81,7 @@ python -m kopru
 |---|---|---|
 | LG webOS TV (oyunun üstünde) | 🔧 test ediliyor | [Kurulum](docs/kurulum/lg-webos.md) |
 | Tarayıcı / OBS ile gösterim | ⏳ test bekliyor | [Kurulum](docs/kurulum/tv-tarayici.md) |
-| PS5 (PS Remote Play) | ⏳ test bekliyor | [Kurulum](docs/kurulum/ps5-remote-play.md) |
+| PS5 (gizli bağlantı: pencere yok, kol TV'de kalır; yedek: PS Remote Play penceresi) | ⏳ test bekliyor | [Kurulum](docs/kurulum/ps5-remote-play.md) |
 | Xbox (Xbox uygulaması) | ⏳ test bekliyor | [Kurulum](docs/kurulum/xbox.md) |
 | Yakalama kartı / OBS | ⏳ test bekliyor | [Kurulum](docs/kurulum/yakalama-karti.md) |
 | PC oyunu | ⏳ test bekliyor | [Windows](docs/kurulum/windows.md) |

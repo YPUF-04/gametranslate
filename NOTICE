@@ -20,4 +20,24 @@ Fikir olarak şu açık kaynak projelerden esinlenilmiştir; onlara teşekkür e
 
 Kod, arayüz, adlandırma, veri/alan adları, bağlantı biçimi ve görsel tasarım
 AltYazıKöprüsü'ne aittir.
+
+------------------------------------------------------------------------
+Kullanılan kütüphaneler (PS5 gizli bağlantı yardımcısı ayk-uzaktan)
+------------------------------------------------------------------------
+ayk-uzaktan.exe (kaynak: uzaktan/) şu kütüphanelerle statik olarak derlenir:
+
+  chiaki-ng (libchiaki) v1.10.1 — Copyright (C) Chiaki ve chiaki-ng katkıcıları
+  (Florian Märkl ve diğerleri). https://github.com/streetpea/chiaki-ng
+  Lisans: AGPL-3.0-only (OpenSSL istisnasıyla). Kaynak değiştirilmeden kullanılır.
+
+  FFmpeg n7.1.1 (libavcodec, libswscale, libavutil; yalnız H.264/HEVC çözücü)
+  https://ffmpeg.org  Lisans: LGPL-2.1-or-later (GPL bileşeni yok).
+
+  ve libchiaki'nin bağımlılıkları: OpenSSL (Apache-2.0), Opus (BSD-3-Clause),
+  json-c (MIT), miniupnpc (BSD-3-Clause), libevent (BSD-3-Clause),
+  nanopb (zlib), Jerasure / gf-complete (BSD-3-Clause), curl (curl lisansı).
+  Lisans metinleri: paket içinde uzaktan/LICENSE-*.txt ve THIRD-PARTY-NOTICES.md.
+
+PS5 Remote Play'e bağlanma yaklaşımı GameTranslator'ın (AGPL-3.0) incelenmesiyle
+öğrenildi; kodu kopyalanmadı. PSN giriş akışı chiaki-ng belgelerine dayanır.
 Üçüncü taraf bileşenler: THIRD-PARTY-NOTICES.md
