@@ -29,6 +29,8 @@
 - **Ekrandaki tüm yazılar** (görev listesi, bilgi kutuları, tabelalar); istersen görevlere kısa açıklama da eklenir
 - **Oyun sesi** (deneysel, varsayılan olarak kapalı): konuşmayı yazıya çevirip çevirir
 
+> 🎮📺 **PS5 + laptop + LG TV (altyazı + Türkçe dublaj) ile ilk deneme mi?** Her şey tek sayfada, sırayla: **[İlk deneme rehberi](docs/kurulum/ilk-deneme.md)** — hangi hesapları açacağın (ikinci PSN hesabı, LG geliştirici hesabı, Gemini anahtarı), PS5 / laptop / LG TV ayarları ve dublaj.
+
 ## Kurulum — adım adım (Windows)
 
 > Hiç bilgisayar bilgisi gerekmez. Her adımda ne yapacağın yazıyor.
