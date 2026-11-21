@@ -333,6 +333,147 @@
     ]));
   }
 
+  // ---------- PS5 GİZLİ BAĞLANTI (PROTOKOL §15): pencere açmaz, kol göndermez; 3 adım ----------
+  function ps5GizliKart(kaynakSecF) {
+    var kok = h('div', { class: 'kart ps5-gizli', id: 'ps5-gizli' });
+    var zamanlayici = null, onizZaman = null;
+    function temizle() { if (zamanlayici) { clearTimeout(zamanlayici); zamanlayici = null; } if (onizZaman) { clearTimeout(onizZaman); onizZaman = null; } }
+    function adimBaslik(n, anahtar, bitti) {
+      return h('h3', { class: 'ps5-adim-bas' }, [h('span', { class: 'rozet' + (bitti ? ' yesil' : ''), text: bitti ? '✓' : String(n) }), h('span', { text: t(anahtar) })]);
+    }
+    function yukle() {
+      temizle();
+      return api('GET', '/api/ps5').then(ciz5, function (e) { kok.textContent = ''; kok.appendChild(hataKutusu(e, 'ps5-hata')); });
+    }
+    function ciz5(d) {
+      kok.textContent = '';
+      kok.appendChild(h('div', { class: 'kart-bas' }, h('h2', {}, [ikon('ps5'), h('span', { text: t('ps5g.baslik') })])));
+      kok.appendChild(h('p', { class: 'ne' }, [h('b', { text: t('ne.etiket') + ' ' }), t('ps5g.ne')]));
+      if (!d.destek) {
+        kok.appendChild(h('div', { class: 'ipucu', id: 'ps5-destek-yok', text: t(d.neden === 'yalniz_windows' ? 'ps5g.yalniz_windows' : 'ps5g.yardimci_yok') }));
+        return;
+      }
+      // 1) ikinci PSN hesabı
+      var a1 = h('div', { class: 'ps5-adim', id: 'ps5-adim-1' }, [adimBaslik(1, 'ps5g.a1', d.hesap.var)]);
+      if (d.hesap.var) {
+        a1.appendChild(h('p', { class: 'sessiz', id: 'ps5-hesap-ozet', text: t('ps5g.a1.tamam', { ozet: d.hesap.ozet || '' }) }));
+      } else {
+        a1.appendChild(adimlar('ps5g.a1.adimlar'));
+        var adresGir = h('input', { type: 'text', id: 'ps5-adres', autocomplete: 'off', spellcheck: 'false', placeholder: t('ps5g.a1.yer') });
+        var a1Durum = h('div', { id: 'ps5-a1-durum', 'aria-live': 'polite' });
+        a1.appendChild(h('div', { class: 'satir' }, [
+          h('button', { type: 'button', class: 'dugme', id: 'ps5-sony-ac', text: t('ps5g.a1.ac'), onclick: function () {
+            api('POST', '/api/ps5/psn/adres').then(function (r) { window.open(r.adres, '_blank', 'noopener'); }, function (e) { a1Durum.textContent = ''; a1Durum.appendChild(hataKutusu(e, 'ps5-a1-hata')); });
+          } })]));
+        a1.appendChild(h('label', { class: 'etiket-kucuk', for: 'ps5-adres', text: t('ps5g.a1.yapistir') }));
+        a1.appendChild(h('div', { class: 'satir' }, [adresGir, h('button', { type: 'button', class: 'dugme sari', id: 'ps5-adres-kaydet', text: t('ps5g.a1.kaydet'), onclick: function () {
+          a1Durum.textContent = ''; a1Durum.appendChild(yukleniyor(t('ps5g.a1.bekle')));
+          api('POST', '/api/ps5/psn/kod', { adres: adresGir.value }, 40000).then(yukle, function (e) { a1Durum.textContent = ''; a1Durum.appendChild(hataKutusu(e, 'ps5-a1-hata')); });
+        } })]));
+        var elleGir = h('input', { type: 'text', id: 'ps5-kimlik', autocomplete: 'off', spellcheck: 'false', placeholder: 'AbCdEfGhIjk=' });
+        a1.appendChild(h('details', { class: 'sorun-ac', id: 'ps5-elle' }, [h('summary', { text: t('ps5g.a1.elle') }),
+          h('div', { class: 'satir' }, [elleGir, h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'ps5-kimlik-kaydet', text: t('ps5g.a1.kaydet'), onclick: function () {
+            api('POST', '/api/ps5/psn/elle', { kimlik: elleGir.value }).then(yukle, function (e) { a1Durum.textContent = ''; a1Durum.appendChild(hataKutusu(e, 'ps5-a1-hata')); });
+          } })])]));
+        a1.appendChild(a1Durum);
+      }
+      kok.appendChild(a1);
+      // 2) PS5'te "Cihazı Bağla" kodu
+      var kayitli = !!(d.konsol && d.konsol.kayitli);
+      var a2 = h('div', { class: 'ps5-adim', id: 'ps5-adim-2' }, [adimBaslik(2, 'ps5g.a2', kayitli)]);
+      if (kayitli) {
+        a2.appendChild(h('p', { class: 'sessiz', id: 'ps5-konsol-ozet', text: t('ps5g.a2.tamam', { ad: d.konsol.ad || 'PS5', ip: d.konsol.host || '' }) }));
+      }
+      if (d.hesap.var && !kayitli) {
+        a2.appendChild(adimlar('ps5g.a2.adimlar'));
+        var ipGir = h('input', { type: 'text', id: 'ps5-ip', autocomplete: 'off', inputmode: 'decimal', placeholder: '192.168.1.30', value: (d.konsol && d.konsol.host) || '' });
+        var pinGir = h('input', { type: 'text', id: 'ps5-pin', autocomplete: 'off', inputmode: 'numeric', maxlength: '11', placeholder: '1234 5678' });
+        var liste = h('div', { class: 'liste', id: 'ps5-konsollar' });
+        var a2Durum = h('div', { id: 'ps5-a2-durum', 'aria-live': 'polite' });
+        function ara() {
+          liste.textContent = ''; liste.appendChild(yukleniyor(t('ps5g.a2.araniyor')));
+          api('POST', '/api/ps5/bul', {}, 20000).then(function (r) {
+            liste.textContent = '';
+            if (!r.konsollar.length) liste.appendChild(h('p', { class: 'sessiz', id: 'ps5-bulunamadi', text: t('ps5g.a2.yok') }));
+            r.konsollar.forEach(function (k) {
+              liste.appendChild(h('button', { type: 'button', class: 'sec', 'data-ps5-host': k.host, 'aria-pressed': String(ipGir.value === k.host), onclick: function () {
+                ipGir.value = k.host; liste.querySelectorAll('[data-ps5-host]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.ps5Host === k.host)); });
+              } }, [h('span', { class: 'sec-ad', text: k.ad + ' · ' + k.host }), h('span', { class: 'sec-alt', text: t('ps5g.durum.' + (k.durum === 'uyku' ? 'uyku' : 'acik')) })]));
+            });
+            if (r.konsollar.length === 1 && !ipGir.value) ipGir.value = r.konsollar[0].host;
+          }, function (e) { liste.textContent = ''; liste.appendChild(hataKutusu(e, 'ps5-bul-hata')); });
+        }
+        a2.appendChild(h('div', { class: 'satir' }, h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'ps5-ara', text: t('ps5g.a2.ara'), onclick: ara })));
+        a2.appendChild(liste);
+        a2.appendChild(h('label', { class: 'etiket-kucuk', for: 'ps5-ip', text: t('ps5g.a2.ip') }));
+        a2.appendChild(ipGir);
+        a2.appendChild(h('label', { class: 'etiket-kucuk', for: 'ps5-pin', text: t('ps5g.a2.pin') }));
+        a2.appendChild(h('div', { class: 'satir' }, [pinGir, h('button', { type: 'button', class: 'dugme sari', id: 'ps5-kaydet', text: t('ps5g.a2.bagla'), onclick: function () {
+          a2Durum.textContent = ''; a2Durum.appendChild(yukleniyor(t('ps5g.a2.bekle')));
+          api('POST', '/api/ps5/kaydet', { host: ipGir.value.trim(), pin: pinGir.value }, 70000).then(yukle, function (e) {
+            a2Durum.textContent = ''; a2Durum.appendChild(hataKutusu(e, 'ps5-a2-hata', [{ id: 'ps5-a2-tekrar', ad: t('genel.tekrar'), f: function () { pinGir.value = ''; pinGir.focus(); } }]));
+          });
+        } })]));
+        a2.appendChild(a2Durum);
+        ara();
+      }
+      kok.appendChild(a2);
+      // 3) bağlantı testi: canlı önizleme + kol sorusu
+      var a3 = h('div', { class: 'ps5-adim', id: 'ps5-adim-3' }, [adimBaslik(3, 'ps5g.a3', d.kol_tv === true && d.baglanti.durum === 'bagli')]);
+      if (kayitli) {
+        var b = d.baglanti || {};
+        var a3Durum = h('div', { id: 'ps5-a3-durum', 'aria-live': 'polite' });
+        var resim = h('img', { class: 'kare-resim', id: 'ps5-onizleme', alt: t('ps5g.a3.resim'), hidden: true });
+        a3.appendChild(h('p', { class: 'sessiz', id: 'ps5-baglanti-durum', text: t('ps5g.baglanti.' + (b.durum || 'kapali')) + (b.mesaj ? ' — ' + b.mesaj : '') }));
+        if (b.durum === 'kapali' || b.durum === 'hata') {
+          a3.appendChild(h('div', { class: 'satir' }, h('button', { type: 'button', class: 'dugme', id: 'ps5-baglan', text: t('ps5g.a3.baglan'), onclick: function () {
+            a3Durum.textContent = ''; a3Durum.appendChild(yukleniyor(t('ps5g.a3.bekle')));
+            api('POST', '/api/ps5/baglan', {}, 20000).then(yukle, function (e) { a3Durum.textContent = ''; a3Durum.appendChild(hataKutusu(e, 'ps5-a3-hata')); });
+          } })));
+        } else {
+          if (b.giris_pin) {
+            var gp = h('input', { type: 'password', id: 'ps5-giris-pin', inputmode: 'numeric', maxlength: '4', autocomplete: 'off' });
+            a3.appendChild(h('div', { class: 'ipucu', id: 'ps5-giris-pin-kutu' }, [t('ps5g.a3.giris_pin'), h('div', { class: 'satir' }, [gp,
+              h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'ps5-giris-pin-gonder', text: t('ps5g.a1.kaydet'), onclick: function () { api('POST', '/api/ps5/giris-pin', { pin: gp.value }).catch(hataGoster); } })])]));
+          }
+          a3.appendChild(h('div', { class: 'kare-sahne' }, resim));
+          a3.appendChild(h('div', { class: 'satir' }, h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'ps5-kes', text: t('ps5g.a3.kes'), onclick: function () { api('POST', '/api/ps5/kes').then(yukle, hataGoster); } })));
+          if (b.durum === 'bagli') {
+            var soru = h('div', { class: 'ps5-kol', id: 'ps5-kol-soru' }, [h('p', {}, h('b', { text: t('ps5g.a3.soru') })),
+              h('div', { class: 'satir' }, [
+                h('button', { type: 'button', class: 'dugme', id: 'ps5-kol-evet', text: t('ps5g.a3.evet'), onclick: function () {
+                  api('POST', '/api/ps5/kol', { calisiyor: true }).then(function () { if (kaynakSecF) kaynakSecF('ps5:gizli'); yukle(); }, hataGoster);
+                } }),
+                h('button', { type: 'button', class: 'dugme ikincil', id: 'ps5-kol-hayir', text: t('ps5g.a3.hayir'), onclick: function () {
+                  api('POST', '/api/ps5/kol', { calisiyor: false }).then(yukle, hataGoster);
+                } })])]);
+            a3.appendChild(soru);
+            if (d.kol_tv === true) a3.appendChild(h('div', { class: 'sonuc iyi', id: 'ps5-hazir', text: t('ps5g.a3.hazir') }));
+            if (d.kol_tv === false) a3.appendChild(h('div', { class: 'ipucu', id: 'ps5-kol-yardim' }, adimlar('ps5g.a3.kol_yardim')));
+            var onizle5 = function () {
+              if (!document.body.contains(resim)) { temizle(); return; }
+              fetch('/api/ps5/onizleme?_=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.blob() : null; }).then(function (bl) {
+                if (bl) { var u = URL.createObjectURL(bl); resim.onload = function () { URL.revokeObjectURL(u); }; resim.src = u; resim.hidden = false; }
+              }, function () {}).then(function () { onizZaman = setTimeout(onizle5, 1500); });
+            };
+            onizZaman = setTimeout(onizle5, 0);   // kart sayfaya eklendikten sonra
+          }
+          if (b.durum !== 'bagli') zamanlayici = setTimeout(yukle, 1500);   // bağlanırken durum yenilenir
+        }
+        a3.appendChild(a3Durum);
+      }
+      kok.appendChild(a3);
+      kok.appendChild(h('details', { class: 'sorun-ac', id: 'ps5-yedek' }, [h('summary', { text: t('ps5g.yedek.baslik') }), adimlar('ps5g.yedek')]));
+      if (d.hesap.var || kayitli) {
+        kok.appendChild(h('div', { class: 'satir' }, h('button', { type: 'button', class: 'baglanti', id: 'ps5-unut', text: t('ps5g.unut'), onclick: function () {
+          if (window.confirm(t('ps5g.unut.onay'))) api('DELETE', '/api/ps5').then(yukle, hataGoster);
+        } })));
+      }
+    }
+    yukle();
+    return kok;
+  }
+
   // ---------- SİHİRBAZ: 6 aşama, her biri ayrı ekran ----------
   var ASAMALAR = ['goruntu', 'okuma', 'ceviri', 'gosterim', 'bolge', 'hazir'];
   function asamaOku() { try { var v = JSON.parse(ls('asamalar') || '{}'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
@@ -473,7 +614,7 @@
         kaynakKutu.appendChild(h('button', { type: 'button', class: 'sec' + (k.haric ? ' haric' : ''), 'data-kaynak': k.kod, 'aria-pressed': String(S.kaynak === k.kod),
           onclick: function () { elle = true; kaynakSec(k.kod); } }, [
           h('span', { class: 'sec-ad' }, [h('span', { text: k.ad }), k.onerilen ? h('span', { class: 'rozet sari', text: t('kaynak.onerilen') }) : null]),
-          h('span', { class: 'sec-alt', text: t(pencereMi(k) ? 'kaynak.tur.pencere' : 'kaynak.tur.ekran') })]));
+          h('span', { class: 'sec-alt', text: t(k.tur === 'ps5' ? 'kaynak.tur.ps5' : (pencereMi(k) ? 'kaynak.tur.pencere' : 'kaynak.tur.ekran')) })]));
       });
       // ps5/xbox/kart için uygun pencere yoksa: cihazın kısa rehberi burada
       if (S.cihaz && S.cihaz !== 'pc' && !oner && REHBER[S.cihaz]) {
@@ -492,6 +633,7 @@
       document.querySelectorAll('[data-cihaz]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.cihaz === S.cihaz)); });
       ipucu.hidden = !S.cihaz; kaynakKart.hidden = !S.cihaz;
       if (S.cihaz) ipucu.textContent = t('kaynak.ipucu.' + S.cihaz);
+      if (typeof ps5Guncelle === 'function') ps5Guncelle();
       kaynakCiz();
     }
     var acikRehber = null;
@@ -507,6 +649,11 @@
       ]));
     }
     var cihazRehber = h('div', { id: 'cihaz-rehber' });
+    var ps5Alan = h('div', { id: 'ps5-alan' });
+    function ps5Guncelle() {   // PS5 seçiliyse gizli bağlantı sihirbazı kaynak listesinin üstünde
+      if (S.cihaz !== 'ps5') { ps5Alan.textContent = ''; return; }
+      if (!ps5Alan.firstChild) ps5Alan.appendChild(ps5GizliKart(function (kod) { elle = true; kaynakYukle(S.cihaz).then(function () { kaynakSec(kod); }, function () { kaynakSec(kod); }); }));
+    }
     var cihazIzgara = h('div', { class: 'izgara izgara-4', role: 'group', 'aria-label': t('asama1.baslik') }, CIHAZLAR.map(function (x) {
       var b = karo(x.ik, t('cihaz.' + x.k), t('cihaz.' + x.k + '.kucuk'), S.cihaz === x.k, function () {
         var ilk = !S.cihaz; S.cihaz = x.k; ls('cihaz', x.k); elle = false; guncelle();
@@ -523,7 +670,7 @@
     }));
     c = asamaCerceve(1, {
       baslik: t('asama1.baslik'), alt: t('asama1.alt'), ne: 'asama1.ne', sorun: 'sorun.asama1',
-      govde: [cihazIzgara, cihazRehber, ipucu, kaynakKart, onizKart]
+      govde: [cihazIzgara, cihazRehber, ipucu, ps5Alan, kaynakKart, onizKart]
     });
     guncelle();
     if (!S.kaynaklar.length) yenile.click();

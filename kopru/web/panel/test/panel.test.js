@@ -70,6 +70,7 @@ function sahteSunucu() {
     okumaMod: 'iyi', okumaIstekleri: 0, kaynakCihazlar: [], kartVar: false, uyari: null, bilgiMod: 'ok',
     yerel: { hazir: false, boyut_mb: 95, indirme: { durum: 'yok', yuzde: 0, mesaj: null } }, yerelHazirla: 0, yerelDene: 0, yerelAdim: 0,
     katman: { destek: true, acik: false, ekran: 1, ekranlar: [{ no: 1, ad: 'Ekran 1 (1920×1080)' }, { no: 2, ad: 'Ekran 2 (2560×1440)' }] }, katmanDene: [],
+    ps5: { hesap: false, kayitli: false, durum: 'kapali', kol: null, yoklama: 0 },
     bolgePostlari: [], kareIstekleri: 0, kareHata: false, calisiyor: false, anahtarlar: {}, istekler: [], govdeler: {}, sozluk: { oyun: 'varsayilan', terimler: [{ asil: 'Ellie', ceviri: 'Ellie' }] }
   };
   const motorlar = () => [
@@ -159,9 +160,33 @@ function sahteSunucu() {
           const cihaz = url.searchParams.get('cihaz') || st.ayarlar.cihaz;
           st.kaynakCihazlar.push(cihaz);
           const l = [{ kod: 'ekran:1', ad: 'Ekran 1 (1920×1080)', tur: 'ekran', onerilen: false, haric: false }, { kod: 'pencere:9', ad: 'Mozilla Firefox', tur: 'pencere', onerilen: false, haric: true }, { kod: 'pencere:123', ad: 'PS Remote Play', tur: 'pencere', onerilen: cihaz === 'ps5' }];
+          if (st.ps5.kayitli) l.unshift({ kod: 'ps5:gizli', ad: 'PS5 (gizli bağlantı)', tur: 'ps5', onerilen: cihaz === 'ps5', kayitli: true });
           if (cihaz === 'kart' && st.kartVar) l.push({ kod: 'pencere:777', ad: 'Windowed Projector (Kaynak) - Video Capture Device', tur: 'pencere', onerilen: true });
           return j(l);
         }
+        // ---- PS5 gizli bağlantı (PROTOKOL 15.7) ----
+        case 'GET /api/ps5': {
+          const p = st.ps5;
+          if (p.durum === 'baglaniyor' && ++p.yoklama >= 2) p.durum = 'bagli';
+          return j({ destek: true, neden: null, hesap: { var: p.hesap, ozet: p.hesap ? 'AQID…' : null },
+            konsol: p.kayitli ? { host: '192.168.1.30', ad: 'PS5-123', kayitli: true } : null,
+            baglanti: { durum: p.durum, hata: null, mesaj: null, kare_boyutu: p.durum === 'bagli' ? [1280, 720] : null, kare_sayisi: 0, ses: true, deneme: 0, giris_pin: false },
+            kol_tv: p.kol, kaynak_secili: st.ayarlar.kaynak === 'ps5:gizli' });
+        }
+        case 'POST /api/ps5/psn/adres': return j({ adres: 'https://auth.api.sonyentertainmentnetwork.com/2.0/oauth/authorize?client_id=x' });
+        case 'POST /api/ps5/psn/kod':
+          if (!/code=/.test(b.adres || '')) return j({ hata: 'psn_kod_yok', mesaj: 'Yapıştırılan adreste giriş kodu yok; Sony girişini bitirdikten sonra adres çubuğundaki adresin TAMAMINI kopyalayın.' }, 400);
+          st.ps5.hesap = true; return j({ tamam: true, ozet: 'AQID…' });
+        case 'POST /api/ps5/psn/elle': st.ps5.hesap = true; return j({ tamam: true, ozet: 'AQID…' });
+        case 'POST /api/ps5/bul': return j({ konsollar: [{ host: '192.168.1.30', ad: 'PS5-123', durum: 'uyku', kayitli: st.ps5.kayitli }] });
+        case 'POST /api/ps5/kaydet':
+          if (String(b.pin).replace(/\D/g, '') === '00000000') return j({ hata: 'ps5_pin_yanlis', mesaj: 'PS5 kodu kabul etmedi; Cihazı Bağla ekranını yeniden açıp yeni çıkan kodu yazın.' }, 502);
+          st.ps5.kayitli = true; return j({ tamam: true, ad: 'PS5-123' });
+        case 'POST /api/ps5/baglan': st.ps5.durum = 'baglaniyor'; st.ps5.yoklama = 0; return j({ tamam: true });
+        case 'POST /api/ps5/kes': st.ps5.durum = 'kapali'; return j({ tamam: true });
+        case 'POST /api/ps5/kol': st.ps5.kol = b.calisiyor; return j({ tamam: true });
+        case 'GET /api/ps5/onizleme': s.writeHead(200, { 'Content-Type': 'image/png' }); return s.end(KARE);
+        case 'DELETE /api/ps5': st.ps5 = { hesap: false, kayitli: false, durum: 'kapali', kol: null, yoklama: 0 }; return j({ tamam: true });
         case 'GET /api/oyunlar': return j(st.oyunlar);
         case 'POST /api/oyunlar': { const kod = b.ad.toLowerCase().replace(/[^a-z0-9]/g, ''); st.oyunlar.push({ kod, ad: b.ad, kayit_sayisi: 0, terim_sayisi: 0 }); return j({ kod }); }
         case 'POST /api/oyun-sec': st.ayarlar.aktif_oyun = b.kod; return j({ tamam: true });
@@ -362,6 +387,52 @@ function dilKontrol() {
     await sayfa.waitForSelector('[data-kaynak="pencere:123"][aria-pressed=true]');
     assert.strictEqual(await sayfa.locator('#ekran-uyari').count(), 0);
     await sayfa.waitForSelector('#dogrula-1:not([hidden])');
+    // --- ps5: gizli bağlantı sihirbazı (PROTOKOL 15): 1) PSN ikinci hesap 2) 8 haneli kod 3) test + kol sorusu
+    await sayfa.waitForSelector('#ps5-gizli #ps5-adim-1');
+    assert.match(await metin('#ps5-gizli'), /PS5'e gizli bağlan[\s\S]*kol ya da klavye girdisi göndermez/);
+    assert.strictEqual(await sayfa.locator('#ps5-adim-2 input').count(), 0, 'hesap yokken kod adımı kapalı');
+    await sayfa.evaluate(() => { window.open = (u) => { window.__acilan = u; }; });
+    await sayfa.click('#ps5-sony-ac');
+    await sayfa.waitForFunction(() => /sonyentertainmentnetwork/.test(window.__acilan || ''));
+    await sayfa.fill('#ps5-adres', 'yanlış');
+    await sayfa.click('#ps5-adres-kaydet');
+    await sayfa.waitForSelector('#ps5-a1-hata');
+    assert.match(await metin('#ps5-a1-hata'), /adresin TAMAMINI kopyalayın/);
+    await sayfa.fill('#ps5-adres', 'https://remoteplay.dl.playstation.net/remoteplay/redirect?code=abc');
+    await sayfa.click('#ps5-adres-kaydet');
+    await sayfa.waitForSelector('#ps5-hesap-ozet');
+    assert.match(await metin('#ps5-hesap-ozet'), /İkinci hesap kaydedildi \(AQID…\)/);
+    await sayfa.waitForSelector('[data-ps5-host="192.168.1.30"]');
+    assert.match(await metin('#ps5-adim-2'), /İKİNCİ kullanıcıya geç[\s\S]*Cihazı Bağla/);
+    assert.match(await metin('[data-ps5-host="192.168.1.30"]'), /PS5-123[\s\S]*Dinlenme modunda/);
+    assert.strictEqual(await sayfa.inputValue('#ps5-ip'), '192.168.1.30', 'tek PS5 kendiliğinden seçilir');
+    await sayfa.fill('#ps5-pin', '0000 0000');
+    await sayfa.click('#ps5-kaydet');
+    await sayfa.waitForSelector('#ps5-a2-hata');
+    assert.match(await metin('#ps5-a2-hata'), /PS5 kodu kabul etmedi/);
+    await sayfa.fill('#ps5-pin', '1234 5678');
+    await sayfa.click('#ps5-kaydet');
+    await sayfa.waitForSelector('#ps5-konsol-ozet');
+    assert.strictEqual(JSON.parse(st.govdeler['POST /api/ps5/kaydet']).pin, '1234 5678');
+    await sayfa.click('#ps5-baglan');
+    await sayfa.waitForSelector('#ps5-kol-soru');
+    await sayfa.waitForSelector('#ps5-onizleme:not([hidden])');
+    assert.match(await metin('#ps5-kol-soru'), /TV'deki kolun oyunu hâlâ kontrol ediyor mu\?/);
+    await gor('ps5-gizli.png', true);
+    await sayfa.click('#ps5-kol-hayir');
+    await sayfa.waitForSelector('#ps5-kol-yardim');
+    assert.match(await metin('#ps5-kol-yardim'), /PS tuşuna bas/);
+    assert.strictEqual(st.ps5.kol, false);
+    await sayfa.click('#ps5-kol-evet');
+    await sayfa.waitForSelector('#ps5-hazir');
+    await sayfa.waitForSelector('[data-kaynak="ps5:gizli"][aria-pressed=true]');
+    for (let i = 0; i < 40 && st.ayarlar.kaynak !== 'ps5:gizli'; i++) await sayfa.waitForTimeout(50);
+    assert.strictEqual(st.ayarlar.kaynak, 'ps5:gizli');
+    assert.match(await metin('[data-kaynak="ps5:gizli"]'), /Gizli bağlantı \(pencere yok, kol göndermez\)/);
+    await sayfa.waitForSelector('#dogrula-1:not([hidden])');
+    await sayfa.click('#ps5-kes');
+    await sayfa.waitForSelector('#ps5-baglan');
+    adim('1. Görüntü: PS5 gizli bağlantı — PSN adresi yapıştır, PS5 bul + 8 haneli kod (yanlış kod hatası), test önizlemesi, kol sorusu, kaynak ps5:gizli');
     await sayfa.click('[data-cihaz=pc]');
     await sayfa.click('[data-kaynak="pencere:123"]');
     await sayfa.waitForFunction(() => document.querySelector('#dogrula-1') && !document.querySelector('#dogrula-1').hidden);
