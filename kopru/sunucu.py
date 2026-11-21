@@ -794,7 +794,11 @@ async def api_kisayollar(request: web.Request) -> web.Response:
 
 
 async def api_durdur(request: web.Request) -> web.Response:
-    request.app[DURUM].durdur()
+    d: Durum = request.app[DURUM]
+    d.durdur()
+    if d.ayar.get("kaynak") == "ps5:gizli" and d.ps5.calisiyor():
+        # §15: çeviri durunca PS5 oturumu da kapanır (ikinci kullanıcı PS5'te açık kalmasın)
+        await asyncio.to_thread(d.ps5.kes)
     return web.json_response({"calisiyor": False})
 
 

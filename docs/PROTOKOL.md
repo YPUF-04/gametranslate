@@ -623,6 +623,7 @@ SSE `ps5`: `GET /api/ps5`'in `baglanti` gövdesi (değişince).
 - Oturum `bitti` ile kapanırsa (`ag`, `erisilemedi`, `kapandi`, `diger`) 2, 4, 8, 15, 30 sn arayla yeniden denenir
   (`durum:"bekliyor"`, `deneme` artar). `reddedildi` (kayıt geçersiz) ve `kullanimda`'da tekrar denenmez:
   `hata` + Türkçe açıklama (`ps5_kayit_gecersiz` / `ps5_kullanimda`).
+- `POST /api/durdur` kaynak `ps5:gizli` iken oturumu da kapatır; `Başlat` (ilk kare isteği) yeniden açar.
 - Bağlanmadan önce `bul` ile durum sorulur; `uyku` ise `uyandir` yollanır, 40 sn'ye kadar `acik` beklenir.
 - Ses (canlı dublaj): kaynak `ps5:gizli` iken işçinin `canli_baslat`'ına `{"ps5_ses":{"kapi":p,"anahtar":a}}`
   eklenir; işçi `127.0.0.1:p`'ye bağlanır, ilk satır olarak anahtarı yollar, sonra 16 kHz mono 16 bit PCM
