@@ -192,9 +192,9 @@
   "ayar.bolum": "What should be translated?",
   "ayar.ne": "Choose here whether menus and mission text are translated too.",
   "sozluk.ne": "Write a name here if you want it to always stay the same.",
-  "guncelleme.hazir": "A new version is ready ({surum}).",
-  "guncelleme.hazir_kucuk": "A new version is ready ({surum}). Only the changed parts will be downloaded (~{boyut}).",
-  "guncelleme.dugme": "Update",
+  "guncelleme.hazir": "A new version is available ({surum}).",
+  "guncelleme.hazir_kucuk": "A new version is available ({surum}). Only the changed parts will download (~{boyut}).",
+  "guncelleme.dugme": "Yes, update",
   "guncelleme.indiriliyor": "Downloading the new version… {n}%",
   "guncelleme.dogrulaniyor": "Verifying the file…",
   "guncelleme.yeniden": "The program will restart by itself.",
@@ -801,5 +801,8 @@
   "ps5g.yedek.baslik": "Fallback: the official PS Remote Play window",
   "ps5g.yedek": "If the hidden connection does not work, open the official PS Remote Play app with the SECOND account and connect.\nPick the \"PS Remote Play\" window from the list below.\nNote: on some setups control can move to the computer with this method; then press the PS button and pick your main account.",
   "ps5g.unut": "Forget the PS5 connection",
-  "ps5g.unut.onay": "Delete the linked PS5 and the second account from this computer?"
+  "ps5g.unut.onay": "Delete the linked PS5 and the second account from this computer?",
+  "guncelleme.soru": "Download it now? Your settings and dubbing pack are kept.",
+  "guncelleme.sonra": "Later",
+  "guncelleme.yenilikler": "What's new?"
 }

@@ -1784,6 +1784,13 @@
       });
     }, 800);
   }
+  // "## 0.1.3 — Başlık\n- **Kalın** madde" -> ["Kalın madde", ...] (düz yazı; HTML olarak basılmaz)
+  function guncellemeNotlari(metin) {
+    return String(metin || '').split('\n').map(function (x) { return x.trim(); })
+      .filter(function (x) { return x && x.indexOf('#') !== 0; })
+      .map(function (x) { return x.replace(/^[-*]\s+/, '').replace(/\*\*|`|__/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'); })
+      .slice(0, 12);
+  }
   function guncellemeBar(g) {
     var kutu = h('div', { class: 'guncelleme-bar', id: 'guncelleme-bar', role: 'status' });
     var a = g.asama;
@@ -1795,12 +1802,23 @@
         h('i', { style: 'width:' + yuzde + '%' })));
       return kutu;
     }
-    kutu.appendChild(h('span', { class: 'metin', id: 'guncelleme-metin', title: g.notlar || '',
+    kutu.appendChild(h('span', { class: 'metin', id: 'guncelleme-metin',
       text: (a === 'hata' && g.mesaj) ? g.mesaj : (g.yalniz_degisenler && g.boyut_bayt
         ? t('guncelleme.hazir_kucuk', { surum: g.surum, boyut: g.boyut_bayt < 1048576 ? Math.max(1, Math.round(g.boyut_bayt / 1024)) + ' KB' : (g.boyut_bayt / 1048576).toFixed(1) + ' MB' })
-        : t('guncelleme.hazir', { surum: g.surum })) }));
+        : t('guncelleme.hazir', { surum: g.surum })) + (a === 'hata' ? '' : ' ' + t('guncelleme.soru')) }));
     kutu.appendChild(h('button', { type: 'button', class: 'dugme kucuk', id: 'guncelle-dugme', onclick: guncellemeKur,
       text: a === 'hata' ? t('guncelleme.tekrar') : t('guncelleme.dugme') }));
+    if (a !== 'hata') {
+      kutu.appendChild(h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'guncelle-sonra', text: t('guncelleme.sonra'),
+        onclick: function () { S.guncellemeErtelenen = g.surum; guncellemeCiz(); } }));
+    }
+    var notlar = guncellemeNotlari(g.notlar);
+    if (notlar.length) {
+      var liste = h('ul', { class: 'guncelleme-notlar' });
+      notlar.forEach(function (n) { liste.appendChild(h('li', { text: n })); });
+      kutu.appendChild(h('details', { class: 'guncelleme-yenilikler', id: 'guncelleme-yenilikler', open: 'open' },
+        [h('summary', { text: t('guncelleme.yenilikler') }), liste]));
+    }
     return kutu;
   }
   function guncellemeCiz() {
@@ -1808,7 +1826,7 @@
     var g = S.guncelleme;
     if (kap) {
       kap.textContent = '';
-      if (g && g.var) kap.appendChild(guncellemeBar(g));
+      if (g && g.var && !(S.guncellemeErtelenen === g.surum && !g.asama)) kap.appendChild(guncellemeBar(g));
     }
     var d = $('#guncelleme-durum');
     if (d && g) {

@@ -38,7 +38,7 @@ SURUMLER_SAYFASI = "https://github.com/YPUF-04/gametranslate/releases/latest"
 KULLANICI_AJANI = "AltYaziKoprusu-guncelleme"
 IZINLI_SUNUCULAR = {"github.com", "api.github.com", "objects.githubusercontent.com",
                     "release-assets.githubusercontent.com"}
-GUN_SN = 24 * 3600
+GUN_SN = 6 * 3600     # açıkken en çok 6 saatte bir; ayrıca her açılışta bir kez bakılır
 HATA_BEKLEME_SN = 15 * 60   # başarısız denetimden sonra otomatik yeniden deneme aralığı (GitHub oran sınırı)
 ZAMAN_ASIMI_SN = 5.0
 KURUCU_DESENI = re.compile(r"^AltYaziKoprusu-Kur-.+\.exe$")
@@ -104,6 +104,23 @@ def dosya_ozeti(yol: Path) -> str:
         for blok in iter(lambda: f.read(1 << 20), b""):
             h.update(blok)
     return h.hexdigest()
+
+
+def surum_bolumu(metin: str, surum: str) -> str:
+    """Sürüm notlarından (SURUMLER.md'nin tamamı olabilir) yalnız o sürümün bölümünü çıkarır:
+    "## 0.1.3 — ..." başlığından bir sonraki "## " başlığına kadar. Bulamazsa ilk "## " bölümü, o da
+    yoksa metnin kendisi."""
+    metin = (metin or "").replace("\r\n", "\n")
+    bolumler = re.split(r"(?m)^## ", metin)
+    if len(bolumler) <= 1:
+        return metin.strip()
+    adaylar = ["## " + b for b in bolumler[1:]]
+    sv = (surum or "").lstrip("v")
+    for b in adaylar:
+        bas = b.split("\n", 1)[0]
+        if sv and re.search(r"(?<![\d.])" + re.escape(sv) + r"(?![\d.])", bas):
+            return b.strip()
+    return adaylar[0].strip()
 
 
 def _kisalt(metin: str) -> str:
@@ -255,6 +272,7 @@ class Guncelleme:
         self.toplam_adresi: str | None = None
         self.kurucu_adi: str | None = None
         self.son_denetim = 0.0
+        self._bu_acilista_bakildi = False
         self.son_hata_an = -1e9
         self.asama = "bosta"     # bosta | indiriliyor | dogrulaniyor | baslatiliyor | hata
         self.ilerleme = 0
@@ -290,7 +308,7 @@ class Guncelleme:
     def _surum_ata(self, surum: Any, notlar: str, boyut: int, kurucu: Any, toplam: Any, ad: Any) -> None:
         eski_yol_tamam = isinstance(kurucu, str) and isinstance(toplam, str)
         if isinstance(surum, str) and daha_yeni_mi(surum, self.mevcut) and (eski_yol_tamam or self.motor is not None):
-            self.surum, self.notlar, self.boyut = surum.lstrip("v"), _kisalt(notlar), boyut
+            self.surum, self.notlar, self.boyut = surum.lstrip("v"), _kisalt(surum_bolumu(notlar, surum)), boyut
             self.kurucu_adresi, self.toplam_adresi, self.kurucu_adi = kurucu, toplam, ad
         else:
             self.surum = None
@@ -308,7 +326,10 @@ class Guncelleme:
     def denetim_zamani_mi(self) -> bool:
         simdi = self.simdi()
         # panel her açıldığında/yenilendiğinde başarısız istek yağmasın
-        return simdi - self.son_denetim >= GUN_SN and simdi - self.son_hata_an >= HATA_BEKLEME_SN
+        if simdi - self.son_hata_an < HATA_BEKLEME_SN:
+            return False
+        # Program her açıldığında bir kez bakılır (yeni sürüm hemen görünsün), sonra en çok 6 saatte bir.
+        return not self._bu_acilista_bakildi or simdi - self.son_denetim >= GUN_SN
 
     # --- denetim ---
     async def denetle(self, elle: bool = False) -> None:
@@ -334,6 +355,7 @@ class Guncelleme:
                     toplam = adres
             self._surum_ata(etiket, str(surum_json.get("body") or ""), boyut, kurucu, toplam, kurucu_adi)
             self.son_denetim = self.simdi()
+            self._bu_acilista_bakildi = True
             self._durum_yaz()
         except asyncio.CancelledError:
             raise
@@ -351,6 +373,7 @@ class Guncelleme:
                 self._surum_ata(bulunan.surum, bulunan.notlar, bulunan.boyut, None, None, None)
                 self.delta, self._ham = bool(bulunan.delta), bulunan
             self.son_denetim = self.simdi()
+            self._bu_acilista_bakildi = True
             self._durum_yaz()
         except asyncio.CancelledError:
             raise

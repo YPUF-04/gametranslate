@@ -119,7 +119,7 @@ async def test_kapali_ayar_istek_yapmaz(tmp_path):
     assert http.istekler == [g.SON_SURUM_ADRESI]
 
 
-async def test_gunde_en_cok_bir_kez(tmp_path):
+async def test_acilista_bir_kez_sonra_aralikla(tmp_path):
     http, zaman = SahteHttp(), [1_000_000.0]
     c = Calistirici()
     gu = g.Guncelleme(lambda: {"guncelleme_denetle": True}, http=http, mevcut_surum="0.1.0", platform="win32",
@@ -130,11 +130,23 @@ async def test_gunde_en_cok_bir_kez(tmp_path):
     zaman[0] += g.GUN_SN + 1
     await gu.denetle()
     assert len(http.istekler) == 2
-    # yeniden başlatınca da hatırlar (aynı ayar dizini)
+    # program yeniden açılınca hemen bir kez daha bakar (kullanıcı isteği: yeni sürüm beklemeden görünsün)
     gu2 = g.Guncelleme(lambda: {"guncelleme_denetle": True}, http=http, mevcut_surum="0.1.0", platform="win32",
                        simdi=lambda: zaman[0] + 60)
+    assert gu2.durum()["surum"] == "0.3.0"      # önceki sonuç hatırlanır
     await gu2.denetle()
-    assert len(http.istekler) == 2 and gu2.durum()["surum"] == "0.3.0"
+    assert len(http.istekler) == 3
+    await gu2.denetle()
+    assert len(http.istekler) == 3              # aynı açılışta aralık dolmadan tekrar sorulmaz
+
+
+def test_surum_bolumu_yalniz_o_surumun_notlarini_alir():
+    metin = ("# Sürüm notları\n\n## 0.1.3 — Yenilikler\n- A geldi\n- B düzeldi\n\n"
+             "## 0.1.2 — Eski\n- C\n\n## 0.1.0 — İlk\n- D\n")
+    assert g.surum_bolumu(metin, "v0.1.3") == "## 0.1.3 — Yenilikler\n- A geldi\n- B düzeldi"
+    assert g.surum_bolumu(metin, "0.1.2") == "## 0.1.2 — Eski\n- C"
+    assert g.surum_bolumu(metin, "0.1.30").startswith("## 0.1.3 —")   # yoksa en üstteki bölüm
+    assert g.surum_bolumu("düz metin", "0.1.3") == "düz metin"
 
 
 async def test_windows_disinda_desteklenmiyor(tmp_path):

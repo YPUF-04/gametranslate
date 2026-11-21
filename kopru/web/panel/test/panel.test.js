@@ -200,10 +200,10 @@ function sahteSunucu() {
         case 'GET /api/guncelleme': {
           const g = st.guncelleme;
           if (g.asama === 'indiriliyor' && g.sayac++ >= 1) { g.ilerleme = g.ilerleme >= 80 ? 100 : 80; if (g.ilerleme === 100) g.asama = 'baslatiliyor'; }
-          return j({ var: true, surum: '0.3.0', notlar: 'Tek tuşla güncelleme', boyut_mb: 48, mevcut: '0.1.0', ilerleme: g.ilerleme, asama: g.asama, mesaj: g.mesaj, denetim_acik: st.ayarlar.guncelleme_denetle !== false, son_denetim: 1 });
+          return j({ var: true, surum: '0.3.0', notlar: '## 0.3.0 — Yenilikler\n- **Tek tuşla** güncelleme\n- LG TV düzeltmesi', boyut_mb: 48, mevcut: '0.1.0', ilerleme: g.ilerleme, asama: g.asama, mesaj: g.mesaj, denetim_acik: st.ayarlar.guncelleme_denetle !== false, son_denetim: 1 });
         }
-        case 'POST /api/guncelleme/kur': st.guncelleme = { asama: 'indiriliyor', ilerleme: 40, sayac: 0 }; return j({ var: true, surum: '0.3.0', notlar: '', boyut_mb: 48, mevcut: '0.1.0', ilerleme: 40, asama: 'indiriliyor' });
-        case 'POST /api/guncelleme/denetle': return j({ var: true, surum: '0.3.0', notlar: '', boyut_mb: 48, mevcut: '0.1.0', ilerleme: st.guncelleme.ilerleme, asama: st.guncelleme.asama, son_denetim: 2 });
+        case 'POST /api/guncelleme/kur': st.guncelleme = { asama: 'indiriliyor', ilerleme: 40, sayac: 0 }; return j({ var: true, surum: '0.3.0', notlar: '## 0.3.0 — Yenilikler\n- **Tek tuşla** güncelleme\n- LG TV düzeltmesi', boyut_mb: 48, mevcut: '0.1.0', ilerleme: 40, asama: 'indiriliyor' });
+        case 'POST /api/guncelleme/denetle': return j({ var: true, surum: '0.3.0', notlar: '## 0.3.0 — Yenilikler\n- **Tek tuşla** güncelleme\n- LG TV düzeltmesi', boyut_mb: 48, mevcut: '0.1.0', ilerleme: st.guncelleme.ilerleme, asama: st.guncelleme.asama, son_denetim: 2 });
         case 'POST /api/tv/lg/kur': {
           st.tvIstekleri.push(b);
           if (b.parola === 'BAD000') {
@@ -1043,7 +1043,10 @@ function dilKontrol() {
     await sayfa.waitForFunction(() => document.querySelectorAll('#son-liste .ceviri-satir').length === 2, null, { timeout: 8000 });
     adim('son çeviriler: en çok 5 satır, kendi içinde kayar, kart kısa');
     await sayfa.waitForSelector('#guncelleme-bar #guncelle-dugme', { timeout: 8000 });
-    assert.match(await sayfa.textContent('#guncelleme-bar'), /Yeni sürüm hazır \(0\.3\.0\)\./);
+    assert.match(await sayfa.textContent('#guncelleme-bar'), /Yeni sürüm var \(0\.3\.0\)\. Şimdi indirmek ister misin\?/);
+    assert.match(await sayfa.textContent('#guncelle-dugme'), /Evet, güncelle/);
+    assert.deepStrictEqual(await sayfa.$$eval('#guncelleme-yenilikler li', l => l.map(x => x.textContent)), ['Tek tuşla güncelleme', 'LG TV düzeltmesi']);
+    assert.ok(await sayfa.locator('#guncelle-sonra').count(), '"Sonra" düğmesi var');
     await gor('pano-calisiyor.png');
     if (SHOTS) {   // tam sayfa (güncelleme bandıyla) ve dar ekran
       await sayfa.screenshot({ path: path.join(SHOTS, 'pano-tam.png'), fullPage: true });
@@ -1057,7 +1060,7 @@ function dilKontrol() {
     await sayfa.waitForFunction(() => /Program kendini yeniden başlatacak\./.test(document.querySelector('#guncelleme-metin').textContent), null, { timeout: 8000 });
     assert.strictEqual(await sayfa.getAttribute('#guncelleme-bar [role=progressbar]', 'aria-valuenow'), '100');
     assert.ok(st.istekler.includes('POST /api/guncelleme/kur'));
-    adim('güncelleme çubuğu: Yeni sürüm hazır → Güncelle → ilerleme → "Program kendini yeniden başlatacak."');
+    adim('güncelleme çubuğu: "Yeni sürüm var… indirmek ister misin?" + Neler yeni? listesi → Evet, güncelle → ilerleme → yeniden başlatacak');
 
     // çevrilecek yerler: Değiştir → 5. adım tek başına → kayıtlı kareler + hedefler geri gelir → otomatiğe dön
     await sayfa.click('#degistir-bolge');

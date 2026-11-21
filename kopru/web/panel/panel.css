@@ -311,6 +311,9 @@ table.sozluk td{padding:0 4px}table.sozluk input{padding:8px 12px}
 .guncelleme-bar{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px;padding:14px 18px;border-radius:16px;
   background:linear-gradient(90deg,rgba(46,196,182,.14),rgba(46,196,182,.05));border:1px solid rgba(46,196,182,.55);color:#D5FBF6;animation:gir var(--orta) var(--yay)}
 .guncelleme-bar .metin{font-weight:650}
+.guncelleme-yenilikler{flex:1 1 100%;margin-top:2px}
+.guncelleme-yenilikler summary{cursor:pointer;font-weight:650;color:#A7F3EA}
+.guncelleme-notlar{margin:8px 0 0;padding-left:20px;line-height:1.55;color:#D5FBF6}
 .ilerleme{position:relative;flex:1 1 220px;height:10px;border-radius:999px;background:var(--zemin2);overflow:hidden;min-width:140px;box-shadow:inset 0 1px 2px rgba(0,0,0,.4)}
 .ilerleme>i{position:relative;display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--ana-koyu),var(--ana));transition:width .4s var(--yay);overflow:hidden}
 /* ilerleme parıltısı */

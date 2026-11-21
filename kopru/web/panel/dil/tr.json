@@ -192,9 +192,9 @@
   "ayar.bolum": "Ne çevrilsin?",
   "ayar.ne": "Menüler ve görev yazıları da çevrilsin mi, onu buradan seçersin.",
   "sozluk.ne": "Bir ismin hep aynı kalmasını istiyorsan buraya yaz.",
-  "guncelleme.hazir": "Yeni sürüm hazır ({surum}).",
-  "guncelleme.hazir_kucuk": "Yeni sürüm hazır ({surum}). Yalnızca değişen parçalar inecek (~{boyut}).",
-  "guncelleme.dugme": "Güncelle",
+  "guncelleme.hazir": "Yeni sürüm var ({surum}).",
+  "guncelleme.hazir_kucuk": "Yeni sürüm var ({surum}). Yalnızca değişen parçalar inecek (~{boyut}).",
+  "guncelleme.dugme": "Evet, güncelle",
   "guncelleme.indiriliyor": "Yeni sürüm indiriliyor… %{n}",
   "guncelleme.dogrulaniyor": "Dosya doğrulanıyor…",
   "guncelleme.yeniden": "Program kendini yeniden başlatacak.",
@@ -801,5 +801,8 @@
   "ps5g.yedek.baslik": "Yedek yol: resmî PS Remote Play penceresi",
   "ps5g.yedek": "Gizli bağlantı olmazsa resmî PS Remote Play uygulamasını İKİNCİ hesapla açıp oyuna bağlan.\nAşağıdaki listeden \"PS Remote Play\" penceresini seç.\nNot: bu yolda bazı kurulumlarda kontrol bilgisayara geçebiliyor; o zaman kolundaki PS tuşuna basıp ana hesabını seç.",
   "ps5g.unut": "PS5 bağlantısını unut",
-  "ps5g.unut.onay": "Kayıtlı PS5 ve ikinci hesap bilgisi bu bilgisayardan silinsin mi?"
+  "ps5g.unut.onay": "Kayıtlı PS5 ve ikinci hesap bilgisi bu bilgisayardan silinsin mi?",
+  "guncelleme.soru": "Şimdi indirmek ister misin? Ayarların ve dublaj paketin korunur.",
+  "guncelleme.sonra": "Sonra",
+  "guncelleme.yenilikler": "Neler yeni?"
 }
