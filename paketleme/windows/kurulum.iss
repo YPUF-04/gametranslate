@@ -1,4 +1,6 @@
 ; SPDX-License-Identifier: AGPL-3.0-only
+; DİKKAT: Artık CI bu dosyayı DERLEMEZ. Yeni kurulumlar Velopack ile yapılır; geçiş kurucusu için gecis.iss kullanılır.
+; Dosya, eski (0.2 ve öncesi) Inno kurulumlarının AppId/davranışını belgelemek için durur (docs/KARARLAR.md).
 ; AltYazıKöprüsü Windows kurucusu (Inno Setup 6). Yönetici izni GEREKTİRMEZ (kullanıcı başına kurulum).
 ; Derleme: ISCC.exe /DSurum=0.2.0 paketleme\windows\kurulum.iss   (önce PyInstaller ile dist\AltYaziKoprusu üretilir)
 ; Güncelleme: program yeni kurucuyu /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /GUNCELLEME=1 ile çalıştırır;

@@ -44,7 +44,7 @@ body:
     id: surum
     attributes:
       label: AltYazıKöprüsü sürümü
-      description: Kurucunun dosya adında yazar (AltYaziKoprusu-Kur-0.2.0.exe).
+      description: Panelde ve Ayarlar'da yazar (örn. 0.3.0).
       placeholder: "Örnek: 0.2.0"
   - type: dropdown
     id: windows

@@ -193,6 +193,7 @@
   "ayar.ne": "Menüler ve görev yazıları da çevrilsin mi, onu buradan seçersin.",
   "sozluk.ne": "Bir ismin hep aynı kalmasını istiyorsan buraya yaz.",
   "guncelleme.hazir": "Yeni sürüm hazır ({surum}).",
+  "guncelleme.hazir_kucuk": "Yeni sürüm hazır ({surum}). Yalnızca değişen parçalar inecek (~{boyut}).",
   "guncelleme.dugme": "Güncelle",
   "guncelleme.indiriliyor": "Yeni sürüm indiriliyor… %{n}",
   "guncelleme.dogrulaniyor": "Dosya doğrulanıyor…",

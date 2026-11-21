@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Tek tuşla güncelleme: GitHub Sürümler'den yeni sürümü bulur, indirir, doğrular, kurar.
 
+İki yol vardır (PROTOKOL 8):
+  1. Velopack (Windows, Velopack kurucusuyla kurulmuş program): yalnız DEĞİŞEN parçalar (delta paketi)
+     indirilir; Velopack kendi SHA256 denetimini yapar, uygular ve programı yeniden başlatır.
+  2. Eski yol (geliştirme, macOS, taşınabilir zip, eski Inno kurulumu): tam kurucu indirilir, SHA256SUMS.txt
+     ile doğrulanır ve sessizce çalıştırılır. Velopack'a geçiş de bu yolla bir kez yapılır (geçiş kurucusu).
+
 Gizlilik: yalnız herkese açık GitHub adreslerine, kimliksiz ve genel bir User-Agent ile gider.
 Hiçbir kimlik, ayar ya da kullanım bilgisi gönderilmez. Ayar `guncelleme_denetle` ile kapatılabilir.
 """
@@ -40,6 +46,9 @@ TOPLAM_ADI = "SHA256SUMS.txt"
 KURUCU_ARGUMANLARI = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/GUNCELLEME=1"]
 EN_FAZLA_YONLENDIRME = 5
 NOT_UZUNLUGU = 800
+DEPO_ADRESI = "https://github.com/YPUF-04/gametranslate"
+YENIDEN_BASLAMA_BEKLEME_SN = 1.5   # panel "yeniden başlayacak" iletisini görsün, sonra uygula
+_OTOMATIK = object()               # motor=_OTOMATIK: Velopack varsa kendiliğinden bulunur
 
 
 class GuncellemeHatasi(Exception):
@@ -172,6 +181,51 @@ def _sunucuyu_kapat() -> None:
     asyncio.get_running_loop().call_later(1.5, cik)
 
 
+# ---------- Velopack (yalnız değişen parçaları indirir) ----------
+
+class VelopackSurum:
+    """Velopack'ın bulduğu güncelleme: gösterilecek bilgiler + Velopack'a geri verilecek ham nesne."""
+
+    def __init__(self, surum: str, notlar: str, boyut: int, delta: bool, ham: Any) -> None:
+        self.surum, self.notlar, self.boyut, self.delta, self.ham = surum, notlar, boyut, delta, ham
+
+
+class VelopackMotoru:
+    """`velopack.UpdateManager` üzerine ince sarmalayıcı. Yöntemler ENGELLEYİCİDİR (to_thread ile çağrılır).
+    Testte yerine sahtesi konur. Kaynak her zaman bu deponun GitHub Sürümleri'dir (Velopack Flow kullanılmaz)."""
+
+    def __init__(self, modul: Any, depo: str = DEPO_ADRESI) -> None:
+        self.modul = modul
+        # Velopack ile kurulmamışsa burada RuntimeError fırlar -> çağıran eski yola döner
+        self.yonetici = modul.UpdateManager(modul.GithubSource(depo))
+
+    def kontrol(self) -> VelopackSurum | None:
+        bilgi = self.yonetici.check_for_updates()
+        if bilgi is None:
+            return None
+        hedef = bilgi.TargetFullRelease
+        deltalar = list(bilgi.DeltasToTarget or [])
+        boyut = sum(int(d.Size) for d in deltalar) if deltalar else int(hedef.Size)
+        return VelopackSurum(str(hedef.Version), str(hedef.NotesMarkdown or ""), boyut, bool(deltalar), bilgi)
+
+    def indir(self, surum: VelopackSurum, ilerleme: Callable[[int], None]) -> None:
+        self.yonetici.download_updates(surum.ham, ilerleme)
+
+    def uygula(self, surum: VelopackSurum) -> None:
+        self.yonetici.apply_updates_and_restart(surum.ham)
+
+
+def velopack_motoru() -> VelopackMotoru | None:
+    """Windows'ta ve program Velopack ile kuruluysa motoru verir; aksi halde None (eski yol)."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import velopack
+        return VelopackMotoru(velopack)
+    except Exception:   # noqa: BLE001 — paket yok / program Velopack ile kurulmamış (zip, geliştirme, Inno)
+        return None
+
+
 # ---------- ana sınıf ----------
 
 class Guncelleme:
@@ -180,7 +234,8 @@ class Guncelleme:
                  baslatici: Callable[[list[str]], None] = _ayrik_baslat,
                  kapatici: Callable[[], None] = _sunucuyu_kapat,
                  simdi: Callable[[], float] = time.time,
-                 gecici_kok: Path | None = None) -> None:
+                 gecici_kok: Path | None = None, motor: Any = _OTOMATIK,
+                 yeniden_baslama_bekleme: float = YENIDEN_BASLAMA_BEKLEME_SN) -> None:
         self.ayar_al = ayar_al
         self.http = http or GitHubHttp()
         self.mevcut = mevcut_surum
@@ -189,6 +244,10 @@ class Guncelleme:
         self.kapatici = kapatici
         self.simdi = simdi
         self.gecici_kok = gecici_kok
+        self.motor = (velopack_motoru() if self.platform == "win32" else None) if motor is _OTOMATIK else motor
+        self.bekleme = yeniden_baslama_bekleme
+        self.delta = False       # indirilecek şey yalnız değişen parçalar mı (Velopack)
+        self._ham: VelopackSurum | None = None
         self.surum: str | None = None
         self.notlar = ""
         self.boyut = 0
@@ -215,6 +274,7 @@ class Guncelleme:
             self.son_denetim = float(v.get("zaman", 0))
             self._surum_ata(v.get("surum"), v.get("notlar", ""), int(v.get("boyut", 0)),
                             v.get("kurucu_adresi"), v.get("toplam_adresi"), v.get("kurucu_adi"))
+            self.delta = bool(v.get("delta", False)) and self.surum is not None and self.motor is not None
         except (OSError, ValueError, TypeError, AttributeError):
             pass
 
@@ -223,18 +283,19 @@ class Guncelleme:
             ayarlar.atomik_yaz(self._dosya(), json.dumps({
                 "zaman": self.son_denetim, "surum": self.surum, "notlar": self.notlar, "boyut": self.boyut,
                 "kurucu_adresi": self.kurucu_adresi, "toplam_adresi": self.toplam_adresi,
-                "kurucu_adi": self.kurucu_adi}, ensure_ascii=False))
+                "kurucu_adi": self.kurucu_adi, "delta": self.delta}, ensure_ascii=False))
         except OSError:
             log.warning("Güncelleme durumu yazılamadı")
 
     def _surum_ata(self, surum: Any, notlar: str, boyut: int, kurucu: Any, toplam: Any, ad: Any) -> None:
-        if isinstance(surum, str) and daha_yeni_mi(surum, self.mevcut) and isinstance(kurucu, str) \
-                and isinstance(toplam, str):
+        eski_yol_tamam = isinstance(kurucu, str) and isinstance(toplam, str)
+        if isinstance(surum, str) and daha_yeni_mi(surum, self.mevcut) and (eski_yol_tamam or self.motor is not None):
             self.surum, self.notlar, self.boyut = surum.lstrip("v"), _kisalt(notlar), boyut
             self.kurucu_adresi, self.toplam_adresi, self.kurucu_adi = kurucu, toplam, ad
         else:
             self.surum = None
             self.notlar, self.boyut, self.kurucu_adresi, self.toplam_adresi, self.kurucu_adi = "", 0, None, None, None
+            self.delta, self._ham = False, None
 
     # --- koşullar ---
     @property
@@ -257,6 +318,9 @@ class Guncelleme:
         if not elle and (not self.otomatik_acik() or not self.denetim_zamani_mi()):
             return
         self.denetim_hatasi = None
+        if self.motor is not None:
+            await self._velopack_denetle()
+            return
         try:
             surum_json = await self.http.json_al(SON_SURUM_ADRESI)
             etiket = str(surum_json.get("tag_name", ""))
@@ -275,6 +339,23 @@ class Guncelleme:
             raise
         except Exception:   # ağ, bozuk JSON, beklenmeyen şekil: arka plan görevi sessizce ölmesin
             log.info("Güncelleme denetlenemedi (ağ ya da yanıt hatası)")
+            self.denetim_hatasi = "guncelleme_denetlenemedi"
+            self.son_hata_an = self.simdi()
+
+    async def _velopack_denetle(self) -> None:
+        try:
+            bulunan = await asyncio.to_thread(self.motor.kontrol)
+            if bulunan is None or not daha_yeni_mi(bulunan.surum, self.mevcut):
+                self._surum_ata(None, "", 0, None, None, None)
+            else:
+                self._surum_ata(bulunan.surum, bulunan.notlar, bulunan.boyut, None, None, None)
+                self.delta, self._ham = bool(bulunan.delta), bulunan
+            self.son_denetim = self.simdi()
+            self._durum_yaz()
+        except asyncio.CancelledError:
+            raise
+        except Exception:   # ağ, GitHub oran sınırı, bozuk yayın akışı: arka plan görevi sessizce ölmesin
+            log.info("Güncelleme denetlenemedi (Velopack)")
             self.denetim_hatasi = "guncelleme_denetlenemedi"
             self.son_hata_an = self.simdi()
 
@@ -308,7 +389,8 @@ class Guncelleme:
             neden = "guncel" if self.son_denetim else ("kapali" if not self.otomatik_acik() else "bekleniyor")
             return {**taban, "var": False, "neden": neden}
         return {**taban, "var": True, "surum": self.surum, "notlar": self.notlar,
-                "boyut_mb": max(1, round(self.boyut / (1024 * 1024))) if self.boyut else None}
+                "boyut_mb": max(1, round(self.boyut / (1024 * 1024))) if self.boyut else None,
+                "boyut_bayt": self.boyut or None, "yalniz_degisenler": self.delta}
 
     # --- kurulum ---
     def kur_baslat(self) -> str | None:
@@ -316,6 +398,12 @@ class Guncelleme:
         if not self.destekli:
             return "guncelleme_desteklenmiyor"
         if self.kur_gorevi and not self.kur_gorevi.done():
+            return None
+        if self.motor is not None:
+            if self.surum is None:
+                return "guncelleme_yok"
+            self.asama, self.ilerleme, self.hata_kodu = "indiriliyor", 0, None
+            self.kur_gorevi = asyncio.get_running_loop().create_task(self._velopack_kur())
             return None
         if self.surum is None or not self.kurucu_adresi or not self.toplam_adresi:
             return "guncelleme_yok"
@@ -335,6 +423,38 @@ class Guncelleme:
             t.cancel()
         if gorevler:
             await asyncio.gather(*gorevler, return_exceptions=True)
+
+    async def _velopack_kur(self) -> None:
+        """Değişen parçaları indirir (Velopack SHA256'yı kendisi denetler), uygular, programı yeniden başlatır."""
+        try:
+            bulunan = self._ham
+            if bulunan is None:     # program yeniden açılmış, kayıtlı durumdan geliyoruz: bir kez daha bak
+                bulunan = await asyncio.to_thread(self.motor.kontrol)
+                if bulunan is None:
+                    raise GuncellemeHatasi("guncelleme_yok")
+
+            def ilerle(yuzde: int) -> None:      # Velopack iş parçacığından çağrılır
+                try:
+                    self.ilerleme = max(0, min(95, int(yuzde)))
+                except (TypeError, ValueError):
+                    pass
+
+            await asyncio.to_thread(self.motor.indir, bulunan, ilerle)
+            self.asama, self.ilerleme = "baslatiliyor", 100
+            await asyncio.sleep(self.bekleme)
+            try:
+                await asyncio.to_thread(self.motor.uygula, bulunan)
+            except Exception:   # noqa: BLE001 — güncelleyici başlatılamadı
+                log.exception("Velopack uygulaması başlatılamadı")
+                raise GuncellemeHatasi("guncelleme_baslatilamadi") from None
+            self.kapatici()     # Update.exe bu sürecin bitmesini bekler
+        except GuncellemeHatasi as e:
+            self._hata(e.kod)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Güncelleme beklenmeyen hata (Velopack)")
+            self._hata("guncelleme_indirilemedi")
 
     async def _kur(self) -> None:
         dizin = Path(tempfile.mkdtemp(prefix="akp-guncelleme-", dir=self.gecici_kok))

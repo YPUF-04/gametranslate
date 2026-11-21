@@ -1,5 +1,11 @@
 # Sürüm notları
 
+## Sıradaki sürüm — Güncellemeler küçüldü
+- **Güncellemeler artık sadece değişen parçaları indirir.** Her seferinde ~120 MB'lık programı baştan indirmek yok; çoğu güncelleme birkaç MB tutar. Düğme aynı: panelde **Güncelle**.
+- Dublaj paketin (çok GB) ve ayarların güncellemede **hiç** yeniden indirilmez / silinmez.
+- Eski kurucuyla kurduysan **bir kez** tam boyutlu bir güncelleme iner (yeni güncelleme sistemine geçiş); sonrası hep küçük. Ayrıntı: `docs/kurulum/windows.md`.
+- Yeni kurulum dosyası: `AltYaziKoprusu-Windows-Kur.exe`.
+
 ## 0.1.0 — İlk sürüm (2026-11-19)
 
 **İlk deneme sürümü.** Gerçek oyunlarda ilk kez kullanılacak; hata görürsen lütfen [bildir](https://github.com/YPUF-04/gametranslate/issues/new/choose).

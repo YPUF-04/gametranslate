@@ -37,10 +37,10 @@
 
 ### A) Programı kur (2 dakika)
 1. [**Son sürüm sayfasını aç**](https://github.com/YPUF-04/gametranslate/releases/latest).
-2. Sayfanın altındaki **Assets** bölümünde `AltYaziKoprusu-Kur-….exe` dosyasına tıkla, iner.
+2. Sayfanın altındaki **Assets** bölümünde `AltYaziKoprusu-Windows-Kur.exe` dosyasına tıkla, iner.
 3. İnen dosyaya **çift tıkla**.
 4. Mavi bir pencere çıkarsa (**"Windows bilgisayarınızı korudu"**): **Ek bilgi** → **Yine de çalıştır**. Program imzasız olduğu için bu uyarı normaldir.
-5. **İleri → Kur → Bitir**. Masaüstüne logolu simge gelir, tarayıcında kontrol paneli açılır.
+5. Kurucu kendiliğinden kurar. Masaüstüne logolu simge gelir, tarayıcında kontrol paneli açılır.
 
 ### B) Hazırlık (1 dakika)
 - **Oyunun ayarlarında** görüntü modunu **"Pencereli tam ekran"** ya da **"Kenarlıksız"** yap. (Yoksa çeviri oyunun üstünde görünmeyebilir.)
@@ -60,7 +60,7 @@
 **Bir adımda hata mı çıktı?** Hata kutusundaki **"Ayrıntı (bize gönder)"** yazısını aç, ekran görüntüsünü al ve [buradan bildir](https://github.com/YPUF-04/gametranslate/issues/new/choose).
 
 ### Güncelleme
-Yeni sürüm çıkınca panelin üstünde **"Yeni sürüm hazır"** ve **Güncelle** düğmesi çıkar: bas, gerisini program yapar. Neler değiştiğini [**Sürüm notları**](SURUMLER.md) sayfasında görebilirsin.
+Yeni sürüm çıkınca panelin üstünde **"Yeni sürüm hazır"** ve **Güncelle** düğmesi çıkar: bas, gerisini program yapar. **Güncellemeler artık sadece değişen parçaları indirir** (her seferinde baştan ~120 MB değil). Neler değiştiğini [**Sürüm notları**](SURUMLER.md) sayfasında görebilirsin.
 
 ### Mac
 [Son sürüm sayfasından](https://github.com/YPUF-04/gametranslate/releases/latest) `.dmg` dosyasını indir, aç, simgeyi **Uygulamalar**'a sürükle. İlk açılış ve **Ekran Kaydı** izni için: [Mac kurulumu](docs/kurulum/mac.md).

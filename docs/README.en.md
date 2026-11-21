@@ -30,7 +30,7 @@
 
 ## Get started in 3 minutes (Windows)
 
-1. [**Download the latest release**](https://github.com/YPUF-04/gametranslate/releases/latest): take the `AltYaziKoprusu-Kur-….exe` file.
+1. [**Download the latest release**](https://github.com/YPUF-04/gametranslate/releases/latest): take the `AltYaziKoprusu-Windows-Kur.exe` file. Updates inside the app download only the changed parts.
 2. Double-click it and press **Next**. (Turkish or English wizard; no administrator rights needed.)
 3. If a blue warning appears: the program is unsigned, so Windows says **"Windows protected your PC"** (SmartScreen). This is normal. Press **More info**, then **Run anyway**.
 4. On the last page leave **Start the program now** ticked and press **Finish**.

@@ -1649,7 +1649,9 @@
       return kutu;
     }
     kutu.appendChild(h('span', { class: 'metin', id: 'guncelleme-metin', title: g.notlar || '',
-      text: (a === 'hata' && g.mesaj) ? g.mesaj : t('guncelleme.hazir', { surum: g.surum }) }));
+      text: (a === 'hata' && g.mesaj) ? g.mesaj : (g.yalniz_degisenler && g.boyut_bayt
+        ? t('guncelleme.hazir_kucuk', { surum: g.surum, boyut: g.boyut_bayt < 1048576 ? Math.max(1, Math.round(g.boyut_bayt / 1024)) + ' KB' : (g.boyut_bayt / 1048576).toFixed(1) + ' MB' })
+        : t('guncelleme.hazir', { surum: g.surum })) }));
     kutu.appendChild(h('button', { type: 'button', class: 'dugme kucuk', id: 'guncelle-dugme', onclick: guncellemeKur,
       text: a === 'hata' ? t('guncelleme.tekrar') : t('guncelleme.dugme') }));
     return kutu;

@@ -15,7 +15,7 @@
 | Kod açık mı | AÇIK kalacak (AGPL). Güven + GitHub görünürlüğü | Karar |
 | Cihaz sırası | Önce bilgisayarlar (Windows + Mac): bilgisayar çevirir, TV'de oyunun üstüne yansır. Telefon/tablet/iPhone sonra (beklemede) | Karar |
 | Görünürlük | GitHub'da bulunabilirlik: README anahtar kelimeleri, konular (topics), sürümler, İngilizce tanıtım | Yapıldı (konuları sahibi elle girer: docs/GITHUB-GORUNURLUK.md) |
-| Dağıtım / güncelleme | Yalnız GitHub Releases (sunucu yok, maliyet 0). Güncelleme günde en çok 1 kez, kimliksiz, kapatılabilir; indirilen dosya SHA256SUMS.txt ile doğrulanır | Kural |
+| Dağıtım / güncelleme | Yalnız GitHub Releases (sunucu yok, maliyet 0). Güncelleme günde en çok 1 kez, kimliksiz, kapatılabilir; Windows'ta **Velopack**: yalnız değişen parçalar iner (aşağıdaki bölüm); eski yol/macOS'ta indirilen tam kurucu SHA256SUMS.txt ile doğrulanır | Kural |
 
 ## Reklam modeli için notlar (karar anında tekrar bakılacak)
 - Google'ın "ödüllü reklam"ı (AdMob) telefon uygulamaları içindir; Windows masaüstü programında doğrudan yok.
@@ -47,3 +47,20 @@ Hedef donanım: RTX 4060 dizüstü (8 GB ekran kartı belleği), Windows. Ayrın
 | Hafif mod | Varsayılan KAPALI: oyun PS5'te, dizüstünün ekran kartı boş. 180 sn boşta kalınca ses motoru ekran kartından indirilir | 8 GB'ı oyunla paylaşmıyoruz |
 | Anka-TTS (F5, Türkçe) / OmniVoice | Değerlendirildi, şimdilik EKLENMEDİ: ağırlıklar CC-BY-NC (kişisel kullanım uygun ama lisans notu gerekir), Anka referans metni ister (canlıda İngilizce örnek + metin: diller arası kalite denenmedi), bu ortamdan Hugging Face'e erişim yoktu → denenemedi. İşçi ses motoru takılabilir (`motor` alanı), ileride "Sesleri karşılaştır" ile eklenebilir | Denenmeden varsayılan yapılmaz |
 | Gerçek deneme (2026-11-20, Linux CPU, GPU yok) | Gerçek işçi + gerçek modellerle (Chatterbox çok dilli, Whisper small, HT-Demucs-ft) 12 sn'lik sentetik İngilizce sahne (2 konuşmacı + müzik) uçtan uca Türkçe dublajlandı; çıktı Whisper'a göre Türkçe (0,88). Çeviri bu denemede LLM'siz sabit sözlükle yapıldı. Bulunanlar düzeltildi: `setuptools<81` (filigran paketi `pkg_resources` ister), STT'ye dosya yerine dizi verilir (PyAV sürüm farkı), sesler üst üste binmez, kısa metinde uydurma uzun ses bir kez yeniden üretilir. Konuşmacı gruplama bu denemede 2 kişiyi 3 küme yaptı (eşik ayarı gerçek oyun sesiyle denenmeli) | GPU/Windows/TV davranışı doğrulanmadı |
+
+## Velopack ile "sıfırdan indirmeden" güncelleme (2026-11) — teknik kararlar
+İstek: "güncellemeleri uygulama üzerinden yapalım, 0'dan hep indirmeyelim." Ayrıntı: PROTOKOL §8.
+
+| Konu | Karar | Neden |
+|---|---|---|
+| Araç | **Velopack** (MIT): python paketi `velopack==1.2.161` + `vpk` 1.2.161 (aynı sürüm, sabit) | PyInstaller `--onedir` ile çalışır, delta paket, GitHub Sürümleri kaynağı, sunucu gerekmez. PyPI'de `win_amd64` tekerleği var |
+| Yeni kurulum | **Velopack Setup.exe** (Sürümlerde `AltYaziKoprusu-Windows-Kur.exe` adıyla). Inno Setup yeni kurulumda ARTIK kullanılmaz | Tek kurulum = tek güncelleme yolu: kurulum + güncelleyici + kaldırıcı Velopack'tan; iki ayrı mekanizma bakımı yok. Yönetici izni istemeyen, kullanıcı başına kurulum korunur |
+| Inno'nun kalan işi | `paketleme/windows/gecis.iss`: yalnız **geçiş kurucusu**, `AltYaziKoprusu-Kur-<sürüm>.exe` adıyla | Eski sürümlerin güncelleyicisi tam bu adı arar, SHA256SUMS ile doğrular ve `/VERYSILENT` çalıştırır; içine Velopack Setup'ı koyup eski programı kaldırdığı için elle indirme gerekmez. Eski sürüm kalmadığında kaldırılabilir |
+| Geçiş (bir kez) | Eski Inno kurulumu → "Güncelle" → tam boyutlu indirme (geçiş kurucusu ≈ Velopack Setup) → eski program kaldırılır, yenisi açılır. Sonraki güncellemeler delta | Bir kerelik tam indirme kabul edildi |
+| `packId` | `AltYaziKoprusu.Program` (**`AltYaziKoprusu` DEĞİL**) | Velopack kökü `%LOCALAPPDATA%\<packId>`; Setup kurarken o klasörü SİLER ("Failed to remove existing application directory") ve kaldırırken kökü temizler. Dublaj paketi `%LOCALAPPDATA%\AltYaziKoprusu\dublaj-ortami` (çok GB, PROTOKOL §14) o kökün içinde kalırdı → farklı kimlik kullanıldı, veri yolları değişmedi |
+| Kullanıcı verisi | Ayarlar `%APPDATA%\AltyaziKoprusu`; dublaj `%LOCALAPPDATA%\AltYaziKoprusu\dublaj-ortami`; anahtarlar Credential Manager. Hiçbiri `%LOCALAPPDATA%\AltYaziKoprusu.Program` altında değil (test: `test_kullanici_verisi_velopack_klasorunun_disinda`) | Güncelleme/kaldırma veriyi silemez; güncelleme dublaj paketini yeniden indirmez |
+| Delta üretimi | CI: `vpk download github` ile önceki Sürüm indirilir, `vpk pack` aynı klasörde delta üretir; yalnız yeni sürümün dosyaları yüklenir | Velopack'ın önerdiği akış; önceki Velopack Sürümü yoksa (ilk Velopack sürümü) tam paket |
+| Yükleme | Mevcut `softprops/action-gh-release` ile Velopack dosyaları + SHA256SUMS.txt + not (`SURUMLER.md`) tek Sürüme konur; `vpk upload` kullanılmadı | Sürüm notu / ön sürüm bayrağı akışı korunur; yüklenen dosyalar `vpk upload`'unkilerle aynı |
+| Doğrulama | Velopack her paketin SHA256'sını `releases.win.json`'dan denetler; SHA256SUMS.txt eski yol ve elle indirenler için durur | |
+| Yedek yol | `velopack` yoksa / program Velopack'la kurulu değilse (geliştirme, macOS, zip) eski tam-kurucu yolu | Hiçbir senaryo güncellemesiz kalmaz |
+| İmza | Velopack paketleri imzasız (sertifika yok); SmartScreen uyarısı eskisi gibi | |
