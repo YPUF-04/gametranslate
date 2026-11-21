@@ -52,7 +52,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: build/uzaktan-is/ffmpeg-kur
-          key: ffmpeg-n7.1.1-h264-hevc-mingw64-v1
+          key: ffmpeg-n7.1.1-h264-hevc-mingw64-v2
       - name: Yardımcıyı derle
         run: bash uzaktan/derle.sh uzaktan-cikti
       - name: Yardımcı çalışıyor mu (yardım + öz denetim)
@@ -61,6 +61,7 @@ jobs:
           ./uzaktan-cikti/ayk-uzaktan.exe surum
           ./uzaktan-cikti/ayk-uzaktan.exe ozdenetim | tee oz.log
           grep -q "OZDENETIM uzaktan=tamam" oz.log
+          test -s uzaktan-cikti/LICENSE-FFmpeg-LGPL.txt && test -s uzaktan-cikti/LICENSE-chiaki-ng.txt
           ls -la uzaktan-cikti
       - uses: actions/upload-artifact@v4
         with:

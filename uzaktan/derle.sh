@@ -40,7 +40,7 @@ git -C "$IS/chiaki-ng" submodule update --init --depth 1 \
 
 # --- FFmpeg: yalnız gereken çözücüler, statik ---
 FF_KUR="$IS/ffmpeg-kur"
-if [ ! -f "$FF_KUR/lib/pkgconfig/libavcodec.pc" ]; then
+if [ ! -f "$FF_KUR/lib/pkgconfig/libavcodec.pc" ] || [ ! -f "$FF_KUR/share/lisans/COPYING.LGPLv2.1" ]; then
 	kaynak_al https://github.com/FFmpeg/FFmpeg.git "$FFMPEG_ETIKET" "$FFMPEG_COMMIT" "$IS/ffmpeg"
 	(
 		cd "$IS/ffmpeg"
@@ -54,6 +54,7 @@ if [ ! -f "$FF_KUR/lib/pkgconfig/libavcodec.pc" ]; then
 			"${ek[@]}"
 		make -j"$(nproc 2>/dev/null || echo 4)"
 		make install
+		mkdir -p "$FF_KUR/share/lisans" && cp COPYING.LGPLv2.1 "$FF_KUR/share/lisans/"
 	)
 fi
 export PKG_CONFIG_PATH="$FF_KUR/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
@@ -73,5 +74,6 @@ else
 fi
 # Lisans dosyaları yardımcının yanına
 cp "$IS/chiaki-ng/COPYING" "$CIKTI/LICENSE-chiaki-ng.txt"
-cp "$IS/ffmpeg/COPYING.LGPLv2.1" "$CIKTI/LICENSE-FFmpeg-LGPL.txt" 2>/dev/null || true
+# (önbellekten gelen FFmpeg kurulumunda kaynak klasörü olmayabilir: lisans kurulumun içinde tutulur)
+cp "$FF_KUR/share/lisans/COPYING.LGPLv2.1" "$CIKTI/LICENSE-FFmpeg-LGPL.txt"
 ls -la "$CIKTI"
