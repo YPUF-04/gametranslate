@@ -520,3 +520,110 @@ SSE `dublaj-video`: `GET /api/dublaj/video` ile aynı gövde (değişince). `kal
 - Gerçek kişilerin seslerini taklit eden hazır ses paketi yoktur; yalnız videodaki/oyundaki karakterin kendi sesi örneklenir.
 - **Yasal not (panelde de yazar):** Dublaj kişisel kullanım içindir. Dublajlı videoyu yayınlamak
   (YouTube vb.) oyunun ve seslendirme sanatçılarının haklarına tabidir; izin almak kullanıcının sorumluluğundadır.
+
+## 15. PS5 gizli bağlantı — pencere açmayan, kol göndermeyen Remote Play (sürüm 0.10)
+
+Amaç: PS5 → HDMI → TV kurulumunda bilgisayar oyunu **pencere açmadan** izlesin; TV'deki DualSense
+oyunu kontrol etmeye devam etsin. Resmî PS Remote Play uygulaması (ikinci hesapla bile) gerçek bir
+denemede kontrolü bilgisayara aldı; bu yüzden program kendi gizli istemcisini taşır. Resmî uygulama
+penceresini yakalamak **yedek** seçenek olarak kalır (§12). Bu bölüm §12 ve §14.3'ü genişletir.
+
+### 15.1 Parçalar
+- `ayk-uzaktan(.exe)`: kendi küçük C yardımcımız (`uzaktan/ayk_uzaktan.c`), chiaki-ng'nin `libchiaki`
+  kütüphanesine (AGPL-3.0, sürüm **v1.10.1**, commit `f30da0aaeb96fc0026cc03683153f682352e7d7c`) ve
+  FFmpeg'in yalnız H.264/HEVC çözücüsü + swscale'ine (LGPL, **7.1.1**) statik bağlanır. Penceresi,
+  ses çıkışı ve kol/klavye girişi **yoktur**; yalnız ağ konuşur, standart giriş/çıkışla programla konuşur.
+- Python: `kopru/uzaktan/` (PSN hesap kimliği, kayıt, oturum yöneticisi, kanal çözücü).
+- Windows paketinde `_internal/uzaktan/ayk-uzaktan.exe`. Geliştirmede `KOPRU_UZAKTAN_YARDIMCI`
+  ortam değişkeni yolu verir. Yardımcı yoksa `destek:false` ve panel yedek yolu (resmî uygulama penceresi) önerir.
+
+### 15.2 Kol (DualSense) kuralı — değişmez
+- Yardımcı **hiçbir zaman** kol, klavye, fare, dokunmatik, mikrofon ya da hareket verisi göndermez;
+  `chiaki_session_set_controller_state` hiç çağrılmaz, klavye/DualSense özellikleri kapalı açılır.
+- libchiaki'nin oturum sırasında kendiliğinden yolladığı "geri bildirim" paketleri (~200 ms'de bir)
+  **boştaki (hiçbir tuşa basılmamış) kol durumunu** taşır; bu, PlayStation'ın oturumu açık tutması için
+  kütüphanenin kendi davranışıdır. Bu durum hiçbir zaman değiştirilmez.
+- Bağlantı ikinci PSN hesabıyla kurulur (TV'deki ana hesap kendi kolunu tutar).
+- Gerçek PS5'te doğrulanmadı (§15.9).
+
+### 15.3 Yardımcının komutları
+Çağrı: `ayk-uzaktan <komut>`. Gizli değerler (hesap kimliği, anahtarlar, PIN) **komut satırında
+değil**, standart girişin ilk satırında tek JSON nesnesiyle verilir (başka süreçler komut satırını görebilir).
+Günlük satırları stderr'e yazılır (anahtarlar ve PIN günlüğe yazılmaz).
+
+| Komut | stdin ilk satırı | stdout |
+|---|---|---|
+| `--help` / `surum` | — | kullanım / `{"olay":"surum","surum":"1","chiaki":"1.10.1","ffmpeg":"..."}` |
+| `ozdenetim` | — | `{"olay":"ozdenetim","tamam":true,"h264":true,"hevc":true,"opus":true,"ag":true}` + `OZDENETIM uzaktan=tamam` |
+| `bul` | `{"hedefler":["255.255.255.255"],"sure_ms":3000}` | her PS5 için `{"olay":"konsol","host":"192.168.1.30","ad":"PS5-123","durum":"acik"\|"uyku","kimlik":"..","oyun":".."}`, sonunda `{"olay":"bitti"}` |
+| `uyandir` | `{"host","kayit_anahtari"}` | `{"olay":"uyandir","tamam":true}` |
+| `kaydet` | `{"host","hesap":"<base64 8 bayt>","pin":12345678}` | `{"olay":"kayit","tamam":true,"ad":"PS5-123","kayit_anahtari":"<32 hex>","sabah":"<32 hex>","mac":"<12 hex>","hedef":1000100}` ya da `{"olay":"kayit","tamam":false,"neden":2148567817,"ayrinti":"..."}` |
+| `akis` | `{"host","kayit_anahtari","sabah","hesap","cozunurluk":720\|1080,"fps":30,"kodek":"h264"\|"hevc","ses":true}` | ikili çerçeveler (15.4) |
+
+Anahtar biçimi (önemli): `kayit_anahtari` ve `sabah`, libchiaki'nin `rp_regist_key` / `rp_key`
+alanlarının **çözülmüş 16 baytının** onaltılık yazımıdır (32 hex karakter). PS5'in verdiği metin
+(`PS5-RegistKey`) libchiaki tarafından zaten çözülür; onu bir kez daha metin olarak saklamak oturumun
+`0x80108b26` ile reddedilmesine yol açar (GameTranslator'ın düzelttiği hata). Uyandırma kimliği:
+`kayit_anahtari` baytlarının sondaki sıfırlar atılmış ASCII metni 16 tabanında sayı olarak okunur.
+
+### 15.4 `akis` kanalı
+- stdout: çerçeveler `"AY"` + tür (1 bayt) + 0 + uzunluk (uint32 LE) + veri.
+  - `J`: UTF-8 JSON olay: `bagli`, `ad`, `kare_boyutu {"g","y"}`, `giris_pin_gerekli`, `bitti {"neden":"durdu"|"kullanimda"|"reddedildi"|"ag"|"kapandi"|"diger","ayrinti"}`, `gunluk`.
+  - `V`: kare: genişlik (uint16 LE), yükseklik (uint16 LE), sonra BGRA satırları (satır = g×4 bayt).
+  - `S`: ses: 16 kHz, tek kanal, 16 bit işaretli LE PCM (PS5'in 48 kHz stereo Opus sesinden indirgenmiş).
+- stdin satırları: `kare` (son çözülmüş kareyi bir kez gönder; kareler YALNIZ istenince gönderilir),
+  `kare <azami_genislik>`, `giris_pin <4 hane>`, `dur`. stdin kapanırsa yardımcı oturumu kapatıp çıkar.
+- Görüntü PS5'ten 720p/30 H.264 istenir (`cozunurluk`/`kodek` ayarı). OCR kareyi kendi hızıyla ister.
+
+### 15.5 PSN hesap kimliği (ikinci hesap)
+chiaki-ng'nin belgelediği resmî Remote Play giriş akışı: kullanıcı panelde "Sony girişini aç"a basar,
+tarayıcıda `https://auth.api.sonyentertainmentnetwork.com/2.0/oauth/authorize?...` (Remote Play
+istemcisinin herkese açık `client_id`'si) açılır, **ikinci hesapla** girer; tarayıcı
+`https://remoteplay.dl.playstation.net/remoteplay/redirect?code=...` adresine gider (sayfa boş/hatalı
+görünebilir). Kullanıcı bu adresi kopyalayıp panele yapıştırır; program kodu `.../oauth/token` ile
+erişim belirtecine, belirteci `.../oauth/token/<belirteç>` ile `user_id`'ye çevirir; `user_id` (ondalık)
+8 baytlık little-endian dizi olur ve base64 yazılır. **Şifre programa hiç girmez; belirteç saklanmaz.**
+Bilen kullanıcı base64 kimliği elle de girebilir.
+
+### 15.6 Saklama
+- Şifreli kasa (`anahtarlar.py`, keyring): `ps5_hesap` = base64 hesap kimliği; `ps5_kayit` =
+  `{"host","ad","kayit_anahtari","sabah","mac","hedef"}` JSON. Düz dosyaya ASLA yazılmaz; kasa yoksa
+  kayıt yapılamaz (`kasa_yok`).
+- Ayar dosyası (`ps5` nesnesi, gizli değil): `{"host":"192.168.1.30","ad":"PS5-123","cozunurluk":720,"kodek":"h264","kol_tv":null|true|false}`.
+- Kaynak kodu: `"kaynak":"ps5:gizli"`. `yakalama.kare_al("ps5:gizli")` pencere yakalamayla aynı
+  arayüzdür (PIL.Image); oturum yoksa açar ve ilk kareyi en çok 15 sn bekler, olmazsa `YakalamaHatasi`.
+  `GET /api/kaynaklar` listesinin başına (yardımcı varsa) `{"kod":"ps5:gizli","ad":"PS5 (gizli bağlantı)","tur":"ps5","onerilen":bool,"kayitli":bool}` eklenir.
+
+### 15.7 Panel API'si
+| Yöntem | Yol | Ne yapar |
+|---|---|---|
+| GET | `/api/ps5` | `{"destek":bool,"neden":null\|"yalniz_windows"\|"yardimci_yok","hesap":{"var":bool,"ozet":"AbC…"},"konsol":{"host","ad","kayitli":bool}\|null,"baglanti":{"durum":"kapali"\|"uyandiriliyor"\|"baglaniyor"\|"bagli"\|"bekliyor"\|"hata","hata":kod\|null,"mesaj":metin\|null,"kare_boyutu":[g,y]\|null,"kare_sayisi":n,"ses":bool,"deneme":n},"kol_tv":null\|bool}` |
+| POST | `/api/ps5/psn/adres` | `{"adres":"https://auth.api.sonyentertainmentnetwork.com/..."}` |
+| POST | `/api/ps5/psn/kod` | `{"adres":"<yapıştırılan adres ya da kod>"}` → `{"tamam":true,"ozet":"AbC…"}`. Hata: `400 psn_kod_yok`, `400 psn_reddetti`, `429 psn_cok_deneme`, `502 psn_ag`, `502 psn_yanit` |
+| POST | `/api/ps5/psn/elle` | `{"kimlik":"<base64>"}` → 8 bayt değilse `400 psn_kimlik_gecersiz` |
+| POST | `/api/ps5/bul` | `{"host":"192.168.1.30"?}` (boşsa yayın) → `{"konsollar":[{"host","ad","durum","kayitli"}]}` |
+| POST | `/api/ps5/kaydet` | `{"host","pin"}` → `{"tamam":true,"ad"}`. Hata: `400 ps5_pin_gecersiz`, `409 psn_hesap_yok`, `502 ps5_pin_yanlis`, `502 ps5_hesap_taninmadi`, `502 ps5_kullanimda`, `502 ps5_yanit_yok`, `502 ps5_surum`, `502 ps5_kayit_hata` |
+| POST | `/api/ps5/baglan` | Oturumu açar (uyku modundaysa önce uyandırır); `ayar.kaynak` değişmez |
+| POST | `/api/ps5/kes` | Oturumu kapatır |
+| POST | `/api/ps5/uyandir` | Uyandırma paketi yollar |
+| GET | `/api/ps5/onizleme` | Son karenin küçük JPEG'i (≤ 480 px); kare yoksa `404 ps5_kare_yok`. Diske yazılmaz |
+| POST | `/api/ps5/kol` | `{"calisiyor":bool}` → `ayar.ps5.kol_tv` |
+| DELETE | `/api/ps5` | Oturumu kapatır, kasadaki `ps5_hesap` ve `ps5_kayit`'ı ve `ayar.ps5`'i siler |
+SSE `ps5`: `GET /api/ps5`'in `baglanti` gövdesi (değişince).
+
+### 15.8 Yeniden bağlanma, uyandırma, ses
+- Oturum `bitti` ile kapanırsa (`ag`, `kapandi`, `diger`) 2, 4, 8, 15, 30 sn arayla yeniden denenir
+  (`durum:"bekliyor"`, `deneme` artar). `reddedildi` (kayıt geçersiz) ve `kullanimda`'da tekrar denenmez:
+  `hata` + Türkçe açıklama (`ps5_kayit_gecersiz` / `ps5_kullanimda`).
+- Bağlanmadan önce `bul` ile durum sorulur; `uyku` ise `uyandir` yollanır, 40 sn'ye kadar `acik` beklenir.
+- Ses (canlı dublaj): kaynak `ps5:gizli` iken işçinin `canli_baslat`'ına `{"ps5_ses":{"kapi":p,"anahtar":a}}`
+  eklenir; işçi `127.0.0.1:p`'ye bağlanır, ilk satır olarak anahtarı yollar, sonra 16 kHz mono 16 bit PCM
+  okur (`parca.kaynak:"ps5"`). Ana program bu kapıyı yalnız 127.0.0.1'de, oturum başına rastgele 32 baytlık
+  anahtarla açar. PS5 sesi bilgisayarda **çalınmaz** (TV zaten çalar); "tamamen Türkçe" kipi bu kaynakta yoktur.
+- Mikrofon asla; ses ve kareler yalnız bellekte.
+
+### 15.9 Bilinen sınırlar (dürüstçe)
+- Gerçek PS5 ile denenmedi: kayıt, oturum, kare/ses akışı yalnız sahte yardımcıyla ve derleme/öz denetimle sınandı.
+- Kolun TV'de kalması ikinci hesap + hiç girdi göndermeme tasarımına dayanır; PS5 yazılımının oturum başında
+  odağı uzaktaki kullanıcıya verip vermediği doğrulanmadı. Panel bağlantı testinde kullanıcıya sorar; "Hayır"
+  derse önce DualSense'in PS tuşuna basıp ana hesabı seçmesini, olmazsa yedek yolu önerir.
