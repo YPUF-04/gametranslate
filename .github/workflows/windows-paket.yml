@@ -195,12 +195,20 @@ jobs:
       - name: Velopack paketini üret (tam + delta + Setup + taşınabilir)
         shell: pwsh
         run: |
-          vpk pack --packId AltYaziKoprusu.Program --packVersion "${{ steps.surum.outputs.surum }}" `
-            --packDir dist/AltYaziKoprusu --mainExe AltYaziKoprusu.exe `
-            --packTitle "AltYazıKöprüsü" --packAuthors "AltYazıKöprüsü katkıcıları" `
-            --icon paketleme/simge/uygulama.ico --channel win --delta BestSpeed `
-            --releaseNotes SURUMLER.md --outputDir dist/velopack
-          if ($LASTEXITCODE -ne 0) { throw "vpk pack başarısız." }
+          $ortak = @('--packId','AltYaziKoprusu.Program','--packVersion',"${{ steps.surum.outputs.surum }}",
+            '--packDir','dist/AltYaziKoprusu','--mainExe','AltYaziKoprusu.exe',
+            '--packTitle','AltYazıKöprüsü','--packAuthors','AltYazıKöprüsü katkıcıları',
+            '--icon','paketleme/simge/uygulama.ico','--channel','win',
+            '--releaseNotes','SURUMLER.md','--outputDir','dist/velopack')
+          vpk pack @ortak --delta BestSpeed
+          if ($LASTEXITCODE -ne 0) {
+            # Windows'taki zstd.exe Türkçe harfli dosya adını (AltYazıKöprüsü_ExecutionStub.exe) açamıyor.
+            # Sürüm yine çıksın: delta olmadan (güncelleme bu kez tam paket indirir). Kalıcı çözüm: KARARLAR.md.
+            Write-Host "::warning::Delta üretilemedi; delta olmadan yeniden paketleniyor."
+            Remove-Item -Recurse -Force dist/velopack -ErrorAction SilentlyContinue
+            vpk pack @ortak --delta none
+            if ($LASTEXITCODE -ne 0) { throw "vpk pack başarısız." }
+          }
           Get-ChildItem dist/velopack | Select-Object Name, Length
       - name: Velopack kurulumu çalışıyor mu (tanı; kurulur, açılış sınanır)
         continue-on-error: true

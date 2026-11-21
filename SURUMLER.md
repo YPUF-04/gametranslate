@@ -1,8 +1,9 @@
 # Sürüm notları
 
-## 0.1.1 — LG TV kurulum düzeltmesi (2026-11-22)
+## 0.1.2 — LG TV kurulum düzeltmesi (2026-11-22)
+(0.1.1'in kurulum dosyaları üretilemedi; aynı düzeltme bu sürümle geliyor.)
 - **LG TV'ye tek tuşla kurulum:** bazı LG TV'lerde "AuthenticationException" hatasıyla bağlantı reddediliyordu. TV'nin eski bağlantı sistemi yeni imza yöntemini tanımıyordu; program artık reddedilince TV'nin anladığı eski yöntemle yeniden dener.
-- Bu sürüm, programın içinden **küçük güncelleme** ile gelen ilk sürümdür: panelde **Güncelle**'ye basman yeter.
+- Bu sürüm programın içinden gelir: panelde **Güncelle**'ye basman yeter. Bu sefer güncelleme **tam paket** (~80 MB) iner; küçük parça (delta) dosyası henüz üretilemiyor (programın Türkçe harfli adı paketleme aracını şaşırtıyor), sonraki sürümde düzeltilecek.
 
 ## 0.1.0 — İlk sürüm (2026-11-21)
 
