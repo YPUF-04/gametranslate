@@ -12,3 +12,6 @@ node_modules/
 *.pem
 ozel_anahtar*
 paketleme/windows/surum-bilgisi.txt
+
+# Yerel derleme klasörü (uzaktan/derle.sh)
+build/
