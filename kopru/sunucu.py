@@ -45,6 +45,7 @@ YAZMA_ZAMAN_ASIMI_SN = 15.0  # donmuş istemciye yazma bu süreyi aşarsa bağla
 DURUM = web.AppKey("durum", object)
 GUNCELLEME = web.AppKey("guncelleme", object)
 LG_KURULUM = web.AppKey("lg_kurulum", object)
+PSN_ISTEK = web.AppKey("psn_istek", object)   # testlerde sahte Sony istemcisi
 
 
 def uzak_adres(request: web.Request) -> str | None:
@@ -79,7 +80,8 @@ class Durum:
                  kisayol_destek: bool | None = None,
                  dosya_secici: Callable[[], Awaitable[str | None]] | None = None,
                  klasorde_goster: Callable[[str], None] | None = None,
-                 video_is_koku: Path | None = None) -> None:
+                 video_is_koku: Path | None = None,
+                 ps5_satir: Callable[[str], list[str]] | None = None) -> None:
         from . import dosya_sec as dosya_sec_mod
         self.dosya_secici = dosya_secici or dosya_sec_mod.sec
         self.klasorde_goster = klasorde_goster or dosya_sec_mod.klasorde_goster
@@ -108,6 +110,11 @@ class Durum:
         self.katman = katman_yonetim.KatmanYonetici(
             lambda: self.ayar, self.yayin, self.calisiyor, lambda: self.calisan_kapi or self.ayar["kapi"],
             katman_baslatici, katman_destek)
+        # PS5 gizli bağlantı (PROTOKOL §15): oturum ayrı iş parçacığında; olaylar döngüye güvenle aktarılır
+        from . import uzaktan as uzaktan_mod
+        self._dongu: asyncio.AbstractEventLoop | None = None
+        self.ps5 = uzaktan_mod.Ps5Yonetici(lambda: self.ayar, self._ps5_yayinla, satir=ps5_satir)
+        uzaktan_mod.kaydet_etkin(self.ps5)
         self.yerel_indirme: dict[str, Any] = {"durum": "yok", "yuzde": 0, "mesaj": None, "ayrinti": None}
         self._yerel_gorev: asyncio.Task | None = None
         self._okuma_dene_okuyucu: Any = None
@@ -117,6 +124,14 @@ class Durum:
         self.kisayol = kisayol_mod.Kisayollar(
             {"baslat_durdur": self.kisayol_baslat_durdur, "gizle_goster": self.kisayol_gizle_goster,
              "yeniden_oku": self.kisayol_yeniden_oku}, kisayol_dinleyici, kisayol_destek)
+
+    def _ps5_yayinla(self, govde: dict[str, Any]) -> None:
+        dongu = self._dongu
+        if dongu is not None and not dongu.is_closed():
+            try:
+                dongu.call_soon_threadsafe(self.yayin.yayinla, "ps5", govde)
+            except RuntimeError:
+                pass
 
     # -- kısayol eylemleri (§13.1) --
     def bildir(self, kod: str) -> None:
@@ -338,6 +353,10 @@ class Durum:
             gorev.cancel()
         self.dublaj.durdur()
         self.katman.kapat()
+        try:
+            await asyncio.to_thread(self.ps5.kapat)
+        except Exception:   # noqa: BLE001
+            log.debug("PS5 oturumu kapatılamadı", exc_info=True)
         gorevler = [t for t in (gorev, self._yerel_gorev, self.dublaj._gorev, self.dublaj._hazirla_gorevi) if t]
         for t in gorevler:
             t.cancel()
@@ -621,6 +640,11 @@ def _dogrula(k: dict[str, Any]) -> bool:
                                   all(isinstance(b.get(f), (int, float)) and 0 <= b[f] <= 1
                                       for f in ("x", "y", "g", "y2"))):
             return False
+        if "ps5" in k:   # panelden yalnız görüntü ayarları; konsol/anahtarlar /api/ps5/* ile
+            p5 = k["ps5"]
+            if not (isinstance(p5, dict) and set(p5) <= {"cozunurluk", "kodek"}
+                    and p5.get("cozunurluk", 720) in ayarlar.PS5_COZUNURLUKLER and p5.get("kodek", "h264") in ("h264", "hevc")):
+                return False
         if "modeller" in k and not (isinstance(k["modeller"], dict) and
                                      all(isinstance(v, str) for v in k["modeller"].values())):
             return False
@@ -1460,9 +1484,180 @@ async def api_yerel_hazirla(request: web.Request) -> web.Response:
     return web.json_response(await _yerel_durum_json(d, kaynak, hedef))
 
 
+# ---------- PS5 gizli bağlantı (PROTOKOL §15.7) ----------
+
+def _ps5_govde(d: Durum) -> dict[str, Any]:
+    from .uzaktan import kayit as kayit_mod, psn as psn_mod
+    ok, neden = d.ps5.destek()
+    hesap = kayit_mod.hesap_oku()
+    kayit = kayit_mod.kayit_oku()
+    a = d.ps5.ayar()
+    konsol = None
+    if kayit or a.get("host"):
+        konsol = {"host": a.get("host") or (kayit or {}).get("host"), "ad": a.get("ad") or (kayit or {}).get("ad"),
+                  "kayitli": kayit is not None}
+    return {"destek": ok, "neden": neden, "hesap": {"var": bool(hesap), "ozet": psn_mod.ozet(hesap)},
+            "konsol": konsol, "baglanti": d.ps5.durum(), "kol_tv": a.get("kol_tv"),
+            "kaynak_secili": d.ayar.get("kaynak") == "ps5:gizli"}
+
+
+def _ps5_hata(e: BaseException, request: web.Request, durum: int = 502) -> web.Response:
+    kod = getattr(e, "kod", None) or "ps5_kayit_hata"
+    if kod in ("ps5_pin_gecersiz", "psn_kod_yok", "psn_reddetti", "psn_kimlik_gecersiz"):
+        durum = 400
+    elif kod in ("psn_hesap_yok", "ps5_kayit_yok", "ps5_yardimci_yok", "ps5_yalniz_windows"):
+        durum = 409
+    elif kod == "psn_cok_deneme":
+        durum = 429
+    return hata(kod, durum, request, getattr(e, "ayrinti", None))
+
+
+async def api_ps5_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    return web.json_response(await asyncio.to_thread(_ps5_govde, d))
+
+
+async def api_ps5_psn_adres(request: web.Request) -> web.Response:
+    from .uzaktan import psn as psn_mod
+    return web.json_response({"adres": psn_mod.giris_adresi()})
+
+
+async def _ps5_hesap_yaz(d: Durum, request: web.Request, b64: str) -> web.Response:
+    from .uzaktan import kayit as kayit_mod, psn as psn_mod
+    try:
+        await asyncio.to_thread(kayit_mod.hesap_yaz, b64)
+    except anahtarlar.KasaHatasi as e:
+        return hata("kasa_yok" if str(e) == "kasa_yok" else "kasa_hata", 503, request)
+    return web.json_response({"tamam": True, "ozet": psn_mod.ozet(b64)})
+
+
+async def api_ps5_psn_kod(request: web.Request) -> web.Response:
+    from .uzaktan import psn as psn_mod
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    istek = request.app.get(PSN_ISTEK)
+    try:
+        kod = psn_mod.kod_cikar(str(v.get("adres") or ""))
+        b64 = await asyncio.to_thread(psn_mod.hesap_kimligi, kod, istek)
+    except psn_mod.PsnHatasi as e:
+        return _ps5_hata(e, request)
+    return await _ps5_hesap_yaz(d, request, b64)
+
+
+async def api_ps5_psn_elle(request: web.Request) -> web.Response:
+    from .uzaktan import psn as psn_mod
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    kimlik = v.get("kimlik")
+    if not psn_mod.kimlik_gecerli(kimlik):
+        return hata("psn_kimlik_gecersiz", 400, request)
+    return await _ps5_hesap_yaz(d, request, str(kimlik).strip())
+
+
+_IPV4 = re.compile(r"(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}")
+
+
+async def api_ps5_bul(request: web.Request) -> web.Response:
+    from .uzaktan import YardimciHatasi
+    d: Durum = request.app[DURUM]
+    v = await _json(request) if request.can_read_body else {}
+    host = str(v.get("host") or "").strip() or None
+    if host and not _IPV4.fullmatch(host):
+        return hata("gecersiz_istek", 400, request)
+    try:
+        konsollar = await asyncio.to_thread(d.ps5.bul, host)
+    except YardimciHatasi as e:
+        return _ps5_hata(e, request)
+    return web.json_response({"konsollar": konsollar})
+
+
+async def api_ps5_kaydet(request: web.Request) -> web.Response:
+    from .uzaktan import YardimciHatasi
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    host = str(v.get("host") or "").strip()
+    if not _IPV4.fullmatch(host):
+        return hata("gecersiz_istek", 400, request)
+    try:
+        sonuc = await asyncio.to_thread(d.ps5.kaydet, host, v.get("pin"))
+    except YardimciHatasi as e:
+        return _ps5_hata(e, request)
+    except anahtarlar.KasaHatasi as e:
+        return hata("kasa_yok" if str(e) == "kasa_yok" else "kasa_hata", 503, request)
+    d.ayar = ayarlar.guncelle(d.ayar, {"ps5": {"host": host, "ad": sonuc.get("ad") or "PS5"}})
+    return web.json_response({"tamam": True, "ad": sonuc.get("ad")})
+
+
+async def api_ps5_baglan(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    ok, neden = d.ps5.destek()
+    if not ok:
+        return hata("ps5_yardimci_yok" if neden == "yardimci_yok" else "ps5_yalniz_windows", 409, request)
+    await asyncio.to_thread(d.ps5.baglan)
+    return web.json_response(await asyncio.to_thread(_ps5_govde, d))
+
+
+async def api_ps5_kes(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    await asyncio.to_thread(d.ps5.kes)
+    return web.json_response({"tamam": True})
+
+
+async def api_ps5_uyandir(request: web.Request) -> web.Response:
+    from .uzaktan import YardimciHatasi
+    d: Durum = request.app[DURUM]
+    try:
+        ok = await asyncio.to_thread(d.ps5.uyandir)
+    except YardimciHatasi as e:
+        return _ps5_hata(e, request)
+    return web.json_response({"tamam": bool(ok)})
+
+
+async def api_ps5_onizleme(request: web.Request) -> web.Response:
+    from .uzaktan import YardimciHatasi
+    d: Durum = request.app[DURUM]
+    try:
+        veri = await asyncio.to_thread(d.ps5.onizleme_jpeg)
+    except YardimciHatasi:
+        return hata("ps5_kare_yok", 404, request)
+    return web.Response(body=veri, content_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+async def api_ps5_kol(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    if not isinstance(v.get("calisiyor"), bool):
+        return hata("gecersiz_istek", 400, request)
+    d.ayar = ayarlar.guncelle(d.ayar, {"ps5": {"kol_tv": v["calisiyor"]}})
+    return web.json_response({"tamam": True})
+
+
+async def api_ps5_giris_pin(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    pin = str(v.get("pin") or "")
+    if not (pin.isdigit() and len(pin) == 4):
+        return hata("gecersiz_istek", 400, request)
+    await asyncio.to_thread(d.ps5.giris_pin, pin)
+    return web.json_response({"tamam": True})
+
+
+async def api_ps5_unut(request: web.Request) -> web.Response:
+    from .uzaktan import kayit as kayit_mod
+    d: Durum = request.app[DURUM]
+    await asyncio.to_thread(d.ps5.kes)
+    await asyncio.to_thread(kayit_mod.unut)
+    yeni = {"ps5": {"host": "", "ad": "", "kol_tv": None}}
+    if d.ayar.get("kaynak") == "ps5:gizli":
+        yeni["kaynak"] = "ekran:1"
+    d.ayar = ayarlar.guncelle(d.ayar, yeni)
+    return web.json_response({"tamam": True})
+
+
 def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None, lg_kurulum: Any = None,
-                     **fabrikalar: Any) -> web.Application:
+                     psn_istek: Any = None, **fabrikalar: Any) -> web.Application:
     app = web.Application(middlewares=[kopru_katman, yerel_katman])
+    app[PSN_ISTEK] = psn_istek
     durum = Durum(ayar if ayar is not None else ayarlar.yukle(), **fabrikalar)
     app[DURUM] = durum
     app[GUNCELLEME] = guncelleme or guncelleme_mod.Guncelleme(lambda: durum.ayar)
@@ -1535,6 +1730,19 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/dublaj/video", api_video_baslat)
     r.add_post("/api/dublaj/video/iptal", api_video_iptal)
     r.add_post("/api/dublaj/video/goster", api_video_goster)
+    r.add_get("/api/ps5", api_ps5_al)
+    r.add_delete("/api/ps5", api_ps5_unut)
+    r.add_post("/api/ps5/psn/adres", api_ps5_psn_adres)
+    r.add_post("/api/ps5/psn/kod", api_ps5_psn_kod)
+    r.add_post("/api/ps5/psn/elle", api_ps5_psn_elle)
+    r.add_post("/api/ps5/bul", api_ps5_bul)
+    r.add_post("/api/ps5/kaydet", api_ps5_kaydet)
+    r.add_post("/api/ps5/baglan", api_ps5_baglan)
+    r.add_post("/api/ps5/kes", api_ps5_kes)
+    r.add_post("/api/ps5/uyandir", api_ps5_uyandir)
+    r.add_get("/api/ps5/onizleme", api_ps5_onizleme)
+    r.add_post("/api/ps5/kol", api_ps5_kol)
+    r.add_post("/api/ps5/giris-pin", api_ps5_giris_pin)
 
     async def durum_dongusu() -> None:
         while True:
@@ -1561,6 +1769,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
                 log.exception("Ekran katmanı denetimi başarısız")
 
     async def ac(_: web.Application) -> None:
+        durum._dongu = asyncio.get_running_loop()
         await asyncio.to_thread(anahtarlar.isit)
         durum.kisayol.baslat(asyncio.get_running_loop(), durum.ayar.get("kisayollar") or {})
         app["katman_gorevi"] = asyncio.create_task(katman_dongusu())   # kasa ilk okuması olay döngüsünü tutmasın

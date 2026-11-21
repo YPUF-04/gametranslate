@@ -58,6 +58,25 @@ def ozdenetim_ceviri() -> int:
     return 0 if sonuc.strip() and sonuc.strip().lower() != "hello, how are you?" else 1
 
 
+def ozdenetim_uzaktan() -> int:
+    """Paket testi (PROTOKOL §15): yardımcı paketin içinde bulunuyor ve çözücüler/ağ/anahtar işleri çalışıyor mu."""
+    from .uzaktan import yardimci
+    yol = yardimci.yardimci_yolu()
+    if yol is None:
+        yaz("OZDENETIM uzaktan=YOK (ayk-uzaktan bulunamadı)")
+        return 1
+    try:
+        olaylar = yardimci.calistir("ozdenetim", None, 30)
+    except yardimci.YardimciHatasi as e:
+        yaz(f"OZDENETIM uzaktan=HATA ({e.kod})")
+        return 1
+    sonuc = next((o for o in olaylar if o.get("olay") == "ozdenetim"), {})
+    tamam = bool(sonuc.get("tamam"))
+    yaz(f"yardimci={yol} {sonuc}")
+    yaz(f"OZDENETIM uzaktan={'tamam' if tamam else 'HATA'}")
+    return 0 if tamam else 1
+
+
 def ozdenetim(ceviri: bool = False) -> int:
     """Paketin içinde ekran yazısı okuyucunun gerçekten çalıştığını dener (ekran gerekmez).
 
@@ -223,7 +242,11 @@ def main() -> None:
     p.add_argument("--ozdenetim", action="store_true", help="yazı okumayı dener ve çıkar (paket testi)")
     p.add_argument("--ozdenetim-ceviri", action="store_true",
                    help="çevrimdışı çeviriyi dener (dil dosyasını indirir) ve çıkar (paket testi)")
+    p.add_argument("--ozdenetim-uzaktan", action="store_true",
+                   help="PS5 gizli bağlantı yardımcısını bulup öz denetimini çalıştırır (paket testi)")
     a, _bilinmeyen = p.parse_known_args()   # Velopack yeniden başlatırken ek argüman verebilir
+    if a.ozdenetim_uzaktan:
+        raise SystemExit(ozdenetim_uzaktan())
     if a.ozdenetim_ceviri:
         raise SystemExit(ozdenetim(ceviri=True))
     if a.ozdenetim:

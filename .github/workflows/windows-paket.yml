@@ -10,7 +10,7 @@ on:
     tags: ["v*"]
     # Geliştirme dalında da kurucu üretilsin ki gerçekten derlendiği görülsün (yayın yapılmaz).
     branches: ["claude/**"]
-    paths: ["paketleme/**", "kopru/**", "pyproject.toml", "requirements*.txt", ".github/workflows/windows-paket.yml"]
+    paths: ["paketleme/**", "kopru/**", "uzaktan/**", "pyproject.toml", "requirements*.txt", ".github/workflows/windows-paket.yml"]
 
 permissions:
   contents: read
@@ -31,8 +31,44 @@ jobs:
       - name: Testleri çalıştır
         run: python -m pytest -q
 
+  # PS5 gizli bağlantı yardımcısı (PROTOKOL §15): libchiaki + FFmpeg, MSYS2 MINGW64 ile statik tek .exe
+  uzaktan:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            git make diffutils
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-nasm mingw-w64-x86_64-openssl mingw-w64-x86_64-opus mingw-w64-x86_64-json-c
+            mingw-w64-x86_64-miniupnpc mingw-w64-x86_64-libevent mingw-w64-x86_64-python
+            mingw-w64-x86_64-python-protobuf mingw-w64-x86_64-protobuf
+      - uses: actions/cache@v4
+        with:
+          path: build/uzaktan-is/ffmpeg-kur
+          key: ffmpeg-n7.1.1-h264-hevc-mingw64-v1
+      - name: Yardımcıyı derle
+        run: bash uzaktan/derle.sh uzaktan-cikti
+      - name: Yardımcı çalışıyor mu (yardım + öz denetim)
+        run: |
+          ./uzaktan-cikti/ayk-uzaktan.exe --help
+          ./uzaktan-cikti/ayk-uzaktan.exe surum
+          ./uzaktan-cikti/ayk-uzaktan.exe ozdenetim | tee oz.log
+          grep -q "OZDENETIM uzaktan=tamam" oz.log
+          ls -la uzaktan-cikti
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ayk-uzaktan
+          path: uzaktan-cikti/*
+
   paket:
-    needs: test
+    needs: [test, uzaktan]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +88,10 @@ jobs:
           pip install -r requirements-windows.txt
           pip install pyinstaller
           pip install -e ".[tv]"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ayk-uzaktan
+          path: uzaktan-cikti
       - name: Exe sürüm bilgisini üret
         run: python paketleme/windows/surum_bilgisi.py "${{ steps.surum.outputs.surum }}" paketleme/windows/surum-bilgisi.txt
       - name: Paketle (PyInstaller)
@@ -66,6 +106,9 @@ jobs:
           --add-binary "C:/Windows/System32/msvcp140_1.dll;."
           --add-binary "C:/Windows/System32/vcruntime140_1.dll;."
           --add-binary "C:/Windows/System32/concrt140.dll;."
+          --add-binary "uzaktan-cikti/ayk-uzaktan.exe;uzaktan"
+          --add-data "uzaktan-cikti/LICENSE-chiaki-ng.txt;uzaktan"
+          --add-data "uzaktan-cikti/LICENSE-FFmpeg-LGPL.txt;uzaktan"
           --paths .
           --add-data "kopru/web;kopru/web"
           --add-data "kopru/__init__.py;kopru"
@@ -124,6 +167,13 @@ jobs:
         run: |
           ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --ozdenetim-ceviri | tee ceviri.log
           grep -q "OZDENETIM ceviri=" ceviri.log
+      - name: Paketin içinde PS5 gizli bağlantı yardımcısı çalışıyor mu
+        shell: bash
+        run: |
+          ls -la dist/AltYaziKoprusu/_internal/uzaktan/
+          ./dist/AltYaziKoprusu/_internal/uzaktan/ayk-uzaktan.exe --help
+          ./dist/AltYaziKoprusu/AltYaziKoprusu.exe --ozdenetim-uzaktan | tee uzaktan.log
+          grep -q "OZDENETIM uzaktan=tamam" uzaktan.log
       - name: Lisans dosyalarını ekle
         shell: pwsh
         run: Copy-Item LICENSE,NOTICE,README.md,GIZLILIK.md dist/AltYaziKoprusu/ -ErrorAction SilentlyContinue

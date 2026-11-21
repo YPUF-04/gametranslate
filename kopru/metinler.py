@@ -325,6 +325,70 @@ DIGER: dict[str, dict[str, str]] = {
                        "yeniden açın.",
                  "en": "Port {kapi} is busy and no free port was found nearby. Change the port in settings and "
                        "start again."},
+    # ---- PS5 gizli bağlantı (PROTOKOL §15) ----
+    "ps5_yardimci_yok": {
+        "tr": "PS5 gizli bağlantı parçası bu kurulumda yok; programı son sürümle yeniden kurun ya da resmî PS Remote Play penceresini kaynak seçin.",
+        "en": "The hidden PS5 connection component is missing; reinstall the latest version or pick the official PS Remote Play window as the source."},
+    "ps5_yalniz_windows": {
+        "tr": "PS5 gizli bağlantı şimdilik yalnız Windows'ta çalışır; bu bilgisayarda resmî PS Remote Play penceresini kaynak seçin.",
+        "en": "The hidden PS5 connection currently works on Windows only; pick the official PS Remote Play window as the source here."},
+    "ps5_pin_gecersiz": {
+        "tr": "Kod 8 rakam olmalı; PS5'te Ayarlar → Sistem → Uzaktan Oynatma → Cihazı Bağla ekranındaki kodu yazın.",
+        "en": "The code must be 8 digits; enter the code shown on PS5 Settings → System → Remote Play → Link Device."},
+    "ps5_pin_yanlis": {
+        "tr": "PS5 kodu kabul etmedi; Cihazı Bağla ekranını yeniden açıp yeni çıkan kodu yazın.",
+        "en": "The PS5 did not accept the code; reopen the Link Device screen and enter the new code."},
+    "psn_hesap_yok": {
+        "tr": "Önce 1. adımda ikinci PSN hesabıyla giriş yapın.",
+        "en": "First sign in with the second PSN account in step 1."},
+    "ps5_hesap_taninmadi": {
+        "tr": "PS5 bu PSN hesabını tanımadı; ikinci hesabın PS5'te bir kullanıcı olarak ekli olduğundan ve 1. adımda o hesapla girdiğinizden emin olun.",
+        "en": "The PS5 did not recognize this PSN account; make sure the second account is added as a user on the PS5 and that you signed in with it in step 1."},
+    "ps5_kullanimda": {
+        "tr": "PS5'e şu an başka bir Remote Play bağlı (ör. resmî uygulama); onu kapatıp yeniden deneyin.",
+        "en": "Another Remote Play client is connected to the PS5 (e.g. the official app); close it and try again."},
+    "ps5_yanit_yok": {
+        "tr": "PS5 yanıt vermedi; PS5'in açık, aynı ağda ve Cihazı Bağla ekranının açık olduğundan emin olun.",
+        "en": "The PS5 did not answer; make sure it is on, on the same network and the Link Device screen is open."},
+    "ps5_surum": {
+        "tr": "PS5'in Remote Play sürümü bu programla uyuşmadı; PS5'i ve programı güncelleyip yeniden deneyin.",
+        "en": "The PS5's Remote Play version did not match; update the PS5 and this program and try again."},
+    "ps5_kayit_hata": {
+        "tr": "PS5 bağlanamadı; Cihazı Bağla ekranını yeniden açıp yeni kodla tekrar deneyin.",
+        "en": "Could not link the PS5; reopen the Link Device screen and try again with the new code."},
+    "ps5_kayit_yok": {
+        "tr": "PS5 henüz bu bilgisayara bağlanmadı; panelde 'PS5'e bağlan' adımlarını tamamlayın.",
+        "en": "The PS5 is not linked to this computer yet; complete the 'Connect to PS5' steps in the panel."},
+    "ps5_kayit_gecersiz": {
+        "tr": "PS5 bu bilgisayarın kaydını kabul etmedi; 'PS5'e bağlan' adımlarından 2. adımı (8 haneli kod) yeniden yapın.",
+        "en": "The PS5 rejected this computer's link; redo step 2 (the 8-digit code) of 'Connect to PS5'."},
+    "ps5_erisilemedi": {
+        "tr": "PS5'e ulaşılamadı; PS5 açık mı ve Ayarlar → Sistem → Uzaktan Oynatma açık mı? Yeniden deneniyor.",
+        "en": "The PS5 could not be reached; is it on and is Remote Play enabled? Retrying."},
+    "ps5_baglanti_koptu": {
+        "tr": "PS5 bağlantısı koptu; kendiliğinden yeniden bağlanılıyor.",
+        "en": "The PS5 connection dropped; reconnecting automatically."},
+    "ps5_kare_yok": {
+        "tr": "PS5'ten henüz görüntü gelmedi; birkaç saniye bekleyip yeniden deneyin.",
+        "en": "No picture from the PS5 yet; wait a few seconds and try again."},
+    "psn_kod_yok": {
+        "tr": "Yapıştırılan adreste giriş kodu yok; Sony girişini bitirdikten sonra adres çubuğundaki adresin TAMAMINI kopyalayın.",
+        "en": "The pasted address has no sign-in code; after finishing the Sony sign-in, copy the WHOLE address from the address bar."},
+    "psn_reddetti": {
+        "tr": "Sony girişi tamamlamadı ya da kodun süresi doldu; 'Sony girişini aç'a yeniden basıp hemen yapıştırın.",
+        "en": "Sony did not complete the sign-in or the code expired; press 'Open Sony sign-in' again and paste right away."},
+    "psn_cok_deneme": {
+        "tr": "Sony çok fazla deneme olduğunu söyledi; birkaç dakika bekleyip yeniden deneyin.",
+        "en": "Sony reported too many attempts; wait a few minutes and try again."},
+    "psn_ag": {
+        "tr": "Sony'ye ulaşılamadı; internet bağlantınızı kontrol edip yeniden deneyin.",
+        "en": "Could not reach Sony; check your internet connection and try again."},
+    "psn_yanit": {
+        "tr": "Sony'nin yanıtı anlaşılamadı; biraz sonra yeniden deneyin.",
+        "en": "Sony's answer could not be understood; try again a little later."},
+    "psn_kimlik_gecersiz": {
+        "tr": "Hesap kimliği geçersiz; 12 karakterlik base64 kimliği (ör. AbCdEfGhIjk=) olduğu gibi yapıştırın.",
+        "en": "The account ID is invalid; paste the 12-character base64 ID (e.g. AbCdEfGhIjk=) as is."},
 }
 
 

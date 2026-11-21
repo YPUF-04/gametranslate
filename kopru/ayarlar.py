@@ -52,6 +52,8 @@ VARSAYILAN: dict[str, Any] = {
     "katman_ekran": 1,          # ekran katmanının açılacağı ekran numarası (1..n)
     "cihaz": None,   # ps5 | xbox | pc | kart
     "tv": None,      # lg | samsung | androidtv | yok
+    # PS5 gizli bağlantı (PROTOKOL §15.6); gizli anahtarlar burada DEĞİL, şifreli kasada
+    "ps5": {"host": "", "ad": "", "cozunurluk": 720, "kodek": "h264", "kol_tv": None},
     "gorunum": VARSAYILAN_GORUNUM,
     # genel kısayol tuşları, yalnız Windows (PROTOKOL §13.1); boş dize = kapalı
     "kisayollar": {"baslat_durdur": "ctrl+shift+t", "gizle_goster": "ctrl+shift+h", "yeniden_oku": "ctrl+shift+r"},
@@ -59,6 +61,7 @@ VARSAYILAN: dict[str, Any] = {
 
 
 GOSTERIMLER = ("bilgisayar", "tv", "tarayici")
+PS5_COZUNURLUKLER = (540, 720, 1080)
 EN_COK_EKRAN = 16
 BOLGE_TURLERI = ("altyazi", "ust_yazi", "diger")
 EN_COK_BOLGE = 6
@@ -277,6 +280,16 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
     for k, t in list(s["kisayollar"].items()):
         if not (k in kisayol.EYLEMLER and kisayol.kisayol_gecerli(t)):
             s["kisayollar"][k] = v["kisayollar"].get(k, "")
+    p5, vp5 = s["ps5"], v["ps5"]
+    if p5.get("cozunurluk") not in PS5_COZUNURLUKLER:
+        p5["cozunurluk"] = vp5["cozunurluk"]
+    if p5.get("kodek") not in ("h264", "hevc"):
+        p5["kodek"] = vp5["kodek"]
+    if p5.get("kol_tv") not in (None, True, False):
+        p5["kol_tv"] = None
+    for alan in ("host", "ad"):
+        if not (isinstance(p5.get(alan), str) and len(p5[alan]) <= 64):
+            p5[alan] = ""
     from . import dublaj as dublaj_mod
     d = s["dublaj"]
     for k in list(d):

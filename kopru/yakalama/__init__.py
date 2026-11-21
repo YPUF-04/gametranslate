@@ -395,12 +395,34 @@ def kaynaklar(cihaz: str | None = None) -> list[dict[str, Any]]:
         raise YakalamaHatasi("Ekran listesi alınamadı. Görüntü sunucusu çalışıyor mu?") from e
     for hwnd, baslik in _pencereler():
         out.append({"kod": f"pencere:{hwnd}", "ad": baslik[:80], "exe": _pencere_exe(hwnd)})
-    return kaynaklari_isaretle(out, cihaz)
+    liste = kaynaklari_isaretle(out, cihaz)
+    ps5 = ps5_kaynak_ogesi(cihaz)
+    return ([ps5] if ps5 else []) + liste
+
+
+def ps5_kaynak_ogesi(cihaz: str | None) -> dict[str, Any] | None:
+    """§15.6: yardımcı varsa "PS5 (gizli bağlantı)" kaynağı (listenin başında)."""
+    try:
+        from .. import uzaktan
+        return uzaktan.kaynak_ogesi(cihaz)
+    except Exception:   # noqa: BLE001 — PS5 kaynağı listeyi asla bozmasın
+        return None
+
+
+def ps5_kare_al() -> Any:
+    """§15.6: gizli PS5 bağlantısından son kare (pencere yakalamayla aynı arayüz: PIL.Image RGB)."""
+    from .. import metinler, uzaktan
+    try:
+        return uzaktan.etkin().kare()
+    except uzaktan.YardimciHatasi as e:
+        raise YakalamaHatasi(metinler.mesaj(e.kod, "tr")) from e
 
 
 def kare_al(kaynak: str) -> Any:
     """Kaynaktan bir PIL.Image (RGB) döndürür. "pencere:<hwnd>" için yalnız o pencerenin iç alanı.
     Windows'ta başlığında marka adı geçen pencereler (§12.1) karede siyaha boyanır."""
+    if kaynak.startswith("ps5:"):
+        return ps5_kare_al()
     from PIL import Image
     mss = _mss()
     dpi_farkindaligi()

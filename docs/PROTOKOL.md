@@ -615,6 +615,7 @@ Bilen kullanıcı base64 kimliği elle de girebilir.
 | POST | `/api/ps5/uyandir` | Uyandırma paketi yollar |
 | GET | `/api/ps5/onizleme` | Son karenin küçük JPEG'i (≤ 480 px); kare yoksa `404 ps5_kare_yok`. Diske yazılmaz |
 | POST | `/api/ps5/kol` | `{"calisiyor":bool}` → `ayar.ps5.kol_tv` |
+| POST | `/api/ps5/giris-pin` | `{"pin":"1234"}`: ikinci kullanıcının PS5 giriş şifresi varsa (`baglanti.giris_pin:true`) |
 | DELETE | `/api/ps5` | Oturumu kapatır, kasadaki `ps5_hesap` ve `ps5_kayit`'ı ve `ayar.ps5`'i siler |
 SSE `ps5`: `GET /api/ps5`'in `baglanti` gövdesi (değişince).
 

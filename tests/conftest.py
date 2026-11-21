@@ -68,3 +68,10 @@ def katman_surec_yok(monkeypatch):
 def dublaj_ortami_gecici(tmp_path, monkeypatch):
     """Testler gerçek dublaj paketi klasörüne dokunmasın."""
     monkeypatch.setenv("KOPRU_DUBLAJ_ORTAMI", str(tmp_path / "dublaj-ortami"))
+
+
+@pytest.fixture(autouse=True)
+def ps5_yardimci_yok(monkeypatch):
+    """Testler geliştiricinin yerel ayk-uzaktan derlemesini bulmasın (PS5 testleri sahte yardımcı verir)."""
+    from kopru.uzaktan import yardimci
+    monkeypatch.setattr(yardimci, "yardimci_yolu", lambda: None)
