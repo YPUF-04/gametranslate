@@ -347,7 +347,7 @@ class IsciParca:
     bas: float
     bitis: float
     temiz: Any = None          # ayrılmış (arka plansız) konuşma sesi
-    kaynak: str = "sistem"     # "surec" (yalnız oyun) | "sistem"
+    kaynak: str = "sistem"     # "surec" (yalnız oyun) | "sistem" | "giris" | "ps5" (gizli bağlantı)
 
 
 class IsciSesKaynagi:
@@ -377,11 +377,22 @@ class IsciSesKaynagi:
         d = ayar.get("dublaj") or {}
         from . import tamamen_turkce_mu
 
+        ps5_ses = None
+        if str(ayar.get("kaynak") or "") == "ps5:gizli":   # PROTOKOL §15.8: ses gizli PS5 bağlantısından
+            from .. import uzaktan
+            y = uzaktan.etkin()
+            ps5_ses = y.ses_kanali()
+            if not y.calisiyor():
+                y.baglan()
+
         async def ac() -> None:
             try:
-                self.bilgi = await self.isci.iste("canli_baslat", {
-                    "pid": self.pid_fn(), "ayirma": bool(d.get("ayirma", True)),
-                    "tamamen_turkce": tamamen_turkce_mu(ayar), "giris": str(d.get("ses_girisi") or "")})
+                istek = {"pid": self.pid_fn(), "ayirma": bool(d.get("ayirma", True)),
+                         "tamamen_turkce": tamamen_turkce_mu(ayar) and ps5_ses is None,
+                         "giris": str(d.get("ses_girisi") or "")}
+                if ps5_ses is not None:
+                    istek["ps5_ses"] = ps5_ses
+                self.bilgi = await self.isci.iste("canli_baslat", istek)
             except DublajHatasi as e:
                 if self.hata_cb:
                     from ..ses import SesHatasi

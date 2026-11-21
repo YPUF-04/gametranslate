@@ -119,6 +119,8 @@ class DublajYonetici:
     def _varsayilan_kaynak(self, parca_cb: Any, saat: Any, hata_cb: Any = None) -> Any:
         if self.isci_kullan():
             return IsciSesKaynagi(parca_cb, saat, self.isci, self.ayar, self._oyun_pid, hata_cb)
+        if str(self.ayar().get("kaynak") or "") == "ps5:gizli":   # §15.8: dublaj paketi olmadan da PS5 sesi
+            return ses_mod.SesKaynagi(parca_cb, saat, kaynak_fabrika=ses_mod.ps5_kaynak, hata_cb=hata_cb)
         return ses_mod.SesKaynagi(parca_cb, saat, hata_cb=hata_cb)
 
     async def girisler(self) -> list[dict[str, Any]]:

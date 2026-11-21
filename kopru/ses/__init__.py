@@ -68,6 +68,40 @@ def kaynak_ac(sc: Any = None) -> Any:
     return kaynak
 
 
+class _Ps5Kayit:
+    def __init__(self, kaynak: Any) -> None:
+        self.kaynak = kaynak
+
+    def __enter__(self) -> "_Ps5Kayit":
+        self.kaynak.ac()
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.kaynak.kapat()
+
+    def record(self, numframes: int) -> Any:
+        return self.kaynak.oku().reshape(-1, 1)
+
+
+class _Ps5Aygit:
+    """`kaynak_ac` ile aynı biçim: `recorder(...)` bağlamı `record(n)` verir. Ses gizli PS5 bağlantısından gelir."""
+    isloopback = True
+
+    def recorder(self, samplerate: int = ORNEK_HIZI, channels: int = 1) -> _Ps5Kayit:
+        from .. import uzaktan
+        from ..dublaj.isci.canli import Ps5Ses
+        y = uzaktan.etkin()
+        kanal = y.ses_kanali()
+        if not y.calisiyor():
+            y.baglan()
+        return _Ps5Kayit(Ps5Ses(kanal["kapi"], kanal["anahtar"]))
+
+
+def ps5_kaynak() -> Any:
+    """PROTOKOL §15.8: kaynak `ps5:gizli` iken oyun sesi (16 kHz mono) PS5 bağlantısından okunur."""
+    return _Ps5Aygit()
+
+
 def konusma_parcala(blok: Any, durum: dict[str, Any]) -> Any | None:
     """Enerji tabanlı basit VAD. Bir konuşma bitince birleşik diziyi döndürür."""
     import numpy as np

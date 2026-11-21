@@ -588,7 +588,8 @@ class GercekIsleyici:
         istek = (v.get("ayirma") and not self.hafif) or v.get("tamamen_turkce")
         ayirici = (lambda pcm, sr: self._ayir_canli(pcm, sr)) if istek else None
         self._canli = CanliYakalama(self._gonder, pid=v.get("pid"), ayirici=ayirici,
-                                    tamamen_turkce=bool(v.get("tamamen_turkce")), giris=str(v.get("giris") or ""))
+                                    tamamen_turkce=bool(v.get("tamamen_turkce")), giris=str(v.get("giris") or ""),
+                                    ps5_ses=v.get("ps5_ses") if isinstance(v.get("ps5_ses"), dict) else None)
         return self._canli.baslat()
 
     def _ayir_canli(self, pcm: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:

@@ -254,6 +254,50 @@ def girisleri_listele() -> list[dict[str, str]]:
         return []
 
 
+class Ps5Ses:
+    """PROTOKOL §15.8: gizli PS5 bağlantısının sesi. Ana programın 127.0.0.1'deki kapısına bağlanır,
+    anahtarı yollar, 16 kHz mono 16 bit PCM okur. PS5 sesi bilgisayarda çalınmaz (TV çalar)."""
+
+    def __init__(self, kapi: int, anahtar: str, zaman_asimi: float = 2.0) -> None:
+        self.kapi, self.anahtar, self.zaman_asimi = int(kapi), str(anahtar), zaman_asimi
+        self._s: Any = None
+        self._artik = b""
+
+    def ac(self) -> None:
+        import socket
+        self._s = socket.create_connection(("127.0.0.1", self.kapi), timeout=5)
+        self._s.sendall(self.anahtar.encode() + b"\n")
+        self._s.settimeout(self.zaman_asimi)
+
+    def oku(self) -> np.ndarray:
+        import socket
+        gerekli = BLOK * 2
+        veri = self._artik
+        son = time.monotonic() + self.zaman_asimi
+        while len(veri) < gerekli and time.monotonic() < son:
+            try:
+                parca = self._s.recv(gerekli - len(veri))
+            except socket.timeout:
+                break
+            if not parca:
+                raise OSError("PS5 ses kanalı kapandı")
+            veri += parca
+        if len(veri) % 2:
+            veri, self._artik = veri[:-1], veri[-1:]
+        else:
+            self._artik = b""
+        if not veri:   # akış durdu (PS5 bağlantısı bekliyor): sessizlik ver, döngü dönsün
+            return np.zeros(BLOK, dtype=np.float32)
+        return np.frombuffer(veri, dtype="<i2").astype(np.float32) / 32768.0
+
+    def kapat(self) -> None:
+        try:
+            if self._s is not None:
+                self._s.close()
+        except OSError:
+            pass
+
+
 class SistemLoopback:
     """Yedek: varsayılan hoparlörün loopback'i (soundcard). Mikrofon aygıtı ASLA istenmez."""
 
@@ -349,7 +393,8 @@ class CanliYakalama:
     def __init__(self, gonder: Callable[[dict[str, Any]], None], pid: int | None = None,
                  ayirici: Callable[[np.ndarray, int], tuple[np.ndarray, np.ndarray]] | None = None,
                  tamamen_turkce: bool = False, kaynak_fabrika: Callable[[], Any] | None = None,
-                 giris: str = "") -> None:
+                 giris: str = "", ps5_ses: dict[str, Any] | None = None) -> None:
+        self.ps5_ses = ps5_ses
         self.gonder = gonder
         self.pid = int(pid) if pid else None
         self.ayirici = ayirici
@@ -370,6 +415,11 @@ class CanliYakalama:
         if self.kaynak_fabrika is not None:
             k = self.kaynak_fabrika()
             k.ac()
+            return k
+        if self.ps5_ses:        # gizli PS5 bağlantısı (§15.8)
+            k = Ps5Ses(int(self.ps5_ses.get("kapi") or 0), str(self.ps5_ses.get("anahtar") or ""))
+            k.ac()
+            self.kaynak_turu = "ps5"
             return k
         if self.giris:          # yakalama kartı: kullanıcının açıkça seçtiği giriş
             k = GirisYakalama(self.giris)
