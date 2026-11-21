@@ -126,15 +126,31 @@ class ParamikoOturumu:
     def baglan(self, ip: str, anahtar_metni: str, parola: str) -> None:
         p = _paramiko()
         anahtar = anahtar_yukle(anahtar_metni, parola)
-        self.istemci = p.SSHClient()
-        self.istemci.set_missing_host_key_policy(p.AutoAddPolicy())   # ares de TV'nin anahtarını doğrulamaz
-        try:
-            self.istemci.connect(ip, port=SSH_KAPI, username=KULLANICI, pkey=anahtar, look_for_keys=False,
-                                 allow_agent=False, timeout=10, banner_timeout=20, auth_timeout=20)
-        except p.AuthenticationException as e:
-            raise TvHatasi("tv_oturum_bitti", f"{type(e).__name__}") from None
-        except (OSError, p.SSHException) as e:    # kapı kapalı / zaman aşımı: anahtar alındı, yani TV ayakta
-            raise TvHatasi("tv_oturum_bitti", f"{type(e).__name__}: {e}") from None
+        # TV'deki eski SSH sunucusu (dropbear) "server-sig-algs" bildirmez; paramiko o zaman RSA anahtarını
+        # rsa-sha2-512 ile imzalar ve eski sunucu girişi reddeder (AuthenticationException). LG'nin kendi aracı
+        # (ares, ssh2) klasik "ssh-rsa" ile girer. Önce varsayılanla, reddedilirse yalnız ssh-rsa ile bir kez daha.
+        denemeler: list[dict[str, Any]] = [{}, {"pubkeys": ["rsa-sha2-512", "rsa-sha2-256"]}]
+        son: Exception | None = None
+        for engelli in denemeler:
+            self.istemci = p.SSHClient()
+            self.istemci.set_missing_host_key_policy(p.AutoAddPolicy())   # ares de TV'nin anahtarını doğrulamaz
+            try:
+                self.istemci.connect(ip, port=SSH_KAPI, username=KULLANICI, pkey=anahtar, look_for_keys=False,
+                                     allow_agent=False, timeout=10, banner_timeout=20, auth_timeout=20,
+                                     disabled_algorithms=engelli or None)
+                return
+            except p.AuthenticationException as e:
+                son = e
+                log.info("TV SSH girişi reddedildi (%s); eski imza yöntemiyle yeniden deneniyor",
+                         "varsayılan" if not engelli else "ssh-rsa")
+                try:
+                    self.istemci.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                continue
+            except (OSError, p.SSHException) as e:    # kapı kapalı / zaman aşımı: anahtar alındı, yani TV ayakta
+                raise TvHatasi("tv_oturum_bitti", f"{type(e).__name__}: {e}") from None
+        raise TvHatasi("tv_oturum_bitti", f"{type(son).__name__} (ssh-rsa dahil)") from None
 
     def calistir(self, komut: str, satir_cb: Callable[[str], bool] | None = None,
                  zaman_sn: float = 120.0) -> tuple[int, str]:

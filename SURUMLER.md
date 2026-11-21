@@ -1,5 +1,9 @@
 # Sürüm notları
 
+## 0.1.1 — LG TV kurulum düzeltmesi (2026-11-22)
+- **LG TV'ye tek tuşla kurulum:** bazı LG TV'lerde "AuthenticationException" hatasıyla bağlantı reddediliyordu. TV'nin eski bağlantı sistemi yeni imza yöntemini tanımıyordu; program artık reddedilince TV'nin anladığı eski yöntemle yeniden dener.
+- Bu sürüm, programın içinden **küçük güncelleme** ile gelen ilk sürümdür: panelde **Güncelle**'ye basman yeter.
+
 ## 0.1.0 — İlk sürüm (2026-11-21)
 
 **İlk deneme sürümü.** Gerçek cihazlarda (PS5, LG TV) ilk kez kullanılacak; hata görürsen lütfen [bildir](https://github.com/YPUF-04/gametranslate/issues/new/choose).

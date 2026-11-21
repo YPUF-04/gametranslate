@@ -250,3 +250,47 @@ async def test_uc_noktalar(aiohttp_client, uygulama_ayari):
     govde = await (await ist.get("/api/tv/lg/durum")).text()
     assert json.loads(govde)["asama"] == "bitti" and PAROLA not in govde
     assert set(json.loads(govde)) == {"asama", "mesaj", "ayrinti"}
+
+
+def test_ssh_reddedilirse_eski_ssh_rsa_ile_yeniden_dener(monkeypatch):
+    """Kullanıcı hatası: gerçek LG TV'de 'AuthenticationException'. Eski dropbear rsa-sha2 imzasını reddeder."""
+    import types
+    cagrilar = []
+
+    class Red(Exception):
+        pass
+
+    class SahteIstemci:
+        def set_missing_host_key_policy(self, _): pass
+        def close(self): pass
+        def connect(self, *a, **k):
+            cagrilar.append(k.get("disabled_algorithms"))
+            if not k.get("disabled_algorithms"):
+                raise Red("reddedildi")
+
+    sahte = types.SimpleNamespace(SSHClient=SahteIstemci, AutoAddPolicy=lambda: None,
+                                  AuthenticationException=Red, SSHException=type("S", (Exception,), {}))
+    monkeypatch.setattr(lg, "_paramiko", lambda: sahte)
+    monkeypatch.setattr(lg, "anahtar_yukle", lambda m, p: "anahtar")
+    lg.ParamikoOturumu().baglan("192.168.1.128", "pem", "166324")
+    assert cagrilar == [None, {"pubkeys": ["rsa-sha2-512", "rsa-sha2-256"]}]
+
+
+def test_ssh_iki_yontem_de_reddedilirse_acik_hata(monkeypatch):
+    import types
+
+    class Red(Exception):
+        pass
+
+    class SahteIstemci:
+        def set_missing_host_key_policy(self, _): pass
+        def close(self): pass
+        def connect(self, *a, **k): raise Red("reddedildi")
+
+    sahte = types.SimpleNamespace(SSHClient=SahteIstemci, AutoAddPolicy=lambda: None,
+                                  AuthenticationException=Red, SSHException=type("S", (Exception,), {}))
+    monkeypatch.setattr(lg, "_paramiko", lambda: sahte)
+    monkeypatch.setattr(lg, "anahtar_yukle", lambda m, p: "anahtar")
+    with pytest.raises(lg.TvHatasi) as h:
+        lg.ParamikoOturumu().baglan("192.168.1.128", "pem", "166324")
+    assert h.value.kod == "tv_oturum_bitti" and "ssh-rsa" in h.value.ayrinti

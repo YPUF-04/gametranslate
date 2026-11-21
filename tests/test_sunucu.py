@@ -2,6 +2,8 @@
 import asyncio
 import json
 
+from kopru import SURUM
+
 import pytest
 
 from kopru import anahtarlar, sunucu
@@ -30,7 +32,7 @@ async def sse_oku(yanit, adet):
 async def test_merhaba(istemci):
     r = await istemci.get("/kopru/merhaba")
     j = await r.json()
-    assert j["uygulama"] == "altyazikoprusu" and j["protokol"] == 1 and j["surum"] == "0.1.0"
+    assert j["uygulama"] == "altyazikoprusu" and j["protokol"] == 1 and j["surum"] == SURUM
     assert set(j) == {"uygulama", "surum", "protokol", "ad"}
     assert r.headers["Access-Control-Allow-Origin"] == "*"
 
