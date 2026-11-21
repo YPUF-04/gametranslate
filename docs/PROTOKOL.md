@@ -568,7 +568,7 @@ alanlarının **çözülmüş 16 baytının** onaltılık yazımıdır (32 hex k
 
 ### 15.4 `akis` kanalı
 - stdout: çerçeveler `"AY"` + tür (1 bayt) + 0 + uzunluk (uint32 LE) + veri.
-  - `J`: UTF-8 JSON olay: `bagli`, `ad`, `kare_boyutu {"g","y"}`, `giris_pin_gerekli`, `bitti {"neden":"durdu"|"kullanimda"|"reddedildi"|"ag"|"kapandi"|"diger","ayrinti"}`, `gunluk`.
+  - `J`: UTF-8 JSON olay: `bagli`, `ad`, `kare_boyutu {"g","y"}`, `giris_pin_gerekli`, `bitti {"neden":"durdu"|"kullanimda"|"reddedildi"|"erisilemedi"|"ag"|"kapandi"|"surum"|"diger","ayrinti","neden_kodu"}`, `gunluk`.
   - `V`: kare: genişlik (uint16 LE), yükseklik (uint16 LE), sonra BGRA satırları (satır = g×4 bayt).
   - `S`: ses: 16 kHz, tek kanal, 16 bit işaretli LE PCM (PS5'in 48 kHz stereo Opus sesinden indirgenmiş).
 - stdin satırları: `kare` (son çözülmüş kareyi bir kez gönder; kareler YALNIZ istenince gönderilir),
@@ -612,7 +612,7 @@ Bilen kullanıcı base64 kimliği elle de girebilir.
 SSE `ps5`: `GET /api/ps5`'in `baglanti` gövdesi (değişince).
 
 ### 15.8 Yeniden bağlanma, uyandırma, ses
-- Oturum `bitti` ile kapanırsa (`ag`, `kapandi`, `diger`) 2, 4, 8, 15, 30 sn arayla yeniden denenir
+- Oturum `bitti` ile kapanırsa (`ag`, `erisilemedi`, `kapandi`, `diger`) 2, 4, 8, 15, 30 sn arayla yeniden denenir
   (`durum:"bekliyor"`, `deneme` artar). `reddedildi` (kayıt geçersiz) ve `kullanimda`'da tekrar denenmez:
   `hata` + Türkçe açıklama (`ps5_kayit_gecersiz` / `ps5_kullanimda`).
 - Bağlanmadan önce `bul` ile durum sorulur; `uyku` ise `uyandir` yollanır, 40 sn'ye kadar `acik` beklenir.
