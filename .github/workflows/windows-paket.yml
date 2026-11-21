@@ -260,6 +260,16 @@ jobs:
         with:
           name: AltYaziKoprusu-Windows
           path: yayin
+      - name: Zorunlu sürüm dosyaları var mı (delta isteğe bağlı; ilk Velopack sürümünde yoktur)
+        run: |
+          set -e
+          ls -la yayin
+          for d in "yayin/AltYaziKoprusu.Program-*-full.nupkg" yayin/releases.win.json yayin/RELEASES \
+                   yayin/assets.win.json yayin/AltYaziKoprusu-Windows-Kur.exe "yayin/AltYaziKoprusu-Kur-*.exe" \
+                   "yayin/AltYaziKoprusu-Tasinabilir-*.zip" yayin/SHA256SUMS.txt; do
+            compgen -G "$d" > /dev/null || { echo "EKSIK: $d"; exit 1; }
+          done
+          compgen -G "yayin/AltYaziKoprusu.Program-*-delta.nupkg" > /dev/null || echo "Bilgi: delta paketi yok (ilk sürüm olabilir)"
       - name: GitHub Sürümünü oluştur
         uses: softprops/action-gh-release@v2.2.2
         with:
@@ -273,6 +283,6 @@ jobs:
             yayin/AltYaziKoprusu-Kur-*.exe
             yayin/AltYaziKoprusu-Tasinabilir-*.zip
             yayin/SHA256SUMS.txt
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
           body_path: SURUMLER.md
           prerelease: ${{ contains(github.ref_name, '-') }}
