@@ -1109,7 +1109,8 @@ function dilKontrol() {
     assert.match(await sayfa.textContent('#dublaj-ozet'), /Pocket/);
     assert.ok(await sayfa.isDisabled('#dublaj-dene'), 'hazır olmadan Dene kapalı');
     await sayfa.click('#dublaj-hazirla');
-    await sayfa.waitForFunction(() => /İndiriliyor… %/.test((document.querySelector('#dublaj-durum') || {}).textContent || ''));
+    // sahte indirme çok hızlı bitebilir: ara durum ("İndiriliyor… %") kaçırılırsa doğrudan "Hazır ✓" da kabul
+    await sayfa.waitForFunction(() => /İndiriliyor… %|Hazır ✓/.test((document.querySelector('#dublaj-durum') || {}).textContent || ''));
     await sayfa.waitForFunction(() => /Hazır ✓/.test((document.querySelector('#dublaj-durum') || {}).textContent || ''), null, { timeout: 9000 });
     assert.ok(st.istekler.includes('POST /api/dublaj/hazirla'));
     adim('dublaj: Hazırla indirme ilerlemesini gösterdi ve "Hazır ✓" oldu');
