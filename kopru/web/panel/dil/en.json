@@ -193,6 +193,7 @@
   "ayar.ne": "Choose here whether menus and mission text are translated too.",
   "sozluk.ne": "Write a name here if you want it to always stay the same.",
   "guncelleme.hazir": "A new version is ready ({surum}).",
+  "guncelleme.hazir_kucuk": "A new version is ready ({surum}). Only the changed parts will be downloaded (~{boyut}).",
   "guncelleme.dugme": "Update",
   "guncelleme.indiriliyor": "Downloading the new version… {n}%",
   "guncelleme.dogrulaniyor": "Verifying the file…",

@@ -185,7 +185,28 @@ def _dll_yollari() -> None:
                     pass
 
 
+YARDIMCI_SURECLER = ("--katman", "--dosya-sec")   # aynı exe'nin alt süreçleri: Velopack kancası gerekmez
+
+
+def velopack_baslat() -> None:
+    """Velopack kurulum/güncelleme kancaları (`--veloapp-*`) için; HER ŞEYDEN ÖNCE çağrılır.
+
+    Normal açılışta (kanca argümanı yokken) hemen döner. Kanca argümanı varsa (kurulum, güncelleme, kaldırma)
+    Velopack gerekeni yapar ve süreci kendisi bitirir. Yalnız paketli Windows programında çalışır; geliştirmede,
+    macOS'ta ve `velopack` yoksa sessizce atlanır. Ekran katmanı / dosya seçici gibi alt süreçlerde çağrılmaz."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    if len(sys.argv) > 1 and sys.argv[1] in YARDIMCI_SURECLER:
+        return
+    try:
+        import velopack
+    except ImportError:
+        return
+    velopack.App().run()
+
+
 def main() -> None:
+    velopack_baslat()
     _dll_yollari()
     # Ekran katmanı ayrı süreç olarak aynı programla açılır (paketli .exe'de -m kullanılamaz)
     if len(sys.argv) > 1 and sys.argv[1] == "--katman":
@@ -202,7 +223,7 @@ def main() -> None:
     p.add_argument("--ozdenetim", action="store_true", help="yazı okumayı dener ve çıkar (paket testi)")
     p.add_argument("--ozdenetim-ceviri", action="store_true",
                    help="çevrimdışı çeviriyi dener (dil dosyasını indirir) ve çıkar (paket testi)")
-    a = p.parse_args()
+    a, _bilinmeyen = p.parse_known_args()   # Velopack yeniden başlatırken ek argüman verebilir
     if a.ozdenetim_ceviri:
         raise SystemExit(ozdenetim(ceviri=True))
     if a.ozdenetim:

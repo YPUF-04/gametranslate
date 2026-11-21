@@ -4,3 +4,4 @@ winocr
 pywin32
 keyring>=24
 paramiko>=3.4,<4
+velopack==1.2.161

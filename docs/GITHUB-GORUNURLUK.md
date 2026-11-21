@@ -36,7 +36,7 @@ Bulunabilirlik için en önemli şey, indirilebilir bir **sürümdür**. Sürüm
 
 1. `pyproject.toml` içindeki `version` ile `kopru/__init__.py` içindeki `SURUM` aynı olmalı (ör. `0.2.0`).
 2. Terminalde: `git tag v0.2.0` sonra `git push --tags`.
-3. GitHub'da **Actions** sekmesinde **Windows paketi** işi çalışır (10-15 dakika). Testler geçerse kurucuyu (`AltYaziKoprusu-Kur-0.2.0.exe`), taşınabilir zip'i ve `SHA256SUMS.txt` dosyasını **Releases** sayfasına kendisi koyar.
+3. GitHub'da **Actions** sekmesinde **Windows paketi** işi çalışır (10-15 dakika). Testler geçerse Velopack paketlerini (tam + delta), kurucuyu (`AltYaziKoprusu-Windows-Kur.exe`), eski sürümlerden geçiş kurucusunu (`AltYaziKoprusu-Kur-0.2.0.exe`), taşınabilir zip'i ve `SHA256SUMS.txt` dosyasını **Releases** sayfasına kendisi koyar.
 4. **Releases** sayfasına gidip sürüm notlarını Türkçe olarak düzeltin (nelerin yeni olduğu 2-3 cümle). Bu notlar programın içindeki "Yeni sürüm hazır" kutusunda da görünür.
 5. Etiket adı mutlaka `v` ile başlamalı (`v0.2.0`), yoksa iş çalışmaz. Ön sürümler için `v0.2.0-beta.1` gibi yazın; "son sürüm" olarak işaretlenmez.
 

@@ -184,19 +184,26 @@ Ayar `bolgeler`: en çok 3 dikdörtgen: `[{"x":0.1,"y":0.75,"g":0.8,"y2":0.2,"tu
 - API (yalnız yerel): `GET /api/erisim` → `{"kalan_dakika":12,"kod":"sinirsiz"|"gun"|null,"bitis":"YYYY-MM-DD"|null,"ucretsiz_dakika":30}`; `POST /api/erisim` `{"kod":"AK1-..."}` → `{"tamam":true,"tur":"sinirsiz"|"gun"}` ya da hata `gecersiz_kod` / `suresi_dolmus_kod` (400). `GET /api/durum` ve `durum` olayına süre dolunca `"sinir": true` eklenir. Sayaç yalnız çeviri çalışırken işler, yerel gece yarısı sıfırlanır; `gun` kodu, yük tarihi + `g` gün sonuna kadar geçerlidir. Kod yazarken büyük/küçük harf, boşluk ve tire önemsizdir.
 - Not: Kod açık kaynak olduğu için kontrolü kaldıran kopyalar yapılabilir; bu yasaldır (AGPL). Kod sistemi dürüst kullanıcılar içindir.
 
-## 8. Güncelleme ve TV kurulumu (sürüm 0.2, yalnız yerel)
+## 8. Güncelleme ve TV kurulumu (sürüm 0.2, yalnız yerel; Velopack: sürüm 0.3)
 
 Ayar: `guncelleme_denetle` (bool, varsayılan `true`). Kapalıyken program kendiliğinden hiç istek yapmaz.
 
+**İki güncelleme yolu (API aynıdır, `yalniz_degisenler` alanı hangisinin kullanıldığını söyler):**
+
+1. **Velopack (Windows, program Velopack kurucusuyla kurulmuşsa):** `velopack.UpdateManager` + `GithubSource("https://github.com/YPUF-04/gametranslate")`. Yalnız **değişen parçalar** (delta paketleri) iner; Velopack paketlerin SHA256'sını kendisi doğrular, uygular ve programı yeniden başlatır. Paket kimliği (`packId`) `AltYaziKoprusu.Program`, kanal `win`. Sürüm yayın varlıkları: `AltYaziKoprusu.Program-<sürüm>-full.nupkg`, `…-<sürüm>-delta.nupkg` (önceki sürüm varsa), `releases.win.json`, `RELEASES`, `assets.win.json`. Program açılışta **her şeyden önce** `velopack.App().run()` çağırır (yalnız paketli Windows programında; `--katman` ve `--dosya-sec` alt süreçlerinde çağrılmaz).
+2. **Eski yol (geliştirme, macOS, Velopack'sız zip, eski Inno kurulumu):** tam kurucu (`AltYaziKoprusu-Kur-<sürüm>.exe`) `releases/latest` üzerinden indirilir, `SHA256SUMS.txt` ile doğrulanır ve sessizce çalıştırılır. Sürümler sayfasındaki bu dosya, eski Inno kurulumlarını Velopack'a **bir kez** geçiren "geçiş kurucusu"dur (`paketleme/windows/gecis.iss`); eski sürümlerdeki düğme aynen çalışmaya devam eder.
+
+Kullanıcı verisi (ayarlar `%APPDATA%\AltyaziKoprusu`, dublaj paketi `%LOCALAPPDATA%\AltYaziKoprusu\dublaj-ortami`, modeller, anahtarlar Credential Manager'da) Velopack'ın yönettiği klasörün (`%LOCALAPPDATA%\AltYaziKoprusu.Program`) **dışındadır**; güncelleme ve kaldırma ona dokunmaz, güncelleme dublaj paketini asla yeniden indirmez.
+
 | Yöntem | Yol | Ne yapar |
 |---|---|---|
-| GET | `/api/guncelleme` | `{"var":true,"surum":"0.3.0","notlar":"...","boyut_mb":48,"ilerleme":0,"asama":"bosta"\|"indiriliyor"\|"dogrulaniyor"\|"baslatiliyor"\|"hata","mesaj":"...","mevcut":"0.2.0","denetim_acik":true,"baglanti":"https://github.com/.../releases/latest"}`. Yeni sürüm yoksa `{"var":false,"neden":"guncel"\|"kapali"\|"bekleniyor"}`. Windows dışında `{"var":false,"neden":"desteklenmiyor","mesaj":"...","baglanti":"..."}`. Gerekirse arka planda (günde en çok 1 kez) GitHub'a bakar |
+| GET | `/api/guncelleme` | `{"var":true,"surum":"0.3.0","notlar":"...","boyut_mb":48,"boyut_bayt":50331648,"yalniz_degisenler":false,"ilerleme":0,"asama":"bosta"\|"indiriliyor"\|"dogrulaniyor"\|"baslatiliyor"\|"hata","mesaj":"...","mevcut":"0.2.0","denetim_acik":true,"baglanti":"https://github.com/.../releases/latest"}`. Yeni sürüm yoksa `{"var":false,"neden":"guncel"\|"kapali"\|"bekleniyor"}`. Windows dışında `{"var":false,"neden":"desteklenmiyor","mesaj":"...","baglanti":"..."}`. Gerekirse arka planda (günde en çok 1 kez) GitHub'a bakar. Velopack yolunda `boyut_bayt`/`boyut_mb` yalnız indirilecek delta paketlerinin toplamıdır (delta yoksa tam paket) ve `yalniz_degisenler:true` olur |
 | POST | `/api/guncelleme/denetle` | Kullanıcı elle bastı: ayar kapalı olsa da bir kez bakar; `GET` ile aynı gövdeyi döner |
-| POST | `/api/guncelleme/kur` | İndirmeyi başlatır; `ilerleme` 0-100. `SHA256SUMS.txt` ile doğrulanamazsa kurulmaz (`asama:"hata"`). Doğrulanırsa kurucu `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /GUNCELLEME=1` ile başlar ve sunucu kapanır |
+| POST | `/api/guncelleme/kur` | İndirmeyi başlatır; `ilerleme` 0-100. Eski yol: `SHA256SUMS.txt` ile doğrulanamazsa kurulmaz (`asama:"hata"`); doğrulanırsa kurucu `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /GUNCELLEME=1` ile başlar ve sunucu kapanır. Velopack yolu: delta indirilir (`indiriliyor`), sonra `baslatiliyor` ve `UpdateManager.apply_updates_and_restart`; sunucu kapanır, program yeni sürümle açılır. İndirme/uygulama hatasında program açık kalır (`asama:"hata"`) |
 | POST | `/api/tv/lg/kur` | `{"ip":"192.168.1.30","parola":"ABC123","paket":"asil"\|"deneme"\|"acgsiz"}` → arka planda kurar. Yalnız yerel ağ IPv4. Parola/anahtar hiçbir yere yazılmaz |
 | GET | `/api/tv/lg/durum` | `{"asama":"bosta"\|"anahtar"\|"baglaniyor"\|"yukleniyor"\|"kuruluyor"\|"bitti"\|"hata","mesaj":"...","ayrinti":"ham hata metni"}` |
 
-Güncelleme adresleri yalnız `https` ve `github.com`, `api.github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` olabilir (yönlendirmeler dahil her adımda denetlenir).
+Eski yolda güncelleme adresleri yalnız `https` ve `github.com`, `api.github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` olabilir (yönlendirmeler dahil her adımda denetlenir). Velopack yolunun kaynağı kodda sabittir (yalnız bu deponun GitHub Sürümleri); Velopack Flow/telemetri kullanılmaz.
 LG kurulumu, LG'nin `ares-install` aracını izler: `http://<TV>:9991/webos_rsa` (anahtar), SSH `<TV>:9922` kullanıcı `prisoner`, SFTP `/media/developer/temp/`, `luna-send-pub -i luna://com.webos.appInstallService/dev/install`, ardından `luna://com.webos.applicationManager/launch`.
 
 ## 9. Türkçe dublaj — karakterin kendi sesiyle (sürüm 0.4)
