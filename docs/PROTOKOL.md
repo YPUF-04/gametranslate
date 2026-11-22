@@ -345,6 +345,8 @@ Her altyazı satırı için: kaynak ekrana gelme anı `t_gel`, kaybolma anı `t_
 - Bu kural §7.2 kural 1–3'ün ve §13.2 altyazı kuralının yerine geçer. Silme olayı `yazi-sil` artık `{"id": ...}` taşır; istemci başka id'li silmeyi yok sayar.
 - İstemciler kendi süre sayacıyla silmez (sunucu karar verir); bağlantı koparsa diye 15 sn güvenlik süresi vardır.
 - Deneme/demo yazıları `"otomatik_sil": true` taşır: istemci bunları `sure_ms` sonunda kendisi siler.
+- **Güncelleme (§16.4):** satırlar sıraya girer, çeviriler paralel yürür, hiçbir satır atlanmaz; geride kalınca
+  okuma tabanı uygulanır. Altyazının yeri §16.1'e göre (varsayılan: orijinalin üstü).
 
 ## 14. Türkçe dublaj 2: dublaj paketi, canlı ve video (sürüm 0.9)
 
@@ -636,3 +638,94 @@ SSE `ps5`: `GET /api/ps5`'in `baglanti` gövdesi (değişince).
 - Kolun TV'de kalması ikinci hesap + hiç girdi göndermeme tasarımına dayanır; PS5 yazılımının oturum başında
   odağı uzaktaki kullanıcıya verip vermediği doğrulanmadı. Panel bağlantı testinde kullanıcıya sorar; "Hayır"
   derse önce DualSense'in PS tuşuna basıp ana hesabı seçmesini, olmazsa yedek yolu önerir.
+
+## 16. Orijinal yazının üstünü örtme, düğme simgeleri, okuma gürültüsü, sıralı hızlı gösterim (sonraki sürüm)
+
+Gerçek kullanımdan (PS5 → HDMI → LG TV, laptop gizli Remote Play'den okur): Türkçe yazı İngilizcenin
+yanına/altına çıkıyordu, düğme simgeleri kayboluyordu, HUD simgeleri çeviriye gidiyordu ve hızlı diyalogda
+(1 sn, 1 sn, 2 sn, 1 sn) çeviriler geç gelip bir an görünüyor, bazıları hiç görünmüyordu. Bu bölüm §7.2,
+§11.4, §12.4 ve §13.4'ü günceller.
+
+### 16.1 Üstünü örtme (varsayılan yerleşim)
+- Yeni görünüm alanı `gorunum.yerlesim`: `"ustune"` (varsayılan) | `"cubuk"` (eski davranış: altyazı alttaki/üstteki
+  çubukta, `konum` ile). Panel tek seçimde sunar: "Orijinal yazının üstünde" / "Altta" / "Üstte".
+- `yerlesim:"ustune"` iken `yazi` olayına `ortu` eklenir (kaynak satırın kutusu, tam kareye göre 0–1):
+  `{"x","y","g","y2","zemin":"#RRGGBB","renk":"#RRGGBB","opaklik":0.94,"metin":"çizilecek metin","satir":n}`
+  (`yazi.metin` yine tam çeviridir; `ortu.metin` uçtaki, örtülmeyen düğme simgesi çıkarılmış hâlidir, §16.2).
+  Kutu kaynağın kutusudur, her yöne yazı yüksekliğinin ~%15'i kadar (en az 0,002) genişletilir.
+  `zemin`: kutunun hemen dışındaki piksellerin ortancası (oyunun kendi arka planı); hesaplanamazsa `#0B0F18`.
+  `renk`: zemin açıksa (bağıl parlaklık > 0,55) `#111111`, değilse `gorunum.yazi_rengi`.
+  `satir`: kaynak yazının satır sayısı (yazı boyu hesabı için).
+- Ekran öğeleri: hedef `"ustune"` (kullanıcı kutusu değil) ve `yerlesim:"ustune"` iken `ekran.ogeler[]` öğesine
+  aynı biçimde `ortu` eklenir (`aciklama` kutunun hemen altında küçük yazılır). Kullanıcının çizdiği hedef kutusu ve `hedef:"altyazi"` (çubuk) değişmez (§11.4).
+- İstemci (TV `ortak.js`, `/tv`, `/obs`, bilgisayar katmanı) `ortu` varsa: kutuyu tam o yere, o boyda, opak
+  (`opaklik`, varsayılan 0,94) `zemin` rengiyle çizer; yazı boyunu kutuya sığacak en büyük boydan başlatıp
+  (en çok kutu yüksekliği / satır × 0,8) küçültür; en çok 2 satır (kaynak daha çok satırlıysa o kadar), yalnız
+  boşlukta bölünür. En az okunur boy 1080p'de 16 px (ekran öğesinde 12 px); o boyda da sığmazsa kutu aşağı
+  ve sağa doğru büyür (ekran dışına taşmaz; kenarda ise içeri kayar), İngilizce yine örtülü kalır.
+- LG TV uygulaması `ortak.js`'i paketin içinde taşır: örtü için TV uygulaması bir kez yeniden kurulur (panelden tek tuş);
+  eski uygulama `ortu` alanını tanımaz ve eski çubuğu çizer (geriye uyumlu).
+  `ortu` yoksa eski çizim (§7.2/§12.4) aynen kullanılır.
+- Örtme modunda "önceki satır" (§7.2/7) gösterilmez (eski yazının yerinde zaten yenisi vardır).
+- Katman maskesi (§11.1 yedeği): kaynağın üstündeki örtü maskelenmez (kendi kaynağını silerdi). Bilgisayar ekranı
+  kipinde örtü, katman yakalamadan hariç tutulamıyorsa (`WDA_EXCLUDEFROMCAPTURE` yok, Windows 10 2004 öncesi) okuyucu
+  İngilizce yerine kendi Türkçemizi görür; o durumda `yerlesim:"cubuk"` önerilir.
+
+### 16.2 Düğme simgeleri korunur
+- Düğme belirteçleri: PlayStation `✕ ○ △ □` (ve OCR'ın sık yanlış okudukları: `×`→`✕`, `®`/`©`/`◯`/`⭘`→`○`,
+  `Δ`/`▵`→`△`, `◻`/`▢`/`☐`→`□`; yalnız tek başına duran simge olarak), `L1 L2 L3 R1 R2 R3`, `OPTIONS`,
+  `CREATE`, `SHARE`, `PS`, Xbox `LB RB LT RT LS RS`, köşeli/açılı/yuvarlak parantezli tek harf ya da sayı
+  (`[X]`, `<A>`, `(B)`), yön okları `← → ↑ ↓ ◀ ▶ ▲ ▼`.
+- Çeviriden önce normalize edilir (yanlış okumalar doğru simgeye) ve istemde "düğme belirteçlerini aynen,
+  cümledeki yerinde bırak" kuralı vardır. Çeviride kaybolan belirteç, kaynaktaki yerine göre başa ya da sona eklenir.
+- Örtme: okuyucu kelime kutuları verirse (Windows OCR `words[].bounding_rect`), satırın **başındaki ya da
+  sonundaki** düğme simgesi örtünün dışında bırakılır (gerçek simge görünür; örtü onun yanından başlar/biter)
+  ve `ortu.metin`'den aynı uçtaki belirteç çıkarılır. Ortadaki simgeler örtülür; belirteç Türkçe metnin içinde
+  rozet olarak çizilir (`span.ak-dugme`). Kelime kutusu yoksa (RapidOCR, Apple Vision) hepsi rozettir.
+- `Satir.kelimeler`: `[(metin, x, y, g, y2)]` (0–1, okuyucunun verdiği kelime kutuları; yoksa boş).
+
+### 16.3 Okuma gürültüsü süzgeci (§11.3'e ek, çeviriden önce)
+- Satırdan emoji/piktogram (`So`/`Cs`/`Co` sınıfı, değişken seçiciler, ZWJ) ve 2+ karakterlik simge yığınları
+  silinir; harf, rakam, olağan noktalama (`. , ! ? ; : ' " - – — … ( ) % / & + #`), kesme işaretleri ve §16.2
+  belirteçleri kalır. Tek başına duran, düğme olmayan tek karakterli simgeler atılır.
+- Sonra satır çevrilmez: harf sayısı < 2, ya da harf payı (belirteçler hariç, boşluksuz) < %50, ya da yalnız
+  sayı/süre/koordinat/yüzde (`12:34`, `3/10`, `X: 120 Y: 45`, `100%`, `x3`, `+250`), ya da yalnız belirteçlerden
+  oluşuyor, ya da §11.3 tekrar kuralı. Virgülle ayrılıp `!`/`?`/`.` ile biten tekrar gerçek konuşmadır, çevrilir
+  ("Move, move, move!", "Go, go, go!").
+
+### 16.4 Sıralı, hızlı gösterim (§13.4'ün güncellemesi)
+Gecikme zinciri: kare aralığı (0,25 sn) → OCR → kararlılık → çeviri isteği → yayın → TV. Değişiklikler:
+- **Çeviri kare döngüsünü bekletmez.** Her altyazı satırının çevirisi ayrı bir görevde, aynı anda (paralel)
+  yürür; kare okuma sürer, böylece çeviri beklerken gelen satırlar kaçmaz. Gösterim sırası satırların ekrana
+  geliş sırasıdır (sıra numarası/`id`), çevirilerin bitiş sırası değil.
+- Altyazı satırı ilk görüldüğü karede çevrilmeye başlar (önden çeviri, §6.4; yalnız 50 ms beklenir ki hemen
+  değişen metne istek gitmesin); ikinci karede aynıysa kesinleşir. Önden istek henüz yola çıkmadıysa kesinleşince
+  beklemeden yenisi atılır. Daktilo gibi büyüyen yazı kararlı olunca çevrilir (eskisi gibi). Çevirisi başarısız
+  olan aynı satır en erken 1 sn sonra yeniden denenir (her karede istek atılmaz).
+- HTTP bağlantısı motorlar arasında açık tutulur (aynı olay döngüsünde tek oturum, keep-alive). Gemini'de altyazı
+  isteği düşünmesiz (`thinkingConfig.thinkingLevel:"minimal"`) istenir; model bunu tanımazsa (HTTP 400) bir kez
+  onsuz denenir ve hatırlanır. Kalite `hizli` (Flash-Lite) en kısa gecikmedir; panel bunu "En hızlı" diye sunar.
+- **Kuyruk, hiçbir satır atlanmaz.** Her satır sırayla gösterilir. Satır `i` gösterildiği an `g_i`, gecikmesi
+  `L_i = g_i - t_gel_i`, doğal bitişi `d_i = max(t_git_i + L_i, g_i + taban_i)`.
+  - `okuma_i = max(en_az, min(3,5 sn, max(1,2 sn, karakter × gorunum.karakter_ms)))` (çevirinin karakter sayısı;
+    `karakter_ms` 40–120, varsayılan 60); `en_az_ms` 0 ise hiçbir taban yoktur.
+  - `taban_i`: **geride kalınmışsa** `okuma_i` (satır çevirisi hazır olduktan sonra kuyrukta 0,3 sn'den fazla beklediyse
+    ya da sonraki satır, bu satırın doğal bitişinden `t_git_i + L_i` 0,3 sn'den fazla önce hazırsa); değilse satır bir
+    **diyalog zincirindeyse** (önceki satırın yerine geçerek gösterildiyse ya da sonraki satır hazırsa) `max(en_az, 1,2 sn)`;
+    tek başına satırda `en_az` (§13.4 aynen). Böylece gecikme sabitken (her çeviri aynı sürede) satırlar oyundaki
+    sürelerince görünür; yalnız 1,2 sn'den kısa olanlar 1,2 sn'ye uzar.
+  - Sonraki satır hazırsa (geride kalınmış): satır `i` en erken `g_i + taban_i`'de, en geç
+    `max(g_i + taban_i, min(d_i, t_hazir_{i+1}))`'de biter ve sonraki **aynı anda** yerine geçer (boşluk, çakışma yok).
+    Uzun satır okuma tabanına kırpılır, kısa satır okuma tabanına uzatılır: kuyruk satır atarak değil, aradaki
+    boşluğu kırparak yetişir.
+  - Sonraki satır henüz çevriliyorsa ve kaynak hiç boşalmadan değiştiyse eskisi en çok `d_i + 2 sn` bekler; yoksa `d_i`'de
+    `yazi-sil {"id"}`.
+  - Çevirisi başarısız olan satır kuyruktan çıkar (hata `durum` olayıyla bildirilir).
+- Örnek (sınanır): oyunda 1, 1, 2, 1 sn'lik satırlar, her çeviri 1,5 sn → dördü de sırayla, her biri en az
+  okuma tabanı kadar görünür.
+- **Gecikme bilgisi:** `GET /api/durum` yanıtına `gecikme` eklenir (yalnız çalışırken, son 20 satırın ortancası, ms):
+  `{"kare_ms","okuma_ms","kararlilik_ms","ceviri_ms","bekleme_ms","toplam_ms","kuyruk":n,"atlanan":n,"olcum":n}`
+  (`kare`/`okuma`: son karenin alınması ve yazı okuma süresi; `kararlilik`: ilk görülme → kesinleşme; `ceviri`:
+  istek → yanıt; `bekleme`: çeviri hazır → ekrana; `toplam`: ilk görülme → ekrana; `kuyruk`: sırada bekleyen satır;
+  `atlanan`: çevirisi başarısız olduğu için gösterilemeyen satır sayısı). Panel ana ekranda kısa bir satırla gösterir.
+- Ekran öğesi (görev/menü) çevirisi de kare döngüsünü bekletmez: önceki öğe çevirisi sürerken o karede öğe adımı atlanır.
