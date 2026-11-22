@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-# Windows için: testler -> PyInstaller paketi -> Velopack (tam + delta + Setup) -> geçiş kurucusu (Inno) -> SHA256SUMS.txt -> (etikette) GitHub Sürümü.
+# Windows için: testler -> PyInstaller paketi -> Velopack (tam + Setup) -> geçiş kurucusu (Inno) -> SHA256SUMS.txt
+#   -> delta (Linux işi; Windows zstd.exe Türkçe başlatıcı adını açamıyor) -> (etikette) GitHub Sürümü.
 # Sürüm yayınlamak: pyproject.toml ve kopru/__init__.py içindeki sürümü yükseltin, sonra `git tag v0.2.0 && git push --tags`.
 # Hiçbir sunucu kullanılmaz; her şey GitHub Actions ve GitHub Releases üzerindedir.
 name: Windows paketi
@@ -71,6 +72,8 @@ jobs:
   paket:
     needs: [test, uzaktan]
     runs-on: windows-latest
+    outputs:
+      surum: ${{ steps.surum.outputs.surum }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -202,9 +205,10 @@ jobs:
             '--releaseNotes','SURUMLER.md','--outputDir','dist/velopack')
           vpk pack @ortak --delta BestSpeed
           if ($LASTEXITCODE -ne 0) {
-            # Windows'taki zstd.exe Türkçe harfli dosya adını (AltYazıKöprüsü_ExecutionStub.exe) açamıyor.
-            # Sürüm yine çıksın: delta olmadan (güncelleme bu kez tam paket indirir). Kalıcı çözüm: KARARLAR.md.
-            Write-Host "::warning::Delta üretilemedi; delta olmadan yeniden paketleniyor."
+            # Windows'taki zstd.exe Türkçe harfli dosya adını (AltYazıKöprüsü_ExecutionStub.exe) açamıyor (velopack#1105;
+            # başlatıcı 1.2.158'den beri --packTitle'dan adlanır). Burada delta'sız paketlenir; delta'yı sonraki "delta"
+            # işi Linux'ta (zstd UTF-8 adları açar) aynı vpk 1.2.161 ile üretip sürüm dosyalarına ekler (KARARLAR.md).
+            Write-Host "::notice::Delta Windows'ta üretilemedi; delta olmadan paketleniyor, delta Linux işinde üretilecek."
             Remove-Item -Recurse -Force dist/velopack -ErrorAction SilentlyContinue
             vpk pack @ortak --delta none
             if ($LASTEXITCODE -ne 0) { throw "vpk pack başarısız." }
@@ -254,9 +258,72 @@ jobs:
           name: AltYaziKoprusu-Windows
           path: dist/yayin/*
 
+  # ---- Delta (yalnız değişen parçalar) Linux'ta: Türkçe kısayol adı (packTitle) korunur ----
+  # vpk 1.2.161 Windows'ta başlatıcıyı packTitle'dan adlar ve delta için zstd.exe'ye verir; zstd.exe Türkçe harfli
+  # yolu açamaz (velopack#1105, düzeltmesi yalnız 1.3 ön sürümünde). Linux'taki zstd UTF-8 adları açar: aynı vpk
+  # sürümüyle `vpk delta generate` burada çalışır, paketleme/velopack_delta.py sürüm dosyalarını (releases.win.json,
+  # assets.win.json, SHA256SUMS.txt) günceller. Herhangi bir adım olmazsa dosyalar AYNEN geçer (sürüm delta'sız çıkar).
+  delta:
+    needs: paket
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: paketleme
+      - uses: actions/download-artifact@v4
+        with:
+          name: AltYaziKoprusu-Windows
+          path: yayin
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Delta'yı Linux'ta üret ve sürüm dosyalarına ekle
+        shell: bash
+        env:
+          SURUM: ${{ needs.paket.outputs.surum }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          uyar() { echo "::warning::$1 Sürüm delta'sız çıkar (güncelleme tam paket indirir)."; exit 0; }
+          ls -la yayin
+          if compgen -G "yayin/AltYaziKoprusu.Program-*-delta.nupkg" > /dev/null; then echo "Delta Windows işinde üretilmiş."; exit 0; fi
+          command -v zstd > /dev/null || sudo apt-get install -y zstd || uyar "zstd kurulamadı."
+          dotnet tool install --global vpk --version 1.2.161 || uyar "vpk kurulamadı."
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          mkdir -p onceki
+          vpk download github --repoUrl "https://github.com/${{ github.repository }}" --channel win --token "$GH_TOKEN" --outputDir onceki \
+            || { echo "Önceki Velopack sürümü yok (ilk sürüm ya da ağ): delta üretilmez."; exit 0; }
+          rm -f onceki/AltYaziKoprusu.Program-"$SURUM"-*.nupkg
+          taban=$(ls onceki/AltYaziKoprusu.Program-*-full.nupkg 2>/dev/null | sort -V | tail -1)
+          [ -n "$taban" ] || { echo "Önceki tam paket yok: delta üretilmez."; exit 0; }
+          yeni="yayin/AltYaziKoprusu.Program-$SURUM-full.nupkg"
+          [ -f "$yeni" ] || uyar "Yeni tam paket yok ($yeni)."
+          echo "Delta: $(basename "$taban") -> $(basename "$yeni")"
+          vpk delta generate --mode BestSpeed --base "$taban" --new "$yeni" --output delta.nupkg || uyar "vpk delta generate başarısız."
+          # doğrulama: delta önceki pakete uygulanınca yeni paketin dosyaları birebir çıkmalı
+          vpk delta patch --base "$taban" --patch delta.nupkg --output yeniden.nupkg || uyar "Delta doğrulanamadı (patch)."
+          python3 - "$yeni" yeniden.nupkg <<'PY' || uyar "Delta doğrulanamadı (içerik farklı)."
+          import hashlib, sys, zipfile
+          def icerik(p):
+              z = zipfile.ZipFile(p)
+              return {n: hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist() if n.startswith("lib/")}
+          a, b = icerik(sys.argv[1]), icerik(sys.argv[2])
+          print(f"lib/ dosyaları: {len(a)}; aynı: {a == b}")
+          sys.exit(0 if a == b else 1)
+          PY
+          # sürüm dosyaları kopyada güncellenir, başarılıysa yer değiştirilir (yarım güncelleme kalmasın)
+          cp -a yayin yayin-yeni
+          python3 paketleme/velopack_delta.py yayin-yeni delta.nupkg "$SURUM" || uyar "Sürüm dosyaları güncellenemedi."
+          rm -rf yayin && mv yayin-yeni yayin
+          ls -la yayin && cat yayin/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AltYaziKoprusu-Windows-son
+          path: yayin/*
+
   yayinla:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: paket
+    needs: [paket, delta]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -266,7 +333,7 @@ jobs:
           sparse-checkout: SURUMLER.md
       - uses: actions/download-artifact@v4
         with:
-          name: AltYaziKoprusu-Windows
+          name: AltYaziKoprusu-Windows-son
           path: yayin
       - name: Zorunlu sürüm dosyaları var mı (delta isteğe bağlı; ilk Velopack sürümünde yoktur)
         run: |
