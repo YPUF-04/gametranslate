@@ -1,5 +1,14 @@
 # Sürüm notları
 
+## 0.1.3 — Çeviri İngilizcenin üstünü kaplar, cümle atlamaz (2026-11-22)
+- **Çeviri İngilizce yazının tam üstüne gelir** ve onu kaplar; yazı kutuya sığacak boyutta olur. (Eski görünüm için: Ayarlar → Yazı nerede? → Altta.)
+- **Kol tuşları kapanmaz:** ✕ ○ △ □, R2, OPTIONS gibi tuş işaretleri olduğu gibi kalır.
+- **Simgeler ve emojiler çevrilmez:** yalnız gerçek kelimeler çevrilir; can barı, sayaç, koordinat gibi şeyler atlanır.
+- **Hızlı konuşmada cümle atlamaz:** çeviriler sırayla ve daha hızlı gelir; her cümle okunacak kadar ekranda kalır.
+- **Güncelleme bildirimi:** yeni sürüm çıkınca en üstte "Yeni sürüm var, indirmek ister misin?" ve "Neler yeni?" listesi çıkar.
+- **Küçük güncellemeler:** bundan sonraki güncellemeler yalnız değişen parçaları indirir.
+- **LG TV uygulamasını bir kez yeniden kur:** yeni görünüm için panelde **TV'ye kur**'a bir kez daha bas.
+
 ## 0.1.2 — LG TV kurulum düzeltmesi (2026-11-22)
 (0.1.1'in kurulum dosyaları üretilemedi; aynı düzeltme bu sürümle geliyor.)
 - **LG TV'ye tek tuşla kurulum:** bazı LG TV'lerde "AuthenticationException" hatasıyla bağlantı reddediliyordu. TV'nin eski bağlantı sistemi yeni imza yöntemini tanımıyordu; program artık reddedilince TV'nin anladığı eski yöntemle yeniden dener.
