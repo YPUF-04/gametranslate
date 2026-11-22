@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import _http, istem
-from .temel import AnahtarHatasi, Baglam, Ceviri, ModelBulunamadi, MotorHatasi
+from .temel import AgHatasi, AnahtarHatasi, Baglam, Ceviri, ModelBulunamadi, MotorHatasi
 
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 VARSAYILAN_MODEL = "gemini-3.8-flash"
@@ -26,6 +26,8 @@ class GeminiMotoru:
     def __init__(self, anahtar: str | None, model: str = VARSAYILAN_MODEL) -> None:
         self._anahtar = anahtar
         self.model = model
+        # §16.4: altyazı için düşünmesiz (en kısa gecikme); model tanımazsa (HTTP 400) bir kez onsuz denenir
+        self.dusunme_kapali = True
 
     async def _gonder(self, govde: dict[str, Any], zaman_asimi: float = 8.0) -> Any:
         """İstek; model 404 verirse sıradaki yedek modelle yeniden dener, çalışanı hatırlar."""
@@ -42,6 +44,19 @@ class GeminiMotoru:
             return veri
         raise son or ModelBulunamadi("HTTP 404")
 
+    async def _hizli_gonder(self, govde: dict[str, Any]) -> Any:
+        if not self.dusunme_kapali:
+            return await self._gonder(govde)
+        hizli = {**govde, "generationConfig": {**govde["generationConfig"],
+                                               "thinkingConfig": {"thinkingLevel": "minimal"}}}
+        try:
+            return await self._gonder(hizli)
+        except AgHatasi as e:
+            if "400" not in str(e):
+                raise
+            self.dusunme_kapali = False   # bu model düşünme ayarını tanımıyor: hatırla, onsuz dene
+            return await self._gonder(govde)
+
     async def cevir(self, metinler: list[str], kaynak: str, hedef: str,
                     sozluk: dict[str, str], aciklama: bool = False,
                     baglam: Baglam | None = None) -> list[Ceviri]:
@@ -54,7 +69,7 @@ class GeminiMotoru:
             "contents": [{"role": "user", "parts": [{"text": istem.kullanici_metni(metinler, baglam)}]}],
             "generationConfig": {"responseMimeType": "application/json"},
         }
-        veri = await self._gonder(govde)
+        veri = await self._hizli_gonder(govde)
         try:
             ham = "".join(p.get("text", "") for p in veri["candidates"][0]["content"]["parts"])
             sonuc, terimler = istem.yaniti_coz_tam(ham, len(metinler), aciklama)

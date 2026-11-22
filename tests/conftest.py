@@ -75,3 +75,19 @@ def ps5_yardimci_yok(monkeypatch):
     """Testler geliştiricinin yerel ayk-uzaktan derlemesini bulmasın (PS5 testleri sahte yardımcı verir)."""
     from kopru.uzaktan import yardimci
     monkeypatch.setattr(yardimci, "yardimci_yolu", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _ortak_http_kapat():
+    """§16.4 ortak (keep-alive) HTTP oturumu test döngüsü kapanmadan kapatılsın (uyarı kalmasın)."""
+    yield
+    import asyncio
+    from kopru.ceviri import _http
+    for dongu, oturum in list(_http._ORTAK.values()):
+        if not oturum.closed and not dongu.is_closed() and not dongu.is_running():
+            try:
+                dongu.run_until_complete(oturum.close())
+            except RuntimeError:
+                pass
+    _http._ORTAK.clear()
+    del asyncio

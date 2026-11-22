@@ -156,9 +156,10 @@ async def test_maske_yalniz_ayni_ekran_ve_bilgisayar_kipinde():
 
 async def test_altyazi_kutusu_kaynakla_cakismiyorsa_maskelenir():
     k = [(10, [Satir("Hello there my old friend", 0.0, 0.0, 1.0, 0.5)])] * 3   # altyazı bölgesi üstte, kutu altta
-    olaylar, _, _, isl = await kos(k, {"bolgeler": [_b(x=0.1, y=0.1, g=0.8, y2=0.3, tur="altyazi")]})
+    cubuk = {**VARSAYILAN["gorunum"], "yerlesim": "cubuk"}   # §16.1: örtüde yazı kaynağın üstündedir, maske yok
+    olaylar, _, _, isl = await kos(k, {"bolgeler": [_b(x=0.1, y=0.1, g=0.8, y2=0.3, tur="altyazi")], "gorunum": cubuk})
     assert yalniz(olaylar, "yazi")
-    maske = isl.maske_kutulari({**VARSAYILAN, "gosterim": "bilgisayar"})
+    maske = isl.maske_kutulari({**VARSAYILAN, "gosterim": "bilgisayar", "gorunum": cubuk})
     assert maske and maske[0][1] > 0.6
 
 

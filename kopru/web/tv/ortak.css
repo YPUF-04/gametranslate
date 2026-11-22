@@ -50,14 +50,31 @@
   background: rgba(11, 21, 36, 0.9); color: #FFD166; display: none; font-weight: 600;
   box-shadow: inset 0 0 0 0.05em rgba(255, 209, 102, 0.35), 0 0.2em 0.8em rgba(0, 0, 0, 0.3); }
 
+/* PROTOKOL 16.1: orijinal yazının üstünü örten kutu: tam kaynağın yerinde ve boyunda, opak (zemin rengi JS'ten);
+   yazı boyu JS'te kutuya sığdırılır. Ekran öğesi örtüsü sola, altyazı örtüsü ortaya hizalıdır. */
+.ak-kok .ak-ortu-katman { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.ak-kok .ak-ortu { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center;
+  align-items: center; text-align: center; overflow: visible; border-radius: 0.14em; font-weight: 600; line-height: 1.2;
+  white-space: nowrap; opacity: 0; transition: opacity 0.15s linear; text-shadow: none; }
+.ak-kok .ak-ortu.ak-acik { opacity: 1; }
+.ak-kok .ak-ortu-oge { align-items: flex-start; text-align: left; font-weight: 500; }
+.ak-kok .ak-ortu-metin { display: block; white-space: nowrap; }
+.ak-kok .ak-ortu-konusan { font-weight: 700; }
+.ak-kok .ak-ortu-aciklama { position: absolute; left: 0; top: 100%; margin-top: 0.15em; padding: 0.1em 0.35em; border-radius: 0.3em;
+  font-size: 0.72em; font-weight: 400; white-space: nowrap; color: #D6E4F2; background: rgba(9, 15, 27, 0.78); }
+/* §16.2: Türkçe metnin içindeki düğme simgesi (✕ ○ △ □, R2, [X]...) rozet olarak */
+.ak-kok .ak-dugme { display: inline-block; padding: 0 0.2em; margin: 0 0.03em; border: 0.07em solid currentColor; border-radius: 0.4em;
+  line-height: 1.05; font-weight: 700; font-size: 0.9em; vertical-align: 0.04em; }
+.ak-kok .ak-olcer { position: absolute; left: -10000px; top: 0; visibility: hidden; white-space: nowrap; font-weight: 600; line-height: 1.2; }
+
 /* §13.1: yazılar gizli (kısayol): çeviri sürer, çizim görünmez */
-.ak-kok.ak-gizli .ak-yazi, .ak-kok.ak-gizli .ak-ekran { visibility: hidden; }
+.ak-kok.ak-gizli .ak-yazi, .ak-kok.ak-gizli .ak-ekran, .ak-kok.ak-gizli .ak-ortu-katman { visibility: hidden; }
 
 /* JS dengesi zorlandığında (sınama) CSS dengesi kapalı */
 .ak-kok.ak-js-denge .ak-metin { text-wrap: wrap; }
 
 /* hareketi azalt: hiçbir geçiş yok, her şey anında */
-.ak-kok.ak-azalt .ak-yazi-kutu, .ak-kok.ak-azalt .ak-onceki, .ak-kok.ak-azalt .ak-oge { transition: none !important; }
+.ak-kok.ak-azalt .ak-yazi-kutu, .ak-kok.ak-azalt .ak-onceki, .ak-kok.ak-azalt .ak-oge, .ak-kok.ak-azalt .ak-ortu { transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  .ak-kok .ak-yazi-kutu, .ak-kok .ak-onceki, .ak-kok .ak-oge { transition: none !important; }
+  .ak-kok .ak-yazi-kutu, .ak-kok .ak-onceki, .ak-kok .ak-oge, .ak-kok .ak-ortu { transition: none !important; }
 }

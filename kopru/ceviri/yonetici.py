@@ -8,6 +8,7 @@ import time
 from collections import deque
 from typing import Any, Callable
 
+from .. import dugmeler
 from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import normallestir
@@ -253,7 +254,7 @@ class CeviriYoneticisi:
                 if len(ceviriler) != len(yeni):   # savunma: zip sessizce kısaltırdı ve bekleyenler sonsuza dek asılırdı
                     raise MotorHatasi("Çeviri sayısı uyuşmuyor")
                 for m, c in zip(yeni, ceviriler):
-                    c = Ceviri(sozluk_mod.son_kontrol(m, c.metin, self.terimler), c.aciklama)
+                    c = Ceviri(dugmeler.dugme_koru(m, sozluk_mod.son_kontrol(m, c.metin, self.terimler)), c.aciklama)
                     if normallestir(c.metin) == normallestir(m):
                         self._degismez_onayli.add(normallestir(m))
                     if self.onbellek and c.metin:

@@ -289,6 +289,31 @@ class Katman:
         t = int(18 + (1 - a) * 40)   # renk anahtarlı saydamlıkta gerçek yarı saydamlık yok: koyu düz kutu
         return f"#{t:02x}{t:02x}{t + 8:02x}"
 
+    def _ortu_ciz(self, o: dict[str, Any], metin: str, W: int, H: int, en_az: int,
+                  yasak: list[tuple[int, int, int, int]], sola: bool) -> tuple[int, int, int, int] | None:
+        """§16.1: kutuyu kaynağın yerine, o boyda, zemin rengiyle (opak) çizer; yazıyı kutuya sığdırır."""
+        g, h = float(o["g"]) * W, float(o["y2"]) * H
+        lay = mantik.ortu_yerlesim(metin, lambda t, px: self.font(px, True).measure(t), g, h,
+                                   int(o.get("satir") or 1), max(8, int(round(en_az * H / 1080))))
+        x0 = int(max(0, min(float(o["x"]) * W, W - lay["g"])))
+        y0 = int(max(0, min(float(o["y"]) * H, H - lay["y2"])))
+        x1, y1 = int(x0 + lay["g"] + 0.999), int(y0 + lay["y2"] + 0.999)
+        if mantik.kutu_kesisir((x0, y0, x1, y1), yasak):   # §12.1: kendi panelimizin üstüne çizilmez
+            return None
+        zemin = str(o.get("zemin") or "#0B0F18")
+        self.tuval.create_rectangle(x0, y0, x1, y1, fill=zemin, outline=zemin)
+        renk = str(o.get("renk") or "#FFFFFF")
+        f = self.font(lay["px"], True)
+        sy = f.metrics("linespace")
+        cy = y0 + (y1 - y0 - sy * len(lay["satirlar"])) / 2
+        for sat in lay["satirlar"]:
+            if sola:
+                self.tuval.create_text(x0 + lay["dolgu"], cy, text=sat, anchor="nw", font=f, fill=renk)
+            else:
+                self.tuval.create_text((x0 + x1) / 2, cy, text=sat, anchor="n", font=f, fill=renk)
+            cy += sy
+        return (x0, y0, x1, y1)
+
     def ciz(self) -> None:
         z = self.zam.goruntu()
         g = z.gorunum
@@ -297,7 +322,15 @@ class Katman:
         kutular: list[tuple[int, int, int, int]] = []
         boyut = max(14, int(g.get("yazi_boyutu", 44) * (H / 1080) * 1.0) or 14)
         yasak = self._yasak_kutular()
+        ortu_acik = g.get("yerlesim", "ustune") != "cubuk"
         for o in z.ogeler:
+            ortu = mantik.ortu_gecerli(o.get("ortu")) if ortu_acik else None
+            if ortu is not None:   # §16.1: kaynak yazının üstünü örter
+                k = self._ortu_ciz(ortu, str(ortu.get("metin") or o.get("metin") or ""), W, H, mantik.ORTU_OGE_EN_AZ_PX,
+                                   yasak, sola=True)
+                if k:
+                    kutular.append(k)
+                continue
             p = mantik.ekran_ogesi_hazirla(o)
             lay = mantik.ekran_ogesi_yerlesim(
                 p["metin"], p["aciklama"], lambda t, px: self.font(px, False).measure(t),
@@ -318,7 +351,16 @@ class Katman:
                                        font=self.font(lay["aciklama_px"], False), fill="#D6E4F2")
                 cy += lay["aciklama_px"] * 1.25
             kutular.append((x0, y0, x1, y1))
-        if z.yazi:
+        if z.yazi and ortu_acik and z.yazi.get("ortu"):
+            y = z.yazi
+            o = y["ortu"]
+            metin = str(o.get("metin") or y["metin"])
+            if y.get("konusan"):
+                metin = f"{y['konusan']}: {metin}"
+            k = self._ortu_ciz(o, metin, W, H, mantik.ORTU_EN_AZ_PX, yasak, sola=False)
+            if k:
+                kutular.append(k)
+        elif z.yazi:
             y = z.yazi
             azami = W * 0.86
             f = self.font(boyut, True)
@@ -374,7 +416,7 @@ class Katman:
 
     def _imza(self) -> str:
         z = self.zam.goruntu()
-        return json.dumps([z.yazi and (z.yazi["id"], z.yazi["metin"], z.yazi["konusan"]), z.onceki,
+        return json.dumps([z.yazi and (z.yazi["id"], z.yazi["metin"], z.yazi["konusan"], z.yazi.get("ortu")), z.onceki,
                            z.ogeler, z.gorunum, z.bildirim, z.gizli], sort_keys=True, default=str)
 
     def tik(self) -> None:

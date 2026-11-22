@@ -19,6 +19,8 @@ class Satir:
     g: float   # genişlik
     y2: float  # yükseklik
     satir: int = 1   # birleştirilmiş öğede kaç okuma satırından oluştuğu (yazı boyu hesabı için)
+    # §16.2: okuyucunun verdiği kelime kutuları [(metin, x, y, g, y2)] (0-1); vermeyen okuyucuda boş
+    kelimeler: tuple = ()
 
 
 class Okuyucu(Protocol):

@@ -16,7 +16,7 @@ from aiohttp import web
 from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, erisim as erisim_mod, guncelleme as guncelleme_mod, hafiza as hafiza_mod,
                metinler, oyunlar, paket as paket_mod, sozluk as sozluk_mod)
 from . import oyun_bilgisi
-from .ceviri import BILGI, motor_olustur
+from .ceviri import BILGI, _http, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .ceviri.yonetici import CeviriYoneticisi
 from . import dublaj as dublaj_mod
@@ -543,6 +543,8 @@ async def api_durum(request: web.Request) -> web.Response:
         "tv_sayisi": d.yayin.istemci_sayisi, "son_yazi": y["metin"] if y else "",
         "adresler": lan_adresleri(), "kapi": d.calisan_kapi or d.ayar["kapi"],
         "sinir": d.erisim.sinir(), **d.yonetici.durum_ek()}
+    if d.isleme is not None and d.calisiyor():   # §16.4: aşama aşama gecikme
+        yanit["gecikme"] = d.isleme.gecikme_bilgisi()
     uyari = await d.kaynak_uyarisi()
     if uyari:
         yanit["uyari"] = uyari
@@ -569,12 +571,14 @@ def _gorunum_gecerli(g: dict[str, Any]) -> bool:
         return isinstance(v, (int, float)) and not isinstance(v, bool) and lo <= v <= hi
     for alan, (lo, hi) in {"yazi_boyutu": (8, 300), "kenar_bosluk": (0, 0.5), "arka_plan": (0, 1),
                            "ekran_olcek": (ayarlar.EN_KUCUK_OLCEK, ayarlar.EN_BUYUK_OLCEK),
-                           "en_az_ms": (0, 3000)}.items():
+                           "en_az_ms": (0, 3000), "karakter_ms": (40, 120)}.items():
         if alan in g and not sayi(g[alan], lo, hi):
             return False
     for alan in ("yazi_rengi", "konusan_rengi"):
         if alan in g and not (isinstance(g[alan], str) and _RENK.fullmatch(g[alan])):
             return False
+    if "yerlesim" in g and g["yerlesim"] not in ayarlar.YERLESIMLER:
+        return False
     for alan in ("asil_goster", "ekran_cevir", "onceki_goster"):
         if alan in g and not isinstance(g[alan], bool):
             return False
@@ -1788,6 +1792,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
         durum.kisayol.durdur()
         await durum.kapat()
         await app[GUNCELLEME].kapat()
+        await _http.ortak_kapat()   # §16.4: açık tutulan çeviri bağlantıları
     app.on_startup.append(ac)
     app.on_cleanup.append(kapat)
     return app

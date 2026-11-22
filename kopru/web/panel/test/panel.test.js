@@ -1240,6 +1240,15 @@ function dilKontrol() {
     await sayfa.selectOption('#hedef-dil', 'de');
     await sayfa.waitForTimeout(200);
     assert.strictEqual(st.ayarlar.hedef_dil, 'de');
+    // PROTOKOL 16.1: yazı yeri — varsayılan "orijinalin üstünde"; altta/üstte eski çubuk
+    assert.strictEqual(await sayfa.inputValue('#konum'), 'ustune');
+    assert.match(await sayfa.textContent('#konum'), /Orijinal yazının üstünde/);
+    await sayfa.selectOption('#konum', 'ust');
+    await sayfa.waitForTimeout(200);
+    assert.strictEqual(st.ayarlar.gorunum.yerlesim, 'cubuk'); assert.strictEqual(st.ayarlar.gorunum.konum, 'ust');
+    await sayfa.selectOption('#konum', 'ustune');
+    await sayfa.waitForTimeout(200);
+    assert.strictEqual(st.ayarlar.gorunum.yerlesim, 'ustune');
     await sayfa.click('#sozluk-kaydet');
     await sayfa.waitForFunction(() => /Kaydedildi/.test(document.querySelector('#sozluk-durum').textContent));
     await sayfa.waitForFunction(() => /deneme altyazısı/.test(document.querySelector('#son-yazi').textContent));

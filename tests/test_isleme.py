@@ -192,7 +192,8 @@ async def test_devam_ayni_id_devam_true():
 
 
 async def test_yeni_cumle_yeni_id():
-    k = [(10, altyazi("We should head back"))] * 3 + [(40, altyazi("Watch out, they are coming!"))] * 3
+    # §16.4: yerine geçilen satır en az 1,2 sn kalır; yenisi o an çapraz geçer
+    k = [(10, altyazi("We should head back"))] * 3 + [(40, altyazi("Watch out, they are coming!"))] * 6
     olaylar = await kos_zamanli(k)
     y = [v for _, v in yalniz(olaylar, "yazi") if v["devam"] is False or True]
     ilk, ikinci = y[0], y[-1]

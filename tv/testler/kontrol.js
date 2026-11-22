@@ -78,6 +78,41 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     var yb = await p.evaluate(function () { return window.AKOverlay.yerlesimBul('Return to the base camp quickly', function (t, px) { return t.length * px * 0.55; }, 400, 16, 11); });
     assert(yb.satirlar.length <= 2 && yb.px >= 11, JSON.stringify(yb)); ok('AKOverlay.yerlesimBul saf düzen: ≤2 satır, ≥11 px');
     s.yayinla('ekran-sil'); await p.waitForFunction(function () { return !document.querySelector('.ak-oge'); });
+    // ---------- PROTOKOL 16.1/16.2: orijinal yazının üstünü örtme ----------
+    var ortu = { x: 0.3, y: 0.8, g: 0.4, y2: 0.06, zemin: '#E6E6E6', renk: '#111111', opaklik: 0.94, satir: 1, metin: "Kabul etmek için ✕'e bas" };
+    s.yayinla('yazi', { id: 'o1', metin: "Kabul etmek için ✕'e bas", asil: 'Press ✕ to Accept', sure_ms: 3000, ortu: ortu });
+    await p.waitForSelector('.ak-ortu-yazi.ak-acik'); await bekle(250);
+    var ob = await p.$eval('.ak-ortu-yazi', function (e) { var b = e.getBoundingClientRect(), cs = getComputedStyle(e), m = e.querySelector('.ak-ortu-metin');
+      return { l: b.left, t: b.top, w: b.width, h: b.height, bg: cs.backgroundColor, c: cs.color, f: parseFloat(cs.fontSize), op: +cs.opacity,
+        mw: m.getBoundingClientRect().width, mh: m.getBoundingClientRect().height, d: Array.prototype.map.call(e.querySelectorAll('.ak-dugme'), function (x) { return x.textContent; }), txt: m.textContent }; });
+    assert(Math.abs(ob.l - 576) <= 1 && Math.abs(ob.t - 864) <= 1 && Math.abs(ob.w - 768) <= 1 && Math.abs(ob.h - 64.8) <= 1.5, JSON.stringify(ob));
+    assert.strictEqual(ob.bg, 'rgba(230, 230, 230, 0.94)'); assert.strictEqual(ob.c, 'rgb(17, 17, 17)'); assert(ob.op > 0.99, 'örtü görünmüyor');
+    assert(ob.mw <= ob.w && ob.mh <= ob.h + 1 && ob.f >= 16, JSON.stringify(ob)); assert.deepStrictEqual(ob.d, ['✕']); assert(ob.txt.indexOf('Kabul etmek için') === 0, ob.txt);
+    assert.strictEqual(await p.isVisible('.ak-yazi-kutu'), false, 'örtüde alt çubuk da görünüyor'); ok('§16.1: altyazı kaynağın yerinde, o boyda, opak örtü; düğme rozet; yazı kutuya sığdı');
+    await p.screenshot({ path: path.join(SHOT, 'tv-ortu.png') });
+    var uzunTr = 'Bu çok uzun bir Türkçe çeviri cümlesi olup İngilizce kutusuna en küçük okunur boyda bile sığmayabilir, kutu büyümelidir';
+    s.yayinla('yazi', { id: 'o1', metin: uzunTr, sure_ms: 3000, devam: true, ortu: { x: 0.3, y: 0.8, g: 0.2, y2: 0.03, zemin: '#101418', renk: '#FFFFFF', metin: uzunTr } });
+    await bekle(100);
+    var ob2 = await p.$$eval('.ak-ortu-yazi', function (l) { return l.map(function (e) { var b = e.getBoundingClientRect(), m = e.querySelector('.ak-ortu-metin');
+      return { w: b.width, h: b.height, b: b.bottom, r: b.right, f: parseFloat(getComputedStyle(e).fontSize), mw: m.getBoundingClientRect().width, mh: m.getBoundingClientRect().height }; }); });
+    assert.strictEqual(ob2.length, 1, 'aynı id (devam) yerinde güncellenmeli: ' + JSON.stringify(ob2));
+    assert(Math.abs(ob2[0].f - 16) <= 0.5 && ob2[0].h > 32.4 && ob2[0].mh <= ob2[0].h + 1 && ob2[0].mw <= ob2[0].w + 1 && ob2[0].b <= 1081 && ob2[0].r <= 1921, JSON.stringify(ob2));
+    ok('§16.1: sığmayan çeviri en az 16 px, kutu büyür, ekrandan taşmaz; devam yerinde');
+    s.yayinla('yazi-sil', { id: 'o1' }); await p.waitForFunction(function () { return !document.querySelector('.ak-ortu-yazi'); }, null, { timeout: 2000 }); ok('§16.1: yazi-sil örtüyü kaldırır');
+    s.yayinla('ekran', { id: 'eo', ogeler: [{ id: 'k1', x: 0.05, y: 0.1, g: 0.3, y2: 0.04, metin: 'Nehir kenarında üç ot topla', tur: 'gorev', aciklama: 'Görev',
+      ortu: { x: 0.045, y: 0.095, g: 0.31, y2: 0.05, zemin: '#282828', renk: '#FFFFFF', metin: 'Nehir kenarında üç ot topla' } }] });
+    await p.waitForSelector('.ak-ortu-oge.ak-acik'); await bekle(250);
+    var eo = await p.$eval('.ak-ortu-oge', function (e) { var b = e.getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, bg: getComputedStyle(e).backgroundColor, a: !!e.querySelector('.ak-ortu-aciklama') }; });
+    assert(Math.abs(eo.l - 86.4) <= 1 && Math.abs(eo.t - 102.6) <= 1 && Math.abs(eo.w - 595.2) <= 1 && eo.bg === 'rgba(40, 40, 40, 0.94)' && eo.a, JSON.stringify(eo));
+    ok('§16.1: ekran öğesi kaynağın üstünü örter (açıklama altında)');
+    s.yayinla('ekran-sil'); await p.waitForFunction(function () { return !document.querySelector('.ak-ortu-oge'); });
+    s.yayinla('gorunum', { yerlesim: 'cubuk' }); await bekle(100);
+    s.yayinla('yazi', { id: 'o2', metin: 'Çubukta', sure_ms: 3000, ortu: ortu }); await p.waitForSelector('.ak-yazi-kutu:visible');
+    assert.strictEqual(await p.$$eval('.ak-ortu-yazi', function (l) { return l.length; }), 0); ok('§16.1: yerlesim "cubuk": eski alt çubuk aynen');
+    s.yayinla('yazi-sil', { id: 'o2' }); await p.waitForSelector('.ak-yazi', { state: 'hidden', timeout: 2000 });
+    s.yayinla('gorunum', { yerlesim: 'ustune' });
+    var dp = await p.evaluate(function () { return [window.AKOverlay.dugmeParcala("✕'e"), window.AKOverlay.dugmeParcala('R2,'), window.AKOverlay.dugmeParcala('[X]'), window.AKOverlay.dugmeParcala('Kabul')]; });
+    assert.deepStrictEqual(dp, [['', '✕', "'e"], ['', 'R2', ','], ['', '[X]', ''], null]); ok('§16.2: düğme belirteci ayrıştırma (Türkçe ek, noktalama)');
     s.yayinla('yazi', { id: 'a3', metin: 'Boyut', sure_ms: 60000 }); await p.waitForSelector('.ak-yazi-kutu:visible');
     var f1 = await p.$eval('.ak-yazi', function (e) { return parseFloat(getComputedStyle(e).fontSize); });
     s.yayinla('gorunum', { yazi_boyutu: 66, konum: 'ust', kenar_bosluk: 0.05, arka_plan: 0.9, yazi_rengi: '#00FF00', konusan_rengi: '#FFD166', asil_goster: true, ekran_cevir: true });

@@ -23,7 +23,10 @@ VARSAYILAN_GORUNUM: dict[str, Any] = {
     "asil_goster": False, "ekran_cevir": True, "onceki_goster": True,
     "ekran_olcek": 1.0,   # ekran öğelerinin genel yazı çarpanı, 0.6-2.0 (PROTOKOL 11.4)
     "en_az_ms": 800,      # çevirinin en az ekranda kalma süresi, 0-3000 ms (PROTOKOL 13.4)
+    "yerlesim": "ustune",  # ustune: orijinal yazının üstünü örter | cubuk: alttaki/üstteki çubuk (PROTOKOL 16.1)
+    "karakter_ms": 60,    # geride kalınca okuma tabanı, karakter başına 40-120 ms (PROTOKOL 16.4)
 }
+YERLESIMLER = ("ustune", "cubuk")
 
 VARSAYILAN: dict[str, Any] = {
     "arayuz_dili": "tr",
@@ -271,6 +274,11 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
         s["gorunum"]["ekran_olcek"] = v["gorunum"]["ekran_olcek"]
     if not en_az_ms_gecerli(s["gorunum"].get("en_az_ms")):
         s["gorunum"]["en_az_ms"] = v["gorunum"]["en_az_ms"]
+    if s["gorunum"].get("yerlesim") not in YERLESIMLER:
+        s["gorunum"]["yerlesim"] = v["gorunum"]["yerlesim"]
+    km = s["gorunum"].get("karakter_ms")
+    if isinstance(km, bool) or not isinstance(km, (int, float)) or not 40 <= km <= 120:
+        s["gorunum"]["karakter_ms"] = v["gorunum"]["karakter_ms"]
     if s["gorunum"].get("konum") not in ("alt", "ust"):
         s["gorunum"]["konum"] = v["gorunum"]["konum"]
     if s["erisim"].get("ucretsiz_dakika_gun") is not None and not (

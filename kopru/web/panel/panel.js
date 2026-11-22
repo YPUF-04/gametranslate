@@ -1981,9 +1981,13 @@
     function gorunumAyar(alan, deger) { var p = {}; p[alan] = deger; ayarKaydet({ gorunum: p }); }
     var boyut = h('input', { type: 'range', min: 24, max: 80, step: 2, id: 'yazi-boyutu', value: g.yazi_boyutu || 44 });
     var koyu = h('input', { type: 'range', min: 0, max: 100, step: 5, id: 'arka-plan', value: Math.round((g.arka_plan == null ? 0.55 : g.arka_plan) * 100) });
-    var konum = h('select', { id: 'konum', onchange: function () { gorunumAyar('konum', konum.value); } }, [
+    // §16.1: "Orijinal yazının üstünde" (örtü, varsayılan) ya da eski çubuk: altta / üstte
+    var konum = h('select', { id: 'konum', onchange: function () {
+      ayarKaydet({ gorunum: konum.value === 'ustune' ? { yerlesim: 'ustune' } : { yerlesim: 'cubuk', konum: konum.value } });
+    } }, [
+      h('option', { value: 'ustune', text: t('gorunum.ustune') }),
       h('option', { value: 'alt', text: t('gorunum.alt') }), h('option', { value: 'ust', text: t('gorunum.ust') })]);
-    konum.value = g.konum || 'alt';
+    konum.value = g.yerlesim === 'cubuk' ? (g.konum || 'alt') : 'ustune';
     ekran.yazi = h('div', { class: 'alt-yazi', id: 'son-yazi' });
     ekran.onizleme = h('div', { class: 'onizleme' }, ekran.yazi);
     function onizlemeGuncelle() {
@@ -2114,6 +2118,12 @@
     if (d.calisiyor && d.yedekte && d.yedek_neden && d.yedek_neden.mesaj) dm = d.yedek_neden.mesaj;   // neden yedeğe geçtiğini açıkça söyle
     if (ekran.durum.textContent !== dm) ekran.durum.textContent = dm;
     var nm = d.calisiyor ? t('ana.ne.calisiyor') : (sorun ? t('durum.hata.' + sorun + '.k') : t('ana.ne.durdu'));
+    var gk = d.calisiyor && d.gecikme && d.gecikme.olcum ? d.gecikme : null;   // §16.4: aşama aşama gecikme
+    if (gk && gk.toplam_ms != null) {
+      var sn = function (ms) { return ((ms || 0) / 1000).toFixed(1).replace('.', ','); };
+      nm += ' · ' + t('gecikme.ozet', { okuma: gk.okuma_ms || 0, ceviri: sn(gk.ceviri_ms), toplam: sn(gk.toplam_ms) });
+      if (gk.kuyruk > 1) nm += ' · ' + t('gecikme.kuyruk', { n: gk.kuyruk });
+    }
     if (ekran.ne.textContent !== nm) ekran.ne.textContent = nm;
     gosterimCiz();
   }

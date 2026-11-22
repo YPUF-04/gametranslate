@@ -24,6 +24,13 @@ def _al(nesne: Any, ad: str) -> Any:
     return nesne[ad] if isinstance(nesne, dict) else getattr(nesne, ad)
 
 
+def _kelime_metni(k: Any) -> str:
+    try:
+        return str(_al(k, "text"))
+    except (KeyError, AttributeError):
+        return ""
+
+
 # İngilizce okuma paketi yoksa (ör. Türkçe Windows) kurulu başka bir Latin dille okunur;
 # Türkçe okuyucu İngilizce harfleri de okur. Daha iyi sonuç için panel İngilizce paketi kurdurabilir.
 TERCIH = ("en-US", "en-GB", "en", "tr-TR", "tr", "de-DE", "fr-FR", "es-ES", "it-IT")
@@ -75,7 +82,8 @@ class Okuyucu:
         W, H = resim.size
         out: list[Satir] = []
         for satir in _al(sonuc, "lines"):
-            kutular = [_al(k, "bounding_rect") for k in _al(satir, "words")]
+            sozcukler = list(_al(satir, "words"))
+            kutular = [_al(k, "bounding_rect") for k in sozcukler]
             if not kutular:
                 continue
             x1 = min(_al(b, "x") for b in kutular)
@@ -84,5 +92,7 @@ class Okuyucu:
             y2 = max(_al(b, "y") + _al(b, "height") for b in kutular)
             metin = str(_al(satir, "text")).strip()
             if metin:
-                out.append(Satir(metin, x1 / W, y1 / H, (x2 - x1) / W, (y2 - y1) / H))
+                kelimeler = tuple((_kelime_metni(k), _al(b, "x") / W, _al(b, "y") / H, _al(b, "width") / W,
+                                   _al(b, "height") / H) for k, b in zip(sozcukler, kutular))
+                out.append(Satir(metin, x1 / W, y1 / H, (x2 - x1) / W, (y2 - y1) / H, kelimeler=kelimeler))
         return out

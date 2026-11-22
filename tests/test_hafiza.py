@@ -391,9 +391,9 @@ async def test_onden_ceviri_gecikmesi_max_ve_toplam_degil():
     await isl.adim()                 # 1. kare: önden çeviri başlar
     assert q.empty()
     await asyncio.sleep(0.2)         # kare aralığı
-    await isl.adim()                 # 2. kare: aynı metin -> kalanı bekler, yayınlar
+    await isl.adim()                 # 2. kare: aynı metin -> kesinleşir; çeviri bitince yayınlanır (§16.4)
+    olay, v = await asyncio.wait_for(q.get(), 1.0)
     gecen = time.monotonic() - t0
-    olay, v = q.get_nowait()
     assert olay == "yazi" and v["metin"] == "T:Stay close to me"
     assert gecen < 0.55              # toplam olsaydı >= 0.6; max(0.2, 0.4+bekleme) ~ 0.45
     assert motor.baslayan == ["Stay close to me"]
@@ -409,7 +409,7 @@ async def test_onden_ceviri_degisirse_atilir():
     assert q.empty() and "Run away now" not in motor.biten
     await asyncio.sleep(0.1)
     await isl.adim()
-    olay, v = q.get_nowait()
+    olay, v = await asyncio.wait_for(q.get(), 1.0)   # §16.4: çeviri bitince (kare döngüsü beklemeden)
     assert v["asil"] == "Hide behind the car" and "Run away now" not in motor.biten
 
 

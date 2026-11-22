@@ -18,6 +18,7 @@ VARSAYILAN_GORUNUM: dict[str, Any] = {
     "yazi_boyutu": 44, "konum": "alt", "kenar_bosluk": 0.08, "arka_plan": 0.55,
     "yazi_rengi": "#FFFFFF", "konusan_rengi": "#FFD166",
     "asil_goster": False, "ekran_cevir": True, "onceki_goster": True, "ekran_olcek": 1.0,
+    "yerlesim": "ustune",
 }
 EKRAN_EN_AZ_PX = 11          # §12.4: sığmazsa yazı küçülür ama bundan küçük olmaz (1080p'ye göre)
 EKRAN_EN_GENIS = 0.35        # §12.4: kutu en çok ekran genişliğinin %35'i kadar genişler
@@ -104,7 +105,7 @@ class Zamanlayici:
         ayni = y is not None and (v.get("id") == y["id"] or v.get("devam") is True)
         if ayni:   # yerinde güncelle: zıplama, sönme yok
             y.update(metin=metin, asil=str(v.get("asil") or ""), konusan=v.get("konusan"),
-                     bitis=bitis, sil_an=None)
+                     bitis=bitis, sil_an=None, ortu=ortu_gecerli(v.get("ortu")))
             if v.get("id"):
                 y["id"] = v["id"]
             return True
@@ -114,7 +115,7 @@ class Zamanlayici:
             self._onceki = None
         self.yazi = {"id": v.get("id") or f"y{simdi}", "metin": metin, "asil": str(v.get("asil") or ""),
                      "konusan": v.get("konusan"), "tur": v.get("tur", "altyazi"), "ilk": simdi,
-                     "bitis": bitis, "sil_an": None}
+                     "bitis": bitis, "sil_an": None, "ortu": ortu_gecerli(v.get("ortu"))}
         return True
 
     def _ekran(self, v: dict[str, Any], simdi: float) -> bool:
@@ -172,6 +173,50 @@ class Zamanlayici:
 
 
 # ---------- yerleşim ----------
+
+ORTU_EN_AZ_PX = 16        # §16.1: örtü yazısının en az boyu (1080p'ye göre), ekran öğesinde 12
+ORTU_OGE_EN_AZ_PX = 12
+ORTU_SATIR = 1.2
+
+
+def ortu_gecerli(o: Any) -> dict[str, Any] | None:
+    """Olaydaki `ortu` kutusu geçerliyse (0-1 sayılar, pozitif boyut) onu, değilse None döndürür."""
+    if not isinstance(o, dict):
+        return None
+    for k in ("x", "y", "g", "y2"):
+        v = o.get(k)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
+            return None
+    if o["g"] <= 0 or o["y2"] <= 0:
+        return None
+    return o
+
+
+def ortu_yerlesim(metin: str, olc: Callable[[str, int], float], g: float, y2: float, satir: int = 1,
+                  en_az: int = ORTU_EN_AZ_PX) -> dict[str, Any]:
+    """§16.1 (ortak.js ortuYerlesim ile aynı): metni g×y2 piksellik kutuya sığdırır; en büyük boydan başlar,
+    en az `en_az` px; en çok max(2, satir) satır, yalnız boşlukta bölünür. Sığmazsa kutu aşağı/sağa büyür.
+    Dönen: {"px","satirlar","g","y2","dolgu","buyudu"}."""
+    k = " ".join((metin or "").split())
+    en_cok = max(2, satir or 1)
+    if not k:
+        return {"px": en_az, "satirlar": [], "g": g, "y2": y2, "dolgu": 0, "buyudu": False}
+    px = max(en_az, int(y2 * 0.8 / max(1, satir or 1)))
+    while px >= en_az:
+        dolgu = max(1, round(px * 0.2))
+        ic, ic_y = max(1.0, g - 2 * dolgu), y2 - dolgu
+        o = (lambda t, p=px: olc(t, p))
+        sat = kelime_sar(k, o, ic)
+        genis = max(o(x) for x in sat)
+        if len(sat) <= en_cok and len(sat) * px * ORTU_SATIR <= ic_y + 0.5 and genis <= ic + 0.5:
+            return {"px": px, "satirlar": sat, "g": g, "y2": y2, "dolgu": dolgu, "buyudu": False}
+        px = int(px * 0.94) if px > en_az + 1 else px - 1
+    px = en_az
+    dolgu = max(1, round(px * 0.2))
+    sat = kelime_sar(k, lambda t: olc(t, px), max(1.0, g - 2 * dolgu))
+    genis = max(olc(x, px) for x in sat)
+    return {"px": px, "satirlar": sat, "g": max(g, genis + 2 * dolgu),
+            "y2": max(y2, len(sat) * px * ORTU_SATIR + dolgu), "dolgu": dolgu, "buyudu": True}
 
 def satir_bol(metin: str, olc: Callable[[str], float], azami: float, en_cok: int = 2) -> list[str]:
     """En çok 2 satır, dengeli (ilk satır biraz kısa), kelime ortasından bölmeden."""
