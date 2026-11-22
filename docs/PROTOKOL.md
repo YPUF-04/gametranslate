@@ -178,6 +178,8 @@ Ayar `bolgeler`: en çok 3 dikdörtgen: `[{"x":0.1,"y":0.75,"g":0.8,"y2":0.2,"tu
 `yazi` olayına eklenen alan: `"devam": true|false` (4. kural için; aynı `id` her zaman yerinde güncelleme sayılır). `ekran.ogeler[]` öğelerine kalıcı `"id"` eklenir (8. kural: aynı id = yerinde güncelle, listeden düşen id solar).
 
 ### 7.3 Erişim kodu (sunucusuz, isteğe bağlı)
+> **Yerine geçti:** sonraki sürümden itibaren §17 geçerlidir (altyazı sınırsız; yalnız dublaj süreli). Aşağısı tarihçe içindir.
+
 - Program ücretsizdir. `erisim.ucretsiz_dakika_gun` (varsayılan 30) kadar günlük çeviri süresi kodsuz kullanılır; süre dolunca çeviri durmaz, panelde sakin bir "Bugünkü ücretsiz süre doldu. Erişim kodunu gir ya da yarın devam et." uyarısı çıkar ve yeni çeviri yapılmaz (hafıza/önbellekten gelenler gösterilmeye devam eder).
 - Kod biçimi: `AK1-` + base32(yük + Ed25519 imzası). Yük: `{"s":"sinirsiz"|"gun","g":30,"t":"2026-11-19","n":"rastgele"}`. Program sadece **açık anahtarı** içerir, imzayı internetsiz doğrular. Özel anahtar sadece geliştiricinin bilgisayarında, depoda ASLA yoktur.
 - Kod üretme: `araclar/kod_uret.py` (geliştirici için basit panel/komut). Hiçbir sunucu yok, maliyet yok.
@@ -729,3 +731,88 @@ Gecikme zinciri: kare aralığı (0,25 sn) → OCR → kararlılık → çeviri 
   istek → yanıt; `bekleme`: çeviri hazır → ekrana; `toplam`: ilk görülme → ekrana; `kuyruk`: sırada bekleyen satır;
   `atlanan`: çevirisi başarısız olduğu için gösterilemeyen satır sayısı). Panel ana ekranda kısa bir satırla gösterir.
 - Ekran öğesi (görev/menü) çevirisi de kare döngüsünü bekletmez: önceki öğe çevirisi sürerken o karede öğe adımı atlanır.
+
+## 17. Erişim 2: altyazı sınırsız, dublaj süresi, "+30 dk" reklamı, cihaza bağlı kod (sonraki sürüm)
+
+Sahibin kararı. Bu bölüm §7.3'ün **yerine geçer** (eski "günde 30 dk ücretsiz çeviri" kuralı kalktı).
+
+### 17.1 Ne sınırlı, ne değil
+- **Altyazı/ekran çevirisi herkese sınırsız ve ücretsizdir.** Hiçbir sayaç, kota ya da `ErisimSiniri` altyazı yolunu
+  durdurmaz (`CeviriYoneticisi.cevir`, `/api/dene`, oyun bilgisi hazırlama sınırsızdır). `durum` olayında ve
+  `GET /api/durum`'da artık `sinir` alanı YOKTUR.
+- **Yalnız Türkçe dublaj sınırlıdır.** Canlı dublaj yalnız "dublaj süresi" varken ya da geçerli bir sınırsız kod
+  varken çalışır. "Dublajı dene" (tek örnek cümle) süre istemez.
+- Video dublajı (§14.4) başlatmak için de süre (ya da kod) gerekir; başlamış bir video işi süre bitse de sonuna kadar
+  biter (yarım iş çöpe gitmesin). Video işi sürerken de süre azalır.
+
+### 17.2 Dublaj süresi (yalnız bellekte)
+- Başta **0**. "+30 dk ekle" ile her seferinde **+30 dk** eklenir; üst üste eklenebilir (30, 60, 90 …), en çok
+  **4 sa (240 dk)**. Kalan + 30 dk > 240 dk ise ekleme reddedilir (`409 dublaj_sure_dolu`).
+- **Diske YAZILMAZ.** Program kapanınca süre gider; sonraki açılış yine 0'dan başlar (yeniden başlatmak süre vermez).
+- Süre yalnız dublaj **gerçekten çalışırken** azalır: çeviri Başlat'a basılmış + dublaj açık + boru hattı çalışıyor
+  (ya da bir video dublajı işi sürüyor). Çeviri durunca ya da dublaj kapalıyken süre durur. Sayaç adımı 5 sn'dir;
+  iki ölçüm arası 30 sn'den uzunsa (uyku, takılma) fazlası sayılmaz. Saat monotoniktir (sistem saati değişse de
+  süre artmaz/azalmaz).
+- Süre 0 olunca dublaj **sakince duraklar** (o an çalan cümle biter, yenisi başlamaz), altyazılar sürer. `durum`
+  olayına `"dublaj_sinir": true` eklenir; panel sakin bir mesaj ve "+30 dk ekle" düğmesini gösterir. Süre eklenince
+  dublaj kendiliğinden devam eder (Başlat'a yeniden basmak gerekmez).
+
+### 17.3 "+30 dk ekle" = bir reklam (ya da destek ekranı)
+1. Panel `POST /api/erisim/reklam` `{"yer":"otomatik"|"panel"}` → `200 {"id":"r…","vast":"https://…"|null,
+   "en_az_sn":15,"hedef":"tv"|"panel","zaman_asimi_sn":120}`. Açık (bitmemiş) bir reklam varsa yenisi açılmaz, o döner.
+   Hata: `409 dublaj_sure_dolu`, `409 dublaj_sinirsiz` (kod zaten sınırsız).
+2. `hedef`: reklam gösterebilen bir TV uygulaması bağlıysa (`/kopru/akis?reklam=1` ile bağlanan istemci) ve
+   `yer` `"panel"` değilse `"tv"`, değilse `"panel"`. `"tv"` ise SSE `reklam` olayı yayınlanır:
+   `{"id":"r…","vast":"https://…"|null,"en_az_sn":15,"bitti":"/kopru/reklam/bitti"}`.
+   TV oyunun üstünde tam ekran oynatır (sol üstte küçük "Reklam · n sn"), bitince `POST /kopru/reklam/bitti`
+   `{"id":"r…","sure_sn":30.0}` gönderir. Panel bu sırada "Reklam TV'de oynuyor" kartını gösterir.
+   `"panel"` ise reklamı panel kendi içinde (tam pencere) oynatır ve `POST /api/erisim/reklam/bitti` `{"id","sure_sn"}` gönderir.
+3. **Süreyi PC verir, istemci değil.** Bitti isteği yalnız sunucu saatine göre yeterince zaman geçtiyse kabul edilir:
+   `gecen ≥ max(15, min(sure_sn, 120)) − 1 sn` (`sure_sn`: istemcinin bildirdiği reklam süresi). Erken gelen istek
+   `409 reklam_erken` `{"kalan_sn":n}` döner ve süre vermez; aynı reklam iki kez süre vermez (`404 reklam_yok`).
+   Kabul edilince +30 dk eklenir, SSE `reklam-bitti` `{"id"}` yayınlanır (TV hâlâ oynatıyorsa kapatır).
+4. **Hiç takılmaz:** VAST adresi yoksa, reklam gelmezse (boş yanıt), yüklenemezse (6 sn), oynatılamazsa ya da 8 sn
+   ilerlemezse istemci 15 sn'lik **destek ekranını** (logo + "{marka}'nü desteklediğin için teşekkürler" + geri sayım)
+   gösterir, sonra bitti gönderir. Reklam 15 sn'den kısa bittiyse kalan süre destek ekranıyla tamamlanır.
+   TV `zaman_asimi_sn` içinde bitti göndermezse panel kendisi gönderir (yedek zamanlayıcı). 10 dk içinde bitmeyen
+   reklam unutulur.
+5. `GET /api/erisim` içinde açık reklam `reklam` alanında görünür (`{"id","hedef","gecen_sn","en_az_sn"}`), yoksa `null`.
+
+### 17.4 VAST oynatıcı (sağlayıcıdan bağımsız)
+- Kendi küçük VAST 3/4 ayrıştırıcımız + `<video>` (`kopru/web/tv/reklam.js`, ES5, `window.AKReklam`); TV uygulaması,
+  `/tv` sayfası ve panel aynı dosyayı kullanır. `/obs` reklam göstermez (yayına reklam girmesin).
+- Desteklenen: Inline/Wrapper (en çok 5 kat), Linear Creative, `progressive` MP4/WebM `MediaFile` (ekrana en uygun
+  genişlik), `Impression`, `Error` (`[ERRORCODE]`), `TrackingEvents` (start, firstQuartile, midpoint, thirdQuartile,
+  complete). Desteklenmeyen: VPAID, SIMID, OMID doğrulaması, atlanabilir/etkileşimli reklam, tıklama (TV'de tıklanmaz).
+  Bunlar "reklam gelmedi" sayılır → destek ekranı.
+- URL makroları: `[CACHEBUSTING]`, `[TIMESTAMP]` rastgele/şimdiki sayıyla değiştirilir.
+- **VAST adresi** sahibin yapı ayarıdır: `kopru/reklam_ayari.py` → `VAST_ADRESI` (varsayılan boş). Gelişmiş ayarlarda
+  `erisim.vast_adresi` (boş ya da `https://` ile başlayan, en çok 2000 karakter) onu ezer. Boşsa hep destek ekranı.
+
+### 17.5 Cihaza bağlı sınırsız dublaj kodu
+- **Cihaz numarası:** `SHA-256("AltYaziKoprusu/cihaz/v1" + makine kimliği)`'nin ilk 50 biti, Crockford base32,
+  10 harf, `XXXXX-XXXXX` biçiminde gösterilir. Makine kimliği: Windows `MachineGuid` (kayıt defteri), macOS
+  `IOPlatformUUID`, Linux `/etc/machine-id`. Bulunamazsa bir kez rastgele üretilip ayar klasörüne (`cihaz.json`)
+  yazılır. Ham kimlik hiçbir yere gönderilmez, gösterilmez; numaradan geri çıkarılamaz.
+- **Kod:** yine `AK1-` biçimi (§7.3). Yeni yük: `{"s":"sinirsiz_dublaj","c":"<10 harf cihaz no>","t":"YYYY-MM-DD","n":"<8 harf kod no>"}`.
+  İmza Ed25519, açık anahtar `kopru/erisim_anahtar.py`. Program imzayı ve `c == bu cihazın numarası`nı denetler;
+  başka cihazın kodu `400 baska_cihaz_kodu` ile reddedilir.
+- **Eski kodlar geçerli:** `sinirsiz` → sınırsız dublaj (her cihazda); `gun` → bitiş tarihine kadar sınırsız dublaj.
+- Kabul edilen kod şifreli kasada saklanır (`keyring`, ad `erisim_kodu`); kasa yoksa ayar klasöründeki
+  `erisim.json`'a yazılır (kod gizli değildir, başka cihazda işe yaramaz). Eski `erisim.json` içindeki kod da okunur.
+  Kod geçerliyken dublaj kalıcı olarak sınırsızdır: reklam yok, geri sayım yok.
+- Üretim: `python araclar/kod_uret.py` sayfasında "Cihaza bağlı (sınırsız dublaj)" + cihaz numarası, ya da
+  `python araclar/kod_uret.py --cihaz ABCDE-FGHJK`.
+
+### 17.6 API (yalnız yerel; `/kopru/reklam/bitti` yerel ağ)
+- `GET /api/erisim` →
+  `{"altyazi":"sinirsiz","dublaj":{"sinirsiz":false,"kalan_sn":4800,"kalan_dakika":80,"aktif":true,"durdu":false,
+  "ekle_dakika":30,"en_cok_dakika":240,"ekleyebilir":true},"kod":"sinirsiz_dublaj"|"sinirsiz"|"gun"|null,
+  "bitis":"YYYY-MM-DD"|null,"cihaz":"ABCDE-FGHJK","tv_reklam":true,"reklam":null}`
+  (`durdu`: dublaj açık ve çeviri çalışıyor ama süre bitti).
+- `POST /api/erisim` `{"kod":"AK1-…"}` → `{"tamam":true,"tur":"sinirsiz_dublaj"|"sinirsiz"|"gun"}`; hata
+  `gecersiz_kod`, `suresi_dolmus_kod`, `baska_cihaz_kodu` (400).
+- `POST /api/erisim/reklam`, `POST /api/erisim/reklam/bitti`, `POST /kopru/reklam/bitti`: §17.3.
+- `POST /api/dublaj/video` süre yoksa `402 dublaj_suresi_yok`.
+- Not (dürüstçe): program açık kaynaktır (AGPL). Bütün bu sınırlar kullanıcının kendi bilgisayarında çalışır;
+  kaldıran bir kopya yapılabilir. Sistem dürüst kullanıcılar ve projeyi desteklemek içindir, bir kilit değildir.
