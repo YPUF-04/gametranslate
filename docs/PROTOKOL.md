@@ -315,7 +315,7 @@ Dizin: `https://raw.githubusercontent.com/argosopentech/argospm-index/main/index
 `GET /api/kaynaklar` her öğeye `onerilen: true|false` ve `tur: "ekran"|"pencere"` ekler; uygun pencere yoksa panel cihaz rehberini gösterir.
 
 ### 12.3 Oyun bilgisi hazırlama
-`POST /api/oyun/<kod>/bilgi-hazirla` → seçili çeviri motoruyla (LLM) oyunun adından: kısa açıklama (≤200 karakter), hitap önerisi, 20–80 terimlik sözlük (karakter/yer/eşya/çete adları; çoğu çevrilmez, gerekiyorsa Türkçe karşılığı). Sonuç öneri olarak döner: `{"aciklama","hitap","terimler":[{"asil","ceviri"}]}`; panel kullanıcıya gösterir, "Kaydet" ile sözlüğe ve oyun bilgisine yazılır. Çevrimdışı motorda kullanılamaz (açık mesaj).
+`POST /api/oyun/<kod>/bilgi-hazirla` → seçili çeviri motoruyla (LLM) oyunun adından: kısa açıklama (≤200 karakter), hitap önerisi, 20–80 terimlik sözlük (karakter/yer/eşya/çete adları; çoğu çevrilmez, gerekiyorsa Türkçe karşılığı). Sonuç öneri olarak döner: `{"aciklama","hitap","terimler":[{"asil","ceviri"}],"karakterler":[{"ad","cinsiyet":"k"|"e"|""}]}` (en çok 30 ana karakter; cinsiyet hem Türkçedeki cinsiyetli sözcükler hem dublaj sesi için); panel kullanıcıya gösterir, "Kaydet" ile sözlüğe ve oyun bilgisine yazılır (`bilgi-kaydet` gövdesine isteğe bağlı `karakterler`; kullanıcının girdiği karakter ve cinsiyeti korunur, yalnız boş cinsiyet doldurulur). Çevrimdışı motorda kullanılamaz (açık mesaj).
 
 ### 12.4 Ekran öğesi boyutu
 Varsayılan yazı boyu kaynak satır yüksekliğinin 0.75'i (1080p'de 12–22 px); öğe tek satıra sığmaya çalışır, genişlik metne göre (kaynak genişliğinin en çok 1.6 katı, ekranın en çok %35'i), yalnız boşlukta satır kırılır, en çok 2 satır; sığmazsa yazı küçülür (en az 11 px) ve sonuna "…" konur.
@@ -443,7 +443,9 @@ katmandır (altyazı davranışı değişmez). Türkçe ses **TV'den** çalar (`
   durur → ayrılır, düzeyi eşitlenir (en çok +30 dB) ve klon örneği olur. Panel bunu adım olarak söyler.
 - Ses profili açıksa (§14.5) yeterli ses toplanınca Diyalog 0 yapılabilir; profili olmayan karakter
   motorun nötr Türkçe sesiyle konuşur.
-- **Metin önce altyazıdan:** ekranda altyazı belirdiği anda (cümle bitmeden) çeviri + seslendirme başlar;
+- **Metin önce altyazıdan:** ekranda altyazı belirdiği anda (cümle bitmeden) seslendirme başlar. Altyazının
+  Türkçesi (`yazi` olayının `metin`i) zaten hazır olduğundan **ikinci bir çeviri isteği yapılmaz** (gecikme ve
+  çeviri motorunun istek kotası yarıya iner); yalnız `metin` yoksa dublaj çevirisi istenir. Ses
   hazır olunca TV'ye hemen gönderilir (`cikis:"tv"` ya da İngilizce çıkarılıyorsa). Konuşma parçası
   sonra gelince aynı satır tekrar çalınmaz, yalnız karakterin sesi örneklenir. Altyazısı olmayan
   konuşmada Whisper yedektir.
@@ -704,9 +706,22 @@ Gecikme zinciri: kare aralığı (0,25 sn) → OCR → kararlılık → çeviri 
   değişen metne istek gitmesin); ikinci karede aynıysa kesinleşir. Önden istek henüz yola çıkmadıysa kesinleşince
   beklemeden yenisi atılır. Daktilo gibi büyüyen yazı kararlı olunca çevrilir (eskisi gibi). Çevirisi başarısız
   olan aynı satır en erken 1 sn sonra yeniden denenir (her karede istek atılmaz).
-- HTTP bağlantısı motorlar arasında açık tutulur (aynı olay döngüsünde tek oturum, keep-alive). Gemini'de altyazı
-  isteği düşünmesiz (`thinkingConfig.thinkingLevel:"minimal"`) istenir; model bunu tanımazsa (HTTP 400) bir kez
-  onsuz denenir ve hatırlanır. Kalite `hizli` (Flash-Lite) en kısa gecikmedir; panel bunu "En hızlı" diye sunar.
+- HTTP bağlantısı motorlar arasında açık tutulur (aynı olay döngüsünde tek oturum, keep-alive; başka iş parçacığının
+  döngüsü kendi oturumunu açar). Sunucunun sessizce kapattığı açık bağlantı yanıt gelmeden koparsa
+  (`ServerDisconnected`/bağlantı sıfırlandı) aynı istek kalan süre içinde **bir kez** yeni bağlantıyla yinelenir.
+- **Gemini düşünme düzeyi (altyazı):** Flash modellerinde `thinkingConfig.thinkingLevel:"low"` (az ama sıfır değil:
+  daha doğal Türkçe, kısa gecikme), Flash-Lite'ta `"minimal"`; Gemini 2.x'e düzey gönderilmez. (0.1.3 her modele
+  `"minimal"` yolluyordu: varsayılan **gemini-3.8-flash "minimal"i desteklemez** → HTTP 400 → düşünme ayarı
+  kaldırılıp yeniden deneniyordu → model varsayılan `"medium"` düşünmeyle yanıt verip 8 sn sınırını aşıyor, satırlar
+  atlanıyordu: "altyazıyı hiç çevirmiyor".) Model bir düzeyi yine de tanımazsa (HTTP 400) o model için düzeysiz
+  denenir ve hatırlanır. Altyazı isteğinin sınırı 8 sn; zaman aşımı, 429 ya da 5xx'te satır kaybolmasın diye kendi
+  kotası olan `gemini-3.5-flash-lite` (`"minimal"`, 6 sn) bir kez denenir. Kalite `hizli` (Flash-Lite) en kısa
+  gecikmedir; panel bunu "En hızlı" diye sunar.
+- Altyazı satırının konuşanı (`"AD: ..."` ön eki) ve oyun bilgisindeki cinsiyeti istemde bağlam olarak verilir
+  (yalnız cinsiyetli sözcükler/ton için; çeviriye ad eklenmez); son satırlar bağlamı konuşan adıyla tutulur.
+- **Kuyruk tıkanmaz:** bir satırın çevirisi en çok 15 sn beklenir (`SATIR_EN_COK_SN`); aşarsa satır atlanır
+  (`atlanan`, `durum` `hata:"ag"`), sıradakiler gösterilir. Satıra devredilmiş önden çeviri dışarıdan iptal edilirse
+  satır askıda kalmaz, kendi isteğini yapar.
 - **Kuyruk, hiçbir satır atlanmaz.** Her satır sırayla gösterilir. Satır `i` gösterildiği an `g_i`, gecikmesi
   `L_i = g_i - t_gel_i`, doğal bitişi `d_i = max(t_git_i + L_i, g_i + taban_i)`.
   - `okuma_i = max(en_az, min(3,5 sn, max(1,2 sn, karakter × gorunum.karakter_ms)))` (çevirinin karakter sayısı;

@@ -337,7 +337,8 @@ async def test_gecikme_bilgisi_asamalar():
 
 # ---------- motor: düşünmesiz istek + açık bağlantı ----------
 
-async def test_gemini_dusunmesiz_ister_tanimazsa_bir_kez_onsuz(monkeypatch):
+async def test_gemini_dusunme_duzeyi_tanimazsa_bir_kez_onsuz(monkeypatch):
+    """gemini-3.8-flash "minimal"i tanımaz (HTTP 400): artık "low" gider; yine de 400 gelirse onsuz denenir."""
     gelen = []
 
     async def sahte(url, govde, basliklar, zaman_asimi=8.0, oturum=None):
@@ -348,7 +349,7 @@ async def test_gemini_dusunmesiz_ister_tanimazsa_bir_kez_onsuz(monkeypatch):
     monkeypatch.setattr(_http, "post_json", sahte)
     m = GeminiMotoru("k")
     (c,) = await m.cevir(["Hello"], "en", "tr", {})
-    assert c.metin == "Merhaba" and gelen == [{"thinkingLevel": "minimal"}, None] and m.dusunme_kapali is False
+    assert c.metin == "Merhaba" and gelen == [{"thinkingLevel": "low"}, None] and m.dusunme_kapali is False
     await m.cevir(["Hello"], "en", "tr", {})
     assert gelen[-1] is None                       # hatırlandı: yeniden denenmez
 

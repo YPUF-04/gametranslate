@@ -117,10 +117,13 @@ class Isleyici:
         if olay == "yazi" and veri.get("asil") and not str(veri.get("id", "")).startswith("d"):
             kimlik = str(veri.get("id", ""))
             self._yazilar.append((self.saat(), kimlik, str(veri["asil"]), veri.get("konusan")))
-            self._erken_baslat(kimlik, str(veri["asil"]), veri.get("konusan"))
+            # Altyazının Türkçesi zaten hazır: dublaj onu seslendirir (ikinci bir çeviri isteği yok: daha hızlı
+            # ve çeviri motorunun istek sınırı/kotası iki kat harcanmaz).
+            tr = " ".join(str(veri.get("metin") or "").split())
+            self._erken_baslat(kimlik, str(veri["asil"]), veri.get("konusan"), tr or None)
 
     # -- önden hazırlık: altyazı görünür görünmez çeviri + ses --
-    def _erken_baslat(self, kimlik: str, asil: str, konusan: str | None) -> None:
+    def _erken_baslat(self, kimlik: str, asil: str, konusan: str | None, tr: str | None = None) -> None:
         d = self.ayar().get("dublaj") or {}
         if not d.get("erken_seslendir", True) or self.motor_getir() is None:
             return
@@ -131,18 +134,21 @@ class Isleyici:
         eski = self._erken.pop(kimlik, None)
         if eski is not None:
             eski.cancel()                    # aynı kimlik, metin değişti (daktilo efekti): yeniden
-        self._erken[kimlik] = loop.create_task(self._erken_hazirla(kimlik, asil, konusan))
+        self._erken[kimlik] = loop.create_task(self._erken_hazirla(kimlik, asil, konusan, tr))
         while len(self._erken) > 6:
             self._erken.pop(next(iter(self._erken))).cancel()
 
-    async def _erken_hazirla(self, kimlik: str, asil: str, konusan: str | None) -> _Erken | None:
+    async def _erken_hazirla(self, kimlik: str, asil: str, konusan: str | None,
+                             hazir_tr: str | None = None) -> _Erken | None:
         try:
             ayar = self.ayar()
             d = ayar.get("dublaj") or {}
             motor = self.motor_getir()
             t0 = self.saat()
             tahmini = max(1.0, len(asil) / 15.0)            # İngilizce ~15 karakter/sn
-            tr = await self._cevir(asil, ayar, tahmini)
+            if hazir_tr and not self.yonetici_dublaj_izni():
+                return None                                  # dublaj süresi yok (PROTOKOL 17.2)
+            tr = hazir_tr or await self._cevir(asil, ayar, tahmini)
             e = _Erken(kimlik, asil, tr, ceviri_ms=int((self.saat() - t0) * 1000))
             ref = self._konusan_ref.get(konusan or "") or (
                 (self._banka[-1].pcm, self._banka[-1].sr, self._banka[-1].iz) if self._banka else None)
@@ -165,6 +171,13 @@ class Isleyici:
         except Exception as ex:   # noqa: BLE001 — önden hazırlık başarısızsa normal yol çalışır
             log.debug("önden hazırlık başarısız: %s", type(ex).__name__)
             return None
+
+    def yonetici_dublaj_izni(self) -> bool:
+        f = getattr(self.yonetici, "dublaj_izni", None)
+        try:
+            return bool(f()) if callable(f) else True
+        except Exception:   # noqa: BLE001
+            return True
 
     def _erken_cal_mi(self, ayar: dict[str, Any]) -> bool:
         """Altyazıyla hazırlanan Türkçe ses, İngilizce cümle bitmeden çalınsın mı?

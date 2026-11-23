@@ -1078,9 +1078,15 @@ async def api_oyun_bilgi_kaydet(request: web.Request) -> web.Response:
     if not (isinstance(aciklama, str) and len(aciklama) <= 2000 and hitap in ("sen", "siz")
             and isinstance(terimler, list) and len(terimler) <= 500):
         return hata("gecersiz_istek", 400, request)
+    karakterler = v.get("karakterler", [])
+    if not isinstance(karakterler, list) or len(karakterler) > 200:
+        return hata("gecersiz_istek", 400, request)
     kismi: dict[str, Any] = {"hitap": hitap}
     if aciklama.strip():
         kismi["aciklama"] = aciklama
+    if karakterler:   # §12.3: önerilen karakterler + cinsiyet (kullanıcının girdikleri korunur)
+        kismi["karakterler"] = oyun_bilgisi.karakter_birlestir((oyunlar.oku(kod) or {}).get("karakterler") or [],
+                                                               karakterler)
     oyun = oyunlar.guncelle(kod, kismi)
     birlesik, eklenen = oyun_bilgisi.birlestir(sozluk_mod.yukle(kod), terimler)
     if eklenen:

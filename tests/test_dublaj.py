@@ -151,7 +151,8 @@ async def test_ekrandaki_altyazi_varsa_onun_metni_ve_kimligi_kullanilir():
     olaylar = bosalt(q)
     assert [o for o, _ in olaylar] == ["ses"]                  # zaten altyazı var: yenisi yayınlanmaz
     assert olaylar[0][1]["yazi_id"] == "a7"
-    assert y.cagrilar[0]["metin"] == "Where were you last night?"   # OCR metni STT'den iyi
+    # altyazının hazır Türkçesi seslendirilir (ikinci çeviri isteği yok); OCR metni STT'den iyi
+    assert not y.cagrilar and motor.cagrilar[-1][0] == "Dün gece neredeydin?"
 
 
 async def test_uzak_ya_da_benzemeyen_altyazi_eslesmez():

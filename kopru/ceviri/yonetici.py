@@ -77,21 +77,58 @@ class CeviriYoneticisi:
                       hitap=b.get("hitap", "sen"), karakterler=list(b.get("karakterler", [])),
                       son_satirlar=list(self.son_satirlar))
 
-    def satir_kaydet(self, id_: str, asil: str, ceviri: str, kaynak: str = "motor") -> None:
-        """Yayınlanan altyazıyı bağlama ve son-çeviriler listesine ekler."""
-        self.son_satirlar.append((asil, ceviri))
-        self.gecmis.append({"id": id_, "asil": asil, "ceviri": ceviri, "kaynak": kaynak})
+    # -- konuşan (altyazıdaki "AD:" ön eki) --
+    konusan_destekli = True
 
-    def satir_guncelle(self, id_: str, asil: str, ceviri: str, kaynak: str = "motor") -> None:
+    def konusan_cinsiyeti(self, ad: str | None) -> str | None:
+        """Oyun bilgisindeki karakter listesinden konuşanın cinsiyeti: "k" | "e" | None (büyük/küçük harf ve
+        yalnız ilk ad da eşleşir: "LUCIA" = "Lucia Caminos")."""
+        if not ad:
+            return None
+        a = " ".join(str(ad).split()).casefold()
+        for k in self.oyun_bilgisi.get("karakterler") or []:
+            if not isinstance(k, dict):
+                continue
+            kad = " ".join(str(k.get("ad") or "").split()).casefold()
+            if kad and (kad == a or kad.split(" ")[0] == a or a.split(" ")[0] == kad):
+                c = k.get("cinsiyet")
+                return c if c in ("k", "e") else None
+        return None
+
+    def konusan_ipucu(self, konusan: str | None) -> str:
+        if not konusan:
+            return ""
+        cins = {"k": "female", "e": "male"}.get(self.konusan_cinsiyeti(konusan) or "")
+        return (f"Speaker of the line(s) to translate: {konusan}" + (f" ({cins})" if cins else "") +
+                ". Use this only for gendered words and tone; do not add the name to the translation.")
+
+    @staticmethod
+    def _baglam_asil(asil: str, konusan: str | None) -> str:
+        return f"{konusan}: {asil}" if konusan else asil
+
+    def satir_kaydet(self, id_: str, asil: str, ceviri: str, kaynak: str = "motor",
+                     konusan: str | None = None) -> None:
+        """Yayınlanan altyazıyı bağlama ve son-çeviriler listesine ekler (bağlamda konuşan adıyla)."""
+        self.son_satirlar.append((self._baglam_asil(asil, konusan), ceviri))
+        g = {"id": id_, "asil": asil, "ceviri": ceviri, "kaynak": kaynak}
+        if konusan:
+            g["konusan"] = konusan
+        self.gecmis.append(g)
+
+    def satir_guncelle(self, id_: str, asil: str, ceviri: str, kaynak: str = "motor",
+                       konusan: str | None = None) -> None:
         """Aynı cümlenin devamı: son-çeviriler listesinde yeni satır açmadan günceller."""
         for g in reversed(self.gecmis):
             if g["id"] == id_:
-                eski = g["asil"]
+                eski = self._baglam_asil(g["asil"], g.get("konusan"))
                 g["asil"], g["ceviri"], g["kaynak"] = asil, ceviri, kaynak
-                self.son_satirlar = deque(((asil, ceviri) if a == eski else (a, c)
+                if konusan:
+                    g["konusan"] = konusan
+                yeni = self._baglam_asil(asil, g.get("konusan"))
+                self.son_satirlar = deque(((yeni, ceviri) if a == eski else (a, c)
                                            for a, c in self.son_satirlar), maxlen=SON_SATIR_ADEDI)
                 return
-        self.satir_kaydet(id_, asil, ceviri, kaynak)
+        self.satir_kaydet(id_, asil, ceviri, kaynak, konusan)
 
     def duzeltildi(self, asil: str, ceviri: str) -> None:
         """Kullanıcı düzeltmesini geçmişe ve bağlam satırlarına yansıtır."""
@@ -211,7 +248,7 @@ class CeviriYoneticisi:
         return None
 
     async def cevir(self, metinler: list[str], kaynak: str = "otomatik", hedef: str = "tr",
-                    aciklama: bool = False) -> list[Ceviri]:
+                    aciklama: bool = False, konusan: str | None = None) -> list[Ceviri]:
         sonuc: list[Ceviri | None] = [None] * len(metinler)
         eksik: list[int] = []
         for i, m in enumerate(metinler):
@@ -222,7 +259,7 @@ class CeviriYoneticisi:
                 eksik.append(i)
         if eksik:
             ayri = list(dict.fromkeys(metinler[i] for i in eksik))
-            gelen = await self._ucustaki(ayri, kaynak, hedef, aciklama)
+            gelen = await self._ucustaki(ayri, kaynak, hedef, aciklama, self.konusan_ipucu(konusan))
             for i in eksik:
                 c = gelen.get(metinler[i])
                 if c is None:
@@ -235,7 +272,7 @@ class CeviriYoneticisi:
         return sonuc  # type: ignore[return-value]
 
     async def _ucustaki(self, ayri: list[str], kaynak: str, hedef: str,
-                        aciklama: bool) -> dict[str, Ceviri]:
+                        aciklama: bool, ipucu: str = "") -> dict[str, Ceviri]:
         """Aynı anda aynı metin için tek istek (dedupe)."""
         bekleyen: dict[str, asyncio.Future] = {}
         yeni: list[str] = []
@@ -249,7 +286,7 @@ class CeviriYoneticisi:
             bekleyen[m] = f
         if yeni:
             try:
-                ceviriler, motor_kodu = await self._motorla(yeni, kaynak, hedef, aciklama)
+                ceviriler, motor_kodu = await self._motorla(yeni, kaynak, hedef, aciklama, ipucu)
                 if len(ceviriler) != len(yeni):   # savunma: zip sessizce kısaltırdı ve bekleyenler sonsuza dek asılırdı
                     raise MotorHatasi("Çeviri sayısı uyuşmuyor")
                 for m, c in zip(yeni, ceviriler):
@@ -278,7 +315,7 @@ class CeviriYoneticisi:
             try:
                 sonuc[m] = await f
             except _Iptal:
-                (sonuc[m],) = (await self._ucustaki([m], kaynak, hedef, aciklama)).values()
+                (sonuc[m],) = (await self._ucustaki([m], kaynak, hedef, aciklama, ipucu)).values()
         return sonuc
 
     async def video_cevir(self, metinler: list[str], sureler: list[float], kaynak: str, hedef: str,

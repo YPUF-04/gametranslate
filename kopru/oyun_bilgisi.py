@@ -18,7 +18,8 @@ EN_COK_TERIM_UZUNLUK = 60
 SISTEM = (
     "You prepare reference data for a game-subtitle translator (English -> Turkish).\n"
     "Given the name of a video game (and maybe an existing description), reply with ONE JSON object and nothing else:\n"
-    '{"aciklama": string, "hitap": "sen" | "siz", "terimler": [{"asil": string, "ceviri": string}]}\n'
+    '{"aciklama": string, "hitap": "sen" | "siz", "terimler": [{"asil": string, "ceviri": string}], '
+    '"karakterler": [{"ad": string, "cinsiyet": "k" | "e" | ""}]}\n'
     "Rules:\n"
     "- aciklama: at most 200 characters, Turkish, plain factual sentence(s) about the game's setting and tone.\n"
     '- hitap: "sen" if characters mostly speak informally, "siz" if the tone is formal/period/military.\n'
@@ -27,6 +28,9 @@ SISTEM = (
     "- asil is the name exactly as written in the game (English). ceviri is the Turkish form to use in subtitles.\n"
     "- Keep names UNTRANSLATED (ceviri == asil) unless an OFFICIAL Turkish localization term is well known.\n"
     "- Do not invent names. If you do not know the game, return an empty list and an empty aciklama.\n"
+    "- karakterler: up to 30 MAIN speaking characters as their name appears in subtitles (e.g. \"Lucia\"); "
+    'cinsiyet "k" for female, "e" for male, "" if unknown or not a person. Used for gendered Turkish words '
+    "and to pick a matching dubbing voice. Do not invent characters.\n"
     "- Never add comments, markdown or text outside the JSON."
 )
 
@@ -83,9 +87,47 @@ def yaniti_coz(ham: str) -> dict[str, Any]:
     aciklama = _temiz(v.get("aciklama", ""), EN_COK_ACIKLAMA) if isinstance(v.get("aciklama", ""), str) else ""
     hitap = v.get("hitap") if v.get("hitap") in ("sen", "siz") else "sen"
     terimler = temizle_terimler(v.get("terimler"))
+    karakterler = temizle_karakterler(v.get("karakterler"))
     if not aciklama and not terimler:
         raise ValueError("boş öneri")
-    return {"aciklama": aciklama, "hitap": hitap, "terimler": terimler}
+    return {"aciklama": aciklama, "hitap": hitap, "terimler": terimler, "karakterler": karakterler}
+
+
+EN_COK_KARAKTER = 30
+
+
+def temizle_karakterler(ham: Any) -> list[dict[str, str]]:
+    """[{"ad","cinsiyet": "k"|"e"|""}]; adsız/çok uzun atılır, tekilleştirilir, en çok 30."""
+    out: list[dict[str, str]] = []
+    goruldu: set[str] = set()
+    if not isinstance(ham, list):
+        return out
+    for k in ham:
+        if not isinstance(k, dict) or not isinstance(k.get("ad"), str):
+            continue
+        ad = _temiz(k["ad"], EN_COK_TERIM_UZUNLUK + 1)
+        if not ad or len(ad) > EN_COK_TERIM_UZUNLUK or ad.casefold() in goruldu:
+            continue
+        goruldu.add(ad.casefold())
+        c = k.get("cinsiyet")
+        out.append({"ad": ad, "cinsiyet": c if c in ("k", "e") else ""})
+        if len(out) >= EN_COK_KARAKTER:
+            break
+    return out
+
+
+def karakter_birlestir(mevcut: list[dict[str, str]], yeni: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Önerilen karakterleri ekler; kullanıcının girdiği karakter (ve cinsiyeti) korunur, yalnız boş cinsiyeti doldurulur."""
+    sonuc = [dict(k) for k in mevcut]
+    dizin = {k.get("ad", "").casefold(): k for k in sonuc}
+    for k in temizle_karakterler(yeni):
+        var = dizin.get(k["ad"].casefold())
+        if var is None:
+            sonuc.append(k)
+            dizin[k["ad"].casefold()] = k
+        elif not var.get("cinsiyet") and k["cinsiyet"]:
+            var["cinsiyet"] = k["cinsiyet"]
+    return sonuc[:200]
 
 
 def birlestir(mevcut: list[dict[str, str]], yeni: list[dict[str, str]]) -> tuple[list[dict[str, str]], int]:

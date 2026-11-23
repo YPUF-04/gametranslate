@@ -1258,7 +1258,8 @@
         r = r || {};
         bilgi.veri = {
           aciklama: String(r.aciklama || ''), hitap: r.hitap === 'siz' ? 'siz' : 'sen',
-          terimler: (r.terimler || []).filter(function (x) { return x && x.asil; }).map(function (x) { return { asil: String(x.asil), ceviri: String(x.ceviri == null ? x.asil : x.ceviri), sec: true }; })
+          terimler: (r.terimler || []).filter(function (x) { return x && x.asil; }).map(function (x) { return { asil: String(x.asil), ceviri: String(x.ceviri == null ? x.asil : x.ceviri), sec: true }; }),
+          karakterler: (r.karakterler || []).filter(function (x) { return x && x.ad; }).map(function (x) { return { ad: String(x.ad), cinsiyet: x.cinsiyet === 'k' || x.cinsiyet === 'e' ? x.cinsiyet : '' }; })
         };
         bilgi.faz = 'sonuc'; bilgiCiz();
       }).catch(function (e) {
@@ -1289,7 +1290,7 @@
         kaydet.disabled = true; kaydet.textContent = t('bilgi.kaydediliyor');
         var secilen = v.terimler.filter(function (x) { return x.sec; }).map(function (x) { return { asil: x.asil, ceviri: (x.ceviri || '').trim() || x.asil }; });
         var kod = bilgi.kod;
-        api('POST', '/api/oyun/' + encodeURIComponent(kod) + '/bilgi-kaydet', { aciklama: v.aciklama.trim(), hitap: v.hitap, terimler: secilen }, 30000).then(function () {
+        api('POST', '/api/oyun/' + encodeURIComponent(kod) + '/bilgi-kaydet', { aciklama: v.aciklama.trim(), hitap: v.hitap, terimler: secilen, karakterler: v.karakterler || [] }, 30000).then(function () {
           bilgi = { kod: kod, faz: 'kaydedildi', veri: null, hata: null, sonuc: secilen.length };
           return oyunYukle();
         }).then(function () { if (document.body.contains(bilgiKart)) { bilgiCiz(); listeCiz(); } }).catch(function (e) {

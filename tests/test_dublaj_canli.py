@@ -330,11 +330,12 @@ async def test_altyazi_gorunur_gorunmez_tv_ye_erken_calar_parca_tekrar_calmaz():
             await asyncio.sleep(0.01)
         sesler = [v for o, v in olaylar if o == "ses"]
         assert sesler and sesler[0]["yazi_id"] == "a2" and "a2" in isl._erken_calinan
-        assert y.cagrilar[n_ceviri:] == ["Get in the car, now!"]                # OCR metni çevrildi
+        # altyazının hazır Türkçesi seslendirildi: ikinci bir çeviri isteği YOK (hız + çeviri kotası)
+        assert y.cagrilar[n_ceviri:] == [] and motor.cagrilar[-1][0] == "y"
         # aynı cümlenin konuşma parçası gelince: yeniden çevrilmez, yeniden çalınmaz
         stt.metin = "Get in the car now"
         await isl.isle(Parca(ton(150, 2.0), saat() + 1.0))
-        assert not [o for o, _ in bosalt(q) if o == "ses"] and len(y.cagrilar) == n_ceviri + 1
+        assert not [o for o, _ in bosalt(q) if o == "ses"] and len(y.cagrilar) == n_ceviri
     finally:
         gorev.cancel()
 
@@ -363,7 +364,7 @@ async def test_onden_hazirlanan_ses_parca_gelince_kullanilir():
             calinan.append(yazi_id)
     isl.cikis_getir = lambda ad: Cikis()
     s = await isl.isle(Parca(ton(150, 3.0), saat() + 0.5))
-    assert calinan == ["a3"] and s.olcum.get("erken") and len(y.cagrilar) == 1
+    assert calinan == ["a3"] and s.olcum.get("erken") and len(y.cagrilar) == 0   # altyazının Türkçesi kullanıldı
     assert len(motor.cagrilar) == n                                   # aynı ses: yeniden üretilmedi
 
 

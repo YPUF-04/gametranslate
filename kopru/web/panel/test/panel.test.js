@@ -1001,7 +1001,7 @@ function dilKontrol() {
     await sayfa.waitForSelector('#bilgi-kaydedildi');
     assert.match(await metin('#bilgi-kaydedildi'), /3 terim öğrenildi/);
     assert.deepStrictEqual(JSON.parse(st.govdeler['POST /api/oyun/cyberpunk/bilgi-kaydet']), { aciklama: 'Fütüristik bir şehirde geçen aksiyon rol yapma oyunu.', hitap: 'sen',
-      terimler: [{ asil: 'Night City', ceviri: 'Night City' }, { asil: 'Johnny Silverhand', ceviri: 'Johnny Silverhand' }, { asil: 'Cyberpsycho', ceviri: 'Siber Sapık' }] });
+      terimler: [{ asil: 'Night City', ceviri: 'Night City' }, { asil: 'Johnny Silverhand', ceviri: 'Johnny Silverhand' }, { asil: 'Cyberpsycho', ceviri: 'Siber Sapık' }], karakterler: [] });
     adim('oyun bilgisi: çevrimdışı motorda sunucu mesajı + Gemini önerisi; hazırla → ilerleme → düzenle/işaret kaldır → kaydet gövdesi');
     await sayfa.click('#paket-ac');
     await sayfa.setInputFiles('#paket-dosya', { name: 'rdr3.akpaket', mimeType: 'application/zip', buffer: Buffer.from('PKfake') });

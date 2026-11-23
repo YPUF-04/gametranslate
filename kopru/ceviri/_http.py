@@ -37,9 +37,29 @@ async def ortak_kapat() -> None:
         await k[1].close()
 
 
+# Açık tutulan (keep-alive) bağlantı sunucu tarafında sessizce kapanmışsa ilk istek yanıt gelmeden kopar;
+# bu durumda AYNI istek bir kez, yeni bağlantıyla yinelenir (aksi hâlde boşta kalınan her aradan sonraki ilk
+# altyazı satırı kaybolurdu).
+_BAYAT_BAGLANTI: tuple[type[BaseException], ...] = tuple(
+    t for t in (getattr(aiohttp, "ServerDisconnectedError", None), getattr(aiohttp, "ClientConnectionResetError", None),
+                getattr(aiohttp, "ClientOSError", None)) if isinstance(t, type))
+
+
 async def post_json(url: str, govde: dict[str, Any], basliklar: dict[str, str],
                     zaman_asimi: float = 8.0, oturum: aiohttp.ClientSession | None = None) -> Any:
     oturum = oturum or ortak_oturum()
+    bitis = asyncio.get_running_loop().time() + zaman_asimi
+    try:
+        return await _post_json(url, govde, basliklar, zaman_asimi, oturum)
+    except AgHatasi as e:
+        kalan = bitis - asyncio.get_running_loop().time()
+        if not isinstance(e.__cause__, _BAYAT_BAGLANTI) or kalan < 1.0:
+            raise
+        return await _post_json(url, govde, basliklar, kalan, oturum)
+
+
+async def _post_json(url: str, govde: dict[str, Any], basliklar: dict[str, str],
+                     zaman_asimi: float, oturum: aiohttp.ClientSession) -> Any:
     try:
         async with oturum.post(url, json=govde, headers=basliklar,
                                timeout=aiohttp.ClientTimeout(total=zaman_asimi)) as r:
@@ -50,7 +70,7 @@ async def post_json(url: str, govde: dict[str, Any], basliklar: dict[str, str],
                 govde = (await r.text(errors="replace"))[:2000].lower()
                 if "api_key_invalid" in govde or "api key not valid" in govde:
                     raise AnahtarHatasi(url)
-                raise AgHatasi("HTTP 400")
+                raise AgHatasi("HTTP 400" + (f": {govde[:160]}" if govde.strip() else ""))
             if r.status == 404:
                 raise ModelBulunamadi("HTTP 404")
             if r.status == 429 or r.status >= 500:

@@ -28,6 +28,7 @@ log = logging.getLogger("kopru.isleme")
 
 ARALIK_SN = 0.25
 SPEK_BEKLEME_SN = 0.05  # §16.4: ilk görüldüğü karede çevrilmeye başlar; 50 ms içinde değişen (daktilo) metne istek atılmaz
+SATIR_EN_COK_SN = 15.0  # §16.4: bir altyazı satırının çevirisi en çok bu kadar beklenir; sonra satır atlanır (kuyruk tıkanmaz)
 HATA_TEKRAR_SN = 1.0    # çevirisi başarısız olan aynı satır en erken bu kadar sonra yeniden denenir
 DEGISIM_ESIGI = 0.5  # küçültülmüş gri karelerde ortalama mutlak fark (0-255); §13.2: neredeyse her değişim yeniden okutur
 HUCRE_ESIGI = 32     # ...ya da tek bir hücredeki fark bu kadarsa (küçük bir yazı gitti/geldi)
@@ -176,6 +177,12 @@ def ceviri_benzer(a: str, b: str) -> bool:
     """İki çeviri aynı ya da neredeyse aynı mı (kaynak OCR'ı oynasa da çeviri sabit kalır)."""
     a, b = normallestir(a), normallestir(b)
     return bool(a) and (a == b or SequenceMatcher(None, a, b).ratio() >= 0.92)
+
+
+def _iptal_ediliyor() -> bool:
+    """Şu anki görevin kendisi mi iptal ediliyor (yoksa yalnız beklediği başka bir görev mi)?"""
+    t = asyncio.current_task()
+    return bool(t is not None and getattr(t, "cancelling", lambda: 1)())
 
 
 def _sessiz(gorev: "asyncio.Task") -> None:
@@ -530,19 +537,25 @@ class Isleme:
             self._spek = None
         self._spek_aday = ""
 
-    def _spek_basla(self, govde: str, aday: str, ayar: dict[str, Any]) -> None:
+    def _spek_basla(self, govde: str, aday: str, ayar: dict[str, Any], konusan: str | None = None) -> None:
         self._spek_iptal()
         self._spek_aday = aday
         self._spek_gitti = False
         self._spek = asyncio.get_running_loop().create_task(
-            self._spek_cevir(govde, ayar["kaynak_dil"], ayar["hedef_dil"]))
+            self._spek_cevir(govde, ayar["kaynak_dil"], ayar["hedef_dil"], konusan))
         self._spek.add_done_callback(_sessiz)
 
-    async def _spek_cevir(self, govde: str, kaynak: str, hedef: str) -> Any:
+    def _yon_cevir(self, govde: str, kaynak: str, hedef: str, konusan: str | None) -> Any:
+        """yonetici.cevir; konuşan adı (varsa, destekleyen yöneticide) istemde bağlam olur (cinsiyet, ton)."""
+        if konusan and getattr(self.yonetici, "konusan_destekli", False):
+            return self.yonetici.cevir([govde], kaynak, hedef, konusan=konusan)
+        return self.yonetici.cevir([govde], kaynak, hedef)
+
+    async def _spek_cevir(self, govde: str, kaynak: str, hedef: str, konusan: str | None = None) -> Any:
         if SPEK_BEKLEME_SN > 0:
             await asyncio.sleep(SPEK_BEKLEME_SN)
         self._spek_gitti = True   # istek yola çıktı (kesinleşince beklenir; çıkmadıysa hemen yenisi atılır)
-        (c,) = await self.yonetici.cevir([govde], kaynak, hedef)
+        (c,) = await self._yon_cevir(govde, kaynak, hedef, konusan)
         return c
 
     def duzeltildi(self, asil: str, ceviri: str) -> None:
@@ -624,7 +637,8 @@ class Isleme:
         return f() if callable(f) else {}
 
     def _hata(self, e: Exception) -> None:
-        kod = {AnahtarHatasi: "anahtar", AgHatasi: "ag", MotorHatasi: "motor"}.get(type(e), "genel")
+        kod = {AnahtarHatasi: "anahtar", AgHatasi: "ag", MotorHatasi: "motor", TimeoutError: "ag",
+               asyncio.TimeoutError: "ag"}.get(type(e), "genel")
         if kod != self.durum_hatasi:
             self.durum_hatasi = kod
             log.warning("Çeviri hatası: %s", type(e).__name__)
@@ -843,12 +857,12 @@ class Isleme:
         if onceki and (aday.startswith(onceki) or onceki.startswith(aday)):
             self._spek_iptal()  # daktilo gibi yazılıyor: kararlı olunca çevrilecek
             return
-        _, govde = konusan_ayir(metin)
+        konusan, govde = konusan_ayir(metin)
         if self.yonetici.ara(govde, ayar["kaynak_dil"], ayar["hedef_dil"]):
             self._spek_iptal()
             self._kesinlestir(metin, aday, ayar)
         else:
-            self._spek_basla(govde, aday, ayar)
+            self._spek_basla(govde, aday, ayar, konusan)
 
     def _kesinlestir(self, metin: str, aday: str, ayar: dict[str, Any]) -> None:
         """Satır kararlı: kuyruğa eklenir (ya da açık satırın devamıysa o satır yerinde yenilenir)."""
@@ -892,10 +906,19 @@ class Isleme:
 
     async def _cevir_gorevi(self, s: SiraSatiri, govde: str, ayar: dict[str, Any], gorev: asyncio.Task | None) -> None:
         try:
+            c = None
             if gorev is not None:
-                c = await gorev          # önden başlamıştı: yalnız kalanı bekler
-            else:
-                (c,) = await self.yonetici.cevir([govde], ayar["kaynak_dil"], ayar["hedef_dil"])
+                try:   # önden başlamıştı: yalnız kalanı bekler (en çok SATIR_EN_COK_SN)
+                    c = await asyncio.wait_for(asyncio.shield(gorev), SATIR_EN_COK_SN)
+                except asyncio.CancelledError:
+                    if _iptal_ediliyor():
+                        raise
+                    # önden çeviri dışarıdan iptal edildi (bu görev değil): satır sonsuza dek "çevriliyor"
+                    # kalıp sıradakileri bekletmesin, kendi isteğini yapar
+                    gorev = None
+            if gorev is None:
+                (c,) = await asyncio.wait_for(self._yon_cevir(govde, ayar["kaynak_dil"], ayar["hedef_dil"],
+                                                              s.ek.get("konusan")), SATIR_EN_COK_SN)
         except asyncio.CancelledError:
             raise
         except Exception as e:   # bilinen motor hataları ve beklenmeyenler: satır kuyruktan çıkar
@@ -951,17 +974,23 @@ class Isleme:
             if eylem == "goster":
                 self._yayinla_satir(s, False)
                 self._ceviri_kaydet(s.ek.get("govde", ""), s.metin or "")
-                self.yonetici.satir_kaydet(s.id, s.ek.get("govde", ""), s.metin or "", s.ek.get("kaynak_tur", "motor"))
+                self._satir_kaydet(s, "satir_kaydet")
                 self._olcum_kaydet(s)
             elif eylem == "devam":
                 self._yayinla_satir(s, True)
                 self._ceviri_kaydet(s.ek.get("govde", ""), s.metin or "")
                 if hasattr(self.yonetici, "satir_guncelle"):
-                    self.yonetici.satir_guncelle(s.id, s.ek.get("govde", ""), s.metin or "",
-                                                 s.ek.get("kaynak_tur", "motor"))
+                    self._satir_kaydet(s, "satir_guncelle")
             else:
                 self.yayin.yayinla("yazi-sil", {"id": s.id})
         self._uyan_kur()
+
+    def _satir_kaydet(self, s: SiraSatiri, yontem: str) -> None:
+        a = (s.id, s.ek.get("govde", ""), s.metin or "", s.ek.get("kaynak_tur", "motor"))
+        if s.ek.get("konusan") and getattr(self.yonetici, "konusan_destekli", False):
+            getattr(self.yonetici, yontem)(*a, konusan=s.ek.get("konusan"))
+        else:
+            getattr(self.yonetici, yontem)(*a)
 
     def _olcum_kaydet(self, s: SiraSatiri) -> None:
         g = s.goster or 0.0
