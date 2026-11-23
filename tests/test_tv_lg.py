@@ -80,11 +80,11 @@ def test_basarili_kurulum_asamalari_ve_komutlar():
     d = k.durum()
     assert d["asama"] == "bitti" and "açılıyor" in d["mesaj"] and d["ayrinti"] == ""
     # ares-install ile aynı yol, kimlik ve komutlar
-    assert o.yuklenen == [("com.altyazikoprusu.tv_0.1.0_all.ipk", "/media/developer/temp/com.altyazikoprusu.tv_0.1.0_all.ipk")]
+    assert o.yuklenen == [(lg.PAKETLER["asil"][0], "/media/developer/temp/" + lg.PAKETLER["asil"][0])]
     install = [c for c in o.komutlar if "appInstallService" in c][0]
     assert install.startswith("/usr/bin/luna-send-pub -i luna://com.webos.appInstallService/dev/install '")
     assert json.loads(install.split("'")[1]) == {
-        "id": "com.ares.defaultName", "ipkUrl": "/media/developer/temp/com.altyazikoprusu.tv_0.1.0_all.ipk",
+        "id": "com.ares.defaultName", "ipkUrl": "/media/developer/temp/" + lg.PAKETLER["asil"][0],
         "subscribe": True}
     assert any(c.startswith("/usr/bin/test -d /media/developer/temp || /bin/mkdir -p") for c in o.komutlar)
     assert o.komutlar[-2].startswith('/bin/rm -f "/media/developer/temp/') or \

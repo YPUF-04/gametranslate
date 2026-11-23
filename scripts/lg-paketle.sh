@@ -19,23 +19,25 @@ CIKTI="$KOK/dist/tv"
 ARA="$KOK/dist/ara"
 rm -rf "$CIKTI" "$ARA"; mkdir -p "$CIKTI" "$ARA" "$KOK/tv/paketler"
 
-# 1) Ana uygulama: ortak bindirme (ortak.js/ortak.css), marka adı (marka.js) ve yazı tipi tek kaynaktan
-#    (kopru/web/tv/) paketin içine kopyalanır. tv/webos içindeki marka.js/yazi-*.woff2 bunlara bağlantıdır (symlink);
-#    cp bağlantıyı izler, pakete gerçek dosya girer.
-ORTAK="ortak.js ortak.css reklam.js marka.js yazi-latin.woff2 yazi-latin-ext.woff2 yazi-LISANS-OFL.txt"
+# 1) Ana uygulama = BAŞLATICI (PROTOKOL 18): tv/webos/ (index.html + yukleyici.js + simgeler) ve yazı tipleri.
+#    Uygulamanın kendisi (kopru/web/tv/webos/*, ortak.js, ...) TV'ye bilgisayardan gelir; pakete yalnız yedek olarak
+#    gömülür (gomulu.js, sunucunun sunduğu paketle aynı üreticiden: python -m kopru.tv_kurulum.uygulama).
+PY="${PYTHON:-python3}"
+ORTAK="yazi-latin.woff2 yazi-latin-ext.woff2 yazi-LISANS-OFL.txt"
 hazirla_tv() { # $1=hedef klasör
   mkdir -p "$1"
   cp -L "$KOK"/tv/webos/* "$1"/
   for f in $ORTAK; do cp -L "$KOK/kopru/web/tv/$f" "$1"/; done
+  ( cd "$KOK" && "$PY" -m kopru.tv_kurulum.uygulama --gomulu "$1/gomulu.js" )
 }
 hazirla_tv "$ARA/tv"
 mkdir -p "$ARA/deneme"; cp -L "$KOK"/tv/lg-test/* "$ARA/deneme"/; cp -L "$KOK/kopru/web/tv/marka.js" "$ARA/deneme"/
 
-# 2) requiredACG'siz varyant: sürüm 0.1.1 (ares-package dosya adını sürümden verir)
+# 2) requiredACG'siz varyant: sürüm 0.2.1 (ares-package dosya adını sürümden verir)
 hazirla_tv "$ARA/tv-acgsiz"
 node -e '
   var f=process.argv[1], fs=require("fs"), a=JSON.parse(fs.readFileSync(f,"utf8"));
-  delete a.requiredACG; a.version="0.1.1"; fs.writeFileSync(f, JSON.stringify(a,null,2)+"\n");' "$ARA/tv-acgsiz/appinfo.json"
+  delete a.requiredACG; a.version="0.2.1"; fs.writeFileSync(f, JSON.stringify(a,null,2)+"\n");' "$ARA/tv-acgsiz/appinfo.json"
 
 echo ">> Uygulama denetimi (ares-package --check)"
 for k in tv deneme tv-acgsiz; do
@@ -61,7 +63,8 @@ for ipk in "$CIKTI"/*.ipk; do
 done
 [ "$HATA" = 0 ] || { echo "Doğrulama başarısız"; exit 1; }
 
+rm -f "$KOK"/tv/paketler/com.altyazikoprusu.tv_*.ipk
 cp "$CIKTI"/*.ipk "$KOK/tv/paketler/"
 echo
 echo "Hazır: $CIKTI  (kopyası: tv/paketler/)"
-echo "NOT: *_0.1.1_all.ipk = requiredACG'SİZ varyant (ana paket kurulmazsa bunu deneyin)."
+echo "NOT: *_0.2.1_all.ipk = requiredACG'SİZ varyant (ana paket kurulmazsa bunu deneyin)."

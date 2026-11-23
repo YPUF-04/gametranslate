@@ -39,11 +39,14 @@ INSTALL_ADRESI = "luna://com.webos.appInstallService/dev/install"
 LAUNCH_ADRESI = "luna://com.webos.applicationManager/launch"
 MD5_BAYT = 200
 # Paket adları tv/paketler/ içindedir; yeniden paketlenince (scripts/lg-paketle.sh) burası güncellenir.
+# 0.2.x = kendini bilgisayardan güncelleyen başlatıcı (PROTOKOL 18): bir son kez kurulur, sonra hiç.
 PAKETLER: dict[str, tuple[str, str]] = {
-    "asil": ("com.altyazikoprusu.tv_0.1.0_all.ipk", "com.altyazikoprusu.tv"),
-    "acgsiz": ("com.altyazikoprusu.tv_0.1.1_all.ipk", "com.altyazikoprusu.tv"),
+    "asil": ("com.altyazikoprusu.tv_0.2.0_all.ipk", "com.altyazikoprusu.tv"),
+    "acgsiz": ("com.altyazikoprusu.tv_0.2.1_all.ipk", "com.altyazikoprusu.tv"),
     "deneme": ("com.altyazikoprusu.deneme_0.1.0_all.ipk", "com.altyazikoprusu.deneme"),
 }
+OTURUM = "oturum"   # kurulum yok: yalnız bağlanıp geliştirici modu belirtecini okur (PROTOKOL 18.6)
+BELIRTEC_DOSYASI = "/var/luna/preferences/devmode_enabled"
 ASAMALAR = ("anahtar", "baglaniyor", "yukleniyor", "kuruluyor", "bitti", "hata")
 
 
@@ -253,12 +256,14 @@ class LgKurulum:
                  anahtar_al: Callable[[str], str] = anahtar_getir,
                  oturum_fabrika: Callable[[], Any] = ParamikoOturumu,
                  paket_klasoru: Callable[[], Path] = paket_dizini,
-                 arka_planda: bool = True) -> None:
+                 arka_planda: bool = True,
+                 belirtec_al: Callable[[str, str], bool] | None = None) -> None:
         self.ayar_al = ayar_al
         self.anahtar_al = anahtar_al
         self.oturum_fabrika = oturum_fabrika
         self.paket_klasoru = paket_klasoru
         self.arka_planda = arka_planda
+        self.belirtec_al = belirtec_al      # (ham belirteç, tv adresi) -> kaydedildi mi
         self._kilit = threading.Lock()
         self._durum: dict[str, Any] = {"asama": "bosta", "kod": None, "ayrinti": ""}
         self._calisiyor = False
@@ -277,7 +282,7 @@ class LgKurulum:
             return "tv_gecersiz_ip"
         if not parola_gecerli_mi(parola):
             return "tv_gecersiz_parola"
-        if paket not in PAKETLER:
+        if paket not in PAKETLER and paket != OTURUM:
             return "tv_gecersiz_paket"
         with self._kilit:
             if self._calisiyor:
@@ -307,9 +312,9 @@ class LgKurulum:
         oturum = None
         uzak = None
         try:
-            ipk_adi, uygulama = PAKETLER[paket]
+            ipk_adi, uygulama = PAKETLER.get(paket, ("", ""))
             yerel = self.paket_klasoru() / ipk_adi
-            if not yerel.is_file():
+            if paket != OTURUM and not yerel.is_file():
                 raise TvHatasi("tv_paket_yok", str(yerel.name))
             self._ata("anahtar", "tv_asama_anahtar")
             anahtar = self.anahtar_al(ip)
@@ -318,6 +323,10 @@ class LgKurulum:
             oturum = self.oturum_fabrika()
             oturum.baglan(ip, anahtar, parola)
             del anahtar       # artık gerekmiyor; bellekten bırak
+            if paket == OTURUM:
+                tamam = self._belirteci_oku(oturum, ip, gizliler)
+                self._ata("bitti", "tv_oturum_acildi" if tamam else "tv_oturum_okunamadi")
+                return
             self._ata("yukleniyor", "tv_asama_yukleniyor")
             uzak = f"{GECICI_DIZIN}/{ipk_adi}"
             oturum.calistir(f"/usr/bin/test -d {GECICI_DIZIN} || /bin/mkdir -p {GECICI_DIZIN}")
@@ -326,6 +335,8 @@ class LgKurulum:
             self._ata("kuruluyor", "tv_asama_kuruluyor")
             self._kur(oturum, uzak)
             acildi = self._ac(oturum, uygulama)
+            if paket != "deneme":
+                self._belirteci_oku(oturum, ip, gizliler)   # en iyi çaba: kurulum sonucunu etkilemez
             self._ata("bitti", "tv_bitti" if acildi else "tv_bitti_acilmadi")
         except TvHatasi as e:
             log.info("LG kurulum durdu: %s", e.kod)
@@ -343,6 +354,26 @@ class LgKurulum:
                 oturum.kapat()
             with self._kilit:
                 self._calisiyor = False
+
+    def _belirteci_oku(self, oturum: Any, ip: str, gizliler: list[str]) -> bool:
+        """PROTOKOL 18.6: geliştirici modu oturum belirteci (kasaya; hata metinlerinden silinir)."""
+        if self.belirtec_al is None:
+            return False
+        try:
+            kod, cikti = oturum.calistir(f'/bin/cat "{BELIRTEC_DOSYASI}"', zaman_sn=15)
+        except Exception:   # noqa: BLE001
+            log.info("Geliştirici modu belirteci okunamadı")
+            return False
+        belirtec = (cikti or "").strip().splitlines()[0].strip() if (cikti or "").strip() else ""
+        if belirtec:
+            gizliler.append(belirtec)
+        if kod not in (0, -1) or not belirtec:
+            return False
+        try:
+            return bool(self.belirtec_al(belirtec, ip))
+        except Exception:   # noqa: BLE001 — uzatma hatası kurulumu bozmasın
+            log.info("Geliştirici modu belirteci kaydedilemedi", exc_info=True)
+            return False
 
     @staticmethod
     def _yuklemeyi_dogrula(oturum: Any, yerel: Path, uzak: str) -> None:

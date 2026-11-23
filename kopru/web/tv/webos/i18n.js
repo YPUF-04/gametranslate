@@ -45,7 +45,10 @@
       demo_not: 'Deneme kipi: bilgisayar gerekmez. Çıkmak için Geri tuşuna basın.',
       cikis: 'Uygulamadan çık',
       rozet_koptu: 'Bağlantı koptu, yeniden deneniyor…',
-      rozet_baglaniyor: 'Bağlanıyor…'
+      rozet_baglaniyor: 'Bağlanıyor…',
+      pc_bekleniyor: 'Bilgisayar bekleniyor…',
+      pc_bekleniyor_ipucu: 'Bilgisayarda {marka} açılınca kendiliğinden bağlanırım (%1).',
+      p_uygulama: 'Uygulama'
     },
     en: {
       ara_baslik: 'Looking for your computer…',
@@ -89,7 +92,10 @@
       demo_not: 'Trial mode: no computer needed. Press Back to leave.',
       cikis: 'Exit app',
       rozet_koptu: 'Connection lost, retrying…',
-      rozet_baglaniyor: 'Connecting…'
+      rozet_baglaniyor: 'Connecting…',
+      pc_bekleniyor: 'Waiting for your computer…',
+      pc_bekleniyor_ipucu: 'I will connect by myself as soon as {marka} is open on your computer (%1).',
+      p_uygulama: 'App'
     }
   };
   var dil = String((navigator.language || navigator.userLanguage || 'tr')).toLowerCase().indexOf('tr') === 0 ? 'tr' : 'en';

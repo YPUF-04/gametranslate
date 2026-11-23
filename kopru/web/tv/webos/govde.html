@@ -1,0 +1,82 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- webOS uygulamasının gövdesi: başlatıcı (tv/webos/yukleyici.js) bunu bilgisayardan alıp <body> içine koyar (PROTOKOL 18). -->
+<div id="hdmi"></div>
+<div id="kok"></div>
+
+<section id="e-ara" class="ekran">
+  <div class="tv-marka">
+    <svg class="tv-logo" viewBox="0 0 64 64" aria-hidden="true">
+      <defs>
+        <linearGradient id="tl-z" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1A3256"/><stop offset="1" stop-color="#0C1729"/></linearGradient>
+        <linearGradient id="tl-k" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2EC4B6"/><stop offset="1" stop-color="#6BE3D7"/></linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="16" fill="url(#tl-z)"/>
+      <path d="M8 33 A30 30 0 0 1 56 33" fill="none" stroke="url(#tl-k)" stroke-width="5" stroke-linecap="round"/>
+      <path d="M20 26 V36 M32 23 V36 M44 26 V36" stroke="#2EC4B6" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+      <rect x="10" y="37" width="44" height="11" rx="5.5" fill="#FFD166"/>
+      <rect x="17" y="41" width="17" height="3" rx="1.5" fill="#0C1729" opacity=".72"/>
+      <rect x="37" y="41" width="10" height="3" rx="1.5" fill="#0C1729" opacity=".72"/>
+    </svg>
+    <div>
+      <div class="tv-ad" id="tv-ad"></div>
+      <div class="tv-slogan" id="tv-slogan"></div>
+    </div>
+  </div>
+  <h1 data-i="ara_baslik"></h1>
+  <p id="ara-durum" class="yardim"></p>
+  <div id="ara-liste" class="liste"></div>
+  <p id="ara-hata" class="hata"></p>
+  <div class="satir">
+    <button class="dugme" id="b-yeniden" data-i="yeniden"></button>
+    <button class="dugme" id="b-elle" data-i="elle"></button>
+    <button class="dugme" id="b-deneme" data-i="deneme"></button>
+  </div>
+</section>
+
+<section id="e-hdmi" class="ekran">
+  <h1 data-i="hdmi_baslik"></h1>
+  <p class="yardim" data-i="hdmi_ipucu"></p>
+  <div class="satir">
+    <button class="dugme buyuk" data-hdmi="1">HDMI 1</button>
+    <button class="dugme buyuk" data-hdmi="2">HDMI 2</button>
+    <button class="dugme buyuk" data-hdmi="3">HDMI 3</button>
+    <button class="dugme buyuk" data-hdmi="4">HDMI 4</button>
+  </div>
+  <p id="hdmi-hata" class="hata"></p>
+  <div class="satir"><button class="dugme" id="b-hdmi-geri" data-i="geri"></button></div>
+</section>
+
+<section id="e-elle" class="ekran">
+  <h1 data-i="elle_baslik"></h1>
+  <p class="yardim" data-i="elle_ipucu"></p>
+  <div id="adres-alan" class="adres-alan"></div>
+  <div class="tus-izgara" id="tus-izgara"></div>
+  <p id="elle-hata" class="hata"></p>
+  <div class="satir">
+    <button class="dugme" id="b-elle-tamam" data-i="tamam"></button>
+    <button class="dugme" id="b-elle-iptal" data-i="iptal"></button>
+  </div>
+</section>
+
+<section id="e-calis" class="ekran sade">
+  <div id="calis-ipucu" class="ipucu"></div>
+  <div id="calis-hata" class="hata buyuk-hata"></div>
+  <div id="demo-not" class="ipucu"></div>
+</section>
+
+<section id="panel" class="ekran">
+  <h1 data-i="panel_baslik"></h1>
+  <table class="bilgi">
+    <tr><th data-i="p_bilgisayar"></th><td id="p-pc"></td></tr>
+    <tr><th data-i="p_baglanti"></th><td id="p-baglanti"></td></tr>
+    <tr><th data-i="p_ceviri"></th><td id="p-ceviri"></td></tr>
+    <tr><th data-i="p_son"></th><td id="p-son"></td></tr>
+    <tr><th data-i="p_hdmi"></th><td id="p-hdmi"></td></tr>
+    <tr><th data-i="p_surum"></th><td id="p-surum"></td></tr>
+  </table>
+  <div class="satir">
+    <button class="dugme" id="b-p-kapat" data-i="kapat"></button>
+    <button class="dugme" id="b-p-hdmi" data-i="hdmi_degistir"></button>
+    <button class="dugme" id="b-p-pc" data-i="pc_degistir"></button>
+  </div>
+</section>

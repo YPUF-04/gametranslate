@@ -138,6 +138,12 @@ HATALAR: dict[str, dict[str, str]] = {
         "tr": "TV uygulamayı kuruyor...", "en": "The TV is installing the app..."},
     "tv_bitti": {
         "tr": "Kuruldu. Uygulama TV'de açılıyor.", "en": "Installed. The app is opening on the TV."},
+    "tv_oturum_acildi": {
+        "tr": "TV bağlandı: geliştirici modu artık her gün kendiliğinden uzatılacak.",
+        "en": "TV connected: its Developer Mode session will now be extended automatically every day."},
+    "tv_oturum_okunamadi": {
+        "tr": "TV'ye bağlanıldı ama oturum belirteci okunamadı; süreyi TV'deki Developer Mode uygulamasından uzatın.",
+        "en": "Connected to the TV but the session token could not be read; extend the session in the TV's Developer Mode app."},
     "tv_bitti_acilmadi": {
         "tr": "Kuruldu. Uygulamayı TV'nin uygulamalar listesinden açın.",
         "en": "Installed. Open the app from the TV's app list."},

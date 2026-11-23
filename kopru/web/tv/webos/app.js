@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // AltYazıKöprüsü - LG webOS TV uygulaması (ES5). Ekranlar: arama, HDMI seçimi, elle adres, çalışıyor, bilgi paneli, deneme.
+// PROTOKOL 18: bu dosya TV'ye bilgisayardan gelir (başlatıcı tv/webos/yukleyici.js); her program güncellemesi TV'yi günceller.
 (function () {
   'use strict';
-  var SURUM = '0.1.0', PORT = 8642, T = window.AKI18N.t, P = window.AKPlatform;
+  var SURUM = '0.2.0', PORT = 8642, T = window.AKI18N.t, P = window.AKPlatform, Y = window.AKYukleyici || null;
   var KEY_PC = 'ak_son_pc', KEY_HDMI = 'ak_hdmi';
 
   // ---- küçük yardımcılar ----
@@ -26,12 +27,22 @@
   // ---- durum ----
   var ekran = null, onceki = null, pc = null, hdmiNo = parseInt(depoOku(KEY_HDMI), 10) || 0;
   var baglanti = 'yok', bilgi = null, kontrol = null, hdmiKapat = null, demoZamanci = null, aramaNo = 0, elleMetin = '';
-  var panelAcik = false, ipucuZamani = null, reklam = null;
+  var panelAcik = false, ipucuZamani = null, reklam = null, bekleZamanci = null, yenileBekliyor = false, oncekiBaglanti = null;
+
+  // ---- kendini güncelleme (PROTOKOL 18.3/5): bilgisayardaki paket farklıysa önbelleğe al, sayfayı yeniden yükle ----
+  function guncellemeDenetle() {
+    if (!Y || !Y.denetle || !pc) { return; }
+    Y.denetle(pc, function (yeni) {
+      if (!yeni) { return; }
+      if (reklam) { yenileBekliyor = true; return; }   // reklamı yarıda kesme
+      Y.yenile();
+    });
+  }
 
   // ---- ekran yönetimi ----
   var EKRANLAR = ['e-ara', 'e-hdmi', 'e-elle', 'e-calis'];
   function goster(ad) {
-    var i; ekran = ad; panelAcik = false; $('panel').className = 'ekran';
+    var i; ekran = ad; if (bekleZamanci && ad !== 'e-ara') { clearTimeout(bekleZamanci); bekleZamanci = null; } panelAcik = false; $('panel').className = 'ekran';
     for (i = 0; i < EKRANLAR.length; i++) { $(EKRANLAR[i]).className = 'ekran' + (EKRANLAR[i] === 'e-calis' ? ' sade' : '') + (EKRANLAR[i] === ad ? ' acik' : ''); }
     document.body.className = (ad === 'e-calis' ? 'calisiyor' : '') + (demoZamanci ? ' demo' : '');
     odakla(null);
@@ -61,8 +72,24 @@
   }
 
   // ---- bilgisayar arama ----
-  function aramaIptal() { aramaNo++; }
+  function aramaIptal() { aramaNo++; if (bekleZamanci) { clearTimeout(bekleZamanci); bekleZamanci = null; } }
+  // Kayıtlı bilgisayar yanıt vermiyor: sakin "Bilgisayar bekleniyor" ekranı, 5 sn'de bir yeniden dener (PROTOKOL 18.3/2)
+  function bekle(adres) {
+    var no = ++aramaNo;
+    goster('e-ara');
+    $('ara-liste').innerHTML = ''; $('ara-hata').textContent = '';
+    $('e-ara').getElementsByTagName('h1')[0].textContent = T('pc_bekleniyor');
+    $('ara-durum').textContent = T('pc_bekleniyor_ipucu', [adres]); $('ara-durum').className = 'yardim araniyor';
+    odakla($('b-yeniden'));
+    function dene() {
+      bekleZamanci = null;
+      esle(adresUrl(adres) + '/kopru/merhaba', function () { if (no === aramaNo) { pcSec(adres); } },
+        function () { if (no === aramaNo && ekran === 'e-ara') { bekleZamanci = setTimeout(dene, 5000); } }, 3000);
+    }
+    bekleZamanci = setTimeout(dene, 5000);
+  }
   function ara() {
+    aramaIptal();
     var no = ++aramaNo, bulunan = [];
     goster('e-ara');
     $('ara-liste').innerHTML = ''; $('ara-hata').textContent = '';
@@ -111,6 +138,7 @@
 
   function pcSec(adres) {
     pc = adres; depoYaz(KEY_PC, adres);
+    guncellemeDenetle();
     if (hdmiNo) { calistir(); } else { hdmiEkrani(); }
   }
 
@@ -143,6 +171,8 @@
   // ---- çalışıyor ----
   function bilgiDurumu(d) {
     baglanti = d === 'bagli' ? 'bagli' : (d === 'koptu' ? 'koptu' : 'baglaniyor'); panelYenile();
+    if (baglanti === 'bagli' && oncekiBaglanti === 'koptu') { guncellemeDenetle(); }   // PC yeniden açıldı: güncellenmiş olabilir
+    if (baglanti !== 'baglaniyor') { oncekiBaglanti = baglanti; }
   }
   function ipucuGoster() {
     var e = $('calis-ipucu'); e.innerHTML = ''; var s = document.createElement('span'); s.textContent = T('ipucu_calisiyor'); e.appendChild(s);
@@ -161,7 +191,8 @@
       var h = $('calis-hata');
       if (d === 'hata') { h.textContent = T('hdmi_hata'); h.style.display = 'block'; } else { h.style.display = 'none'; }
     });
-    kontrol = window.AKOverlay.baslat(adresUrl(pc) + '/kopru/akis?reklam=1', $('kok'), {
+    var sorgu = '/kopru/akis?reklam=1' + (Y ? '&yukleyici=' + Y.surum + '&paket=' + encodeURIComponent(Y.paket || '') : '');
+    kontrol = window.AKOverlay.baslat(adresUrl(pc) + sorgu, $('kok'), {
       onDurum: bilgiDurumu, onBilgi: function (v) { bilgi = v; panelYenile(); }, onYazi: function () { panelYenile(); },
       onReklam: reklamOynat, onReklamBitti: function () { if (reklam) { reklam.durdur(); reklam = null; } },
       metinKoptu: T('rozet_koptu'), metinBaglaniyor: T('rozet_baglaniyor')
@@ -183,7 +214,7 @@
     if (!v || !v.id || reklam || !window.AKReklam || !pc) { return; }
     reklam = window.AKReklam.oynat(document.body, { id: v.id, vast: v.vast, en_az_sn: v.en_az_sn,
       metin: { reklam: T('reklam'), sn: T('sn'), destek: T('destek'), destek_alt: T('destek_alt') },
-      bitti: function (s) { reklam = null; reklamBitti(v, s, 0); } });
+      bitti: function (s) { reklam = null; reklamBitti(v, s, 0); if (yenileBekliyor && Y) { setTimeout(Y.yenile, 1500); } } });
   }
 
   // ---- deneme kipi ----
@@ -214,7 +245,7 @@
     $('p-pc').textContent = pc || T('yok'); $('p-baglanti').textContent = durumMetni();
     $('p-ceviri').textContent = bilgi && bilgi.motor ? bilgi.motor + (bilgi.yedek ? ' (yedek)' : '') : T('yok');
     $('p-son').textContent = (kontrol && kontrol.sonYazi()) || T('yok');
-    $('p-hdmi').textContent = hdmiNo ? 'HDMI ' + hdmiNo : T('yok'); $('p-surum').textContent = SURUM;
+    $('p-hdmi').textContent = hdmiNo ? 'HDMI ' + hdmiNo : T('yok'); $('p-surum').textContent = SURUM + (Y ? ' · ' + T('p_uygulama') + ' ' + (Y.paket || '-') + ' (' + Y.kaynak + ')' : '');
   }
   function panelAc() { panelYenile(); panelAcik = true; $('panel').className = 'ekran acik'; odakla(null); }
   function panelKapat() { panelAcik = false; $('panel').className = 'ekran'; }
@@ -263,6 +294,6 @@
   var kayitli = depoOku(KEY_PC);
   if (kayitli) {
     goster('e-ara'); $('ara-durum').textContent = T('kayitli_bakiliyor'); $('ara-durum').className = 'yardim araniyor';
-    esle(adresUrl(kayitli) + '/kopru/merhaba', function () { pcSec(kayitli); }, function () { ara(); }, 3000);
+    esle(adresUrl(kayitli) + '/kopru/merhaba', function () { pcSec(kayitli); }, function () { bekle(kayitli); }, 3000);
   } else { ara(); }
 }());

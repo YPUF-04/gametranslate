@@ -2,7 +2,8 @@
 // Çalıştır:  cd tv/testler && NODE_PATH=$(npm root -g) node kontrol.js   (Playwright + Chromium gerekir)
 // Ekran görüntüsü klasörü için: SHOT_DIR=/yol node kontrol.js
 var assert = require('assert'), fs = require('fs'), os = require('os'), path = require('path');
-var pw = require('playwright'), sahte = require('./sunucu.js');
+var pw = require('playwright'), sahte = require('./sunucu.js'), cp = require('child_process');
+var PY = process.env.PYTHON || 'python3';
 var SHOT = process.env.SHOT_DIR || os.tmpdir();
 var KOK = path.join(__dirname, '..', '..');
 var sonuc = [];
@@ -10,15 +11,22 @@ function bekle(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 function ok(ad) { sonuc.push(ad); console.log('  ok  ' + ad); }
 function hatalar(sayfa) { var l = []; sayfa.on('pageerror', function (e) { l.push('pageerror: ' + e.message); }); sayfa.on('console', function (m) { if (m.type() === 'error') { l.push('console: ' + m.text()); } }); return l; }
 
-function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme betiğinin yaptığı gibi)
+function sahneyiHazirla() { // başlatıcı (tv/webos) + yazı tipleri + gömülü paket, paketleme betiğinin yaptığı gibi (PROTOKOL 18)
   var d = fs.mkdtempSync(path.join(os.tmpdir(), 'akwebos-')), w = path.join(KOK, 'tv', 'webos');
   fs.readdirSync(w).forEach(function (f) { fs.copyFileSync(path.join(w, f), path.join(d, f)); });
-  ['ortak.js', 'ortak.css', 'reklam.js'].forEach(function (f) { fs.copyFileSync(path.join(KOK, 'kopru', 'web', 'tv', f), path.join(d, f)); });
+  ['yazi-latin.woff2', 'yazi-latin-ext.woff2'].forEach(function (f) { fs.copyFileSync(path.join(KOK, 'kopru', 'web', 'tv', f), path.join(d, f)); });
+  cp.execFileSync(PY, ['-m', 'kopru.tv_kurulum.uygulama', '--gomulu', path.join(d, 'gomulu.js')], { cwd: KOK });
   return d;
+}
+function paketAl() { // sunucunun sunduğu paketin aynısı
+  var f = path.join(os.tmpdir(), 'ak-tv-paket-' + process.pid + '.json');
+  cp.execFileSync(PY, ['-m', 'kopru.tv_kurulum.uygulama', '--json', f], { cwd: KOK });
+  return JSON.parse(fs.readFileSync(f, 'utf8'));
 }
 
 (async function () {
   var s = sahte.olustur(); await new Promise(function (r) { s.listen(8642, '0.0.0.0', r); });
+  var PAKET = paketAl(); s.tvPaket = PAKET;
   var b = await pw.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   try {
     // ---------- 1) tv.html ----------
@@ -305,6 +313,8 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     // 3a) demo kipi (webOS köprüsü yok)
     c = await b.newContext({ locale: 'tr-TR', viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 }); p = await c.newPage(); var hd = hatalar(p);
     await p.goto(url); await p.waitForSelector('#e-ara.acik'); await bekle(300);
+    assert.deepStrictEqual(await p.evaluate(function () { return [window.AKYukleyici.surum, window.AKYukleyici.kaynak, window.AKYukleyici.paket]; }), [2, 'gomulu', PAKET.surum]);
+    ok('§18.3: kayıtlı bilgisayar yokken başlatıcı gömülü paketi açtı');
     assert(/Bilgisayar/.test(await p.textContent('#ara-hata')) || true);
     ok('ilk açılış: arama ekranı (ağ adresi yoksa elle girmeye yönlendirir): "' + (await p.textContent('#ara-hata')).trim() + '"');
     await p.screenshot({ path: path.join(SHOT, 'webos-ara.png') });
@@ -323,10 +333,11 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     for (i = 0; i < 40 && s.istemciSayisi() < 1; i++) { await bekle(100); } assert(s.istemciSayisi() >= 1);
     s.yayinla('yazi', { id: 'z1', metin: 'TV üzerinden altyazı', sure_ms: 30000 }); await p.waitForSelector('.ak-yazi-kutu:visible');
     await p.keyboard.press('Enter'); await p.waitForSelector('#panel.acik');
-    var pt = await p.textContent('#panel'); assert(/127\.0\.0\.\d+:8642/.test(pt) && pt.indexOf('Bağlı') >= 0 && pt.indexOf('HDMI 1') >= 0 && pt.indexOf('TV üzerinden altyazı') >= 0 && pt.indexOf('0.1.0') >= 0, pt); ok('bilgi paneli adres/bağlantı/HDMI/son altyazı/sürüm gösteriyor');
+    var pt = await p.textContent('#panel'); assert(/127\.0\.0\.\d+:8642/.test(pt) && pt.indexOf('Bağlı') >= 0 && pt.indexOf('HDMI 1') >= 0 && pt.indexOf('TV üzerinden altyazı') >= 0 && pt.indexOf('0.2.0') >= 0 && pt.indexOf(PAKET.surum) >= 0, pt); ok('bilgi paneli adres/bağlantı/HDMI/son altyazı/sürüm gösteriyor');
     await p.screenshot({ path: path.join(SHOT, 'webos-panel.png') });
     // §17.3: "+30 dk" reklamı TV'de: SSE reklam → oynat → bitti çağrısı (süreyi PC verir)
-    assert(s.akisSorgulari.slice(-1)[0] === 'reklam=1', 'webOS reklam=1 ile bağlanmadı'); ok('webOS akışa reklam=1 ile bağlandı');
+    assert.strictEqual(s.akisSorgulari.slice(-1)[0], 'reklam=1&yukleyici=2&paket=' + PAKET.surum, 'webOS akış sorgusu'); ok('webOS akışa reklam=1 + başlatıcı/paket sürümüyle bağlandı (§18.3/6)');
+    assert(s.paketIstekleri.some(function (q) { return q.yukleyici === '2' && q.surum === PAKET.surum; }), JSON.stringify(s.paketIstekleri)); ok('§18.3/5: bilgisayar seçilince paket sürümü denetlendi (aynı: yeniden yükleme yok)');
     await p.keyboard.press('Escape'); await p.waitForSelector('#panel.acik', { state: 'detached', timeout: 1 }).catch(function () {});
     s.reklamBitti.length = 0;
     var istekler = []; p.on('request', function (q) { istekler.push(q.url()); });
@@ -372,6 +383,42 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     await p.keyboard.type('127.0.0.1'); assert.strictEqual((await p.textContent('#adres-alan')).trim(), '127.0.0.1');
     await p.click('#b-elle-tamam'); await p.waitForSelector('#e-hdmi.acik'); ok('elle adres + sayı tuşu ile bağlantı');
     assert.deepStrictEqual(he.filter(function (x) { return x.indexOf('pageerror') === 0; }), []); await c.close();
+    // 3d) PROTOKOL 18: TV bir daha yeniden kurulmaz — paket bilgisayardan gelir, önbelleğe alınır, PC yokken önbellekten açılır
+    console.log('webOS başlatıcı (kendini güncelleme)');
+    var YENI = JSON.parse(JSON.stringify(PAKET)); YENI.surum = 'abcdef000001';
+    YENI.html = YENI.html + '<div id="yeni-isaret">yeni paket</div>';
+    s.tvPaket = YENI; s.paketIstekleri.length = 0;
+    c = await b.newContext({ locale: 'tr-TR', viewport: { width: 1920, height: 1080 } });
+    await c.addInitScript(function () { if (!sessionStorage.getItem('ak_test_ilk')) { sessionStorage.setItem('ak_test_ilk', '1'); localStorage.setItem('ak_son_pc', '127.0.0.1:8642'); localStorage.setItem('ak_hdmi', '1'); } });
+    p = await c.newPage(); var hy = hatalar(p);
+    await p.goto(url); await p.waitForSelector('#yeni-isaret', { timeout: 8000 }); await p.waitForSelector('#e-calis.acik', { timeout: 8000 });
+    var yk = await p.evaluate(function () { return [window.AKYukleyici.kaynak, window.AKYukleyici.paket, JSON.parse(localStorage.getItem('ak_paket')).surum]; });
+    assert.deepStrictEqual(yk, ['pc', 'abcdef000001', 'abcdef000001']); ok('§18.3/1: kayıtlı bilgisayardan yeni paket alındı, önbelleğe yazıldı ve doğrudan çalışma ekranı açıldı');
+    for (i = 0; i < 40 && s.istemciSayisi() < 1; i++) { await bekle(100); }
+    assert(/yukleyici=2&paket=abcdef000001$/.test(s.akisSorgulari.slice(-1)[0]), s.akisSorgulari.slice(-1)[0]); ok('akışa yeni paket sürümüyle bağlandı');
+    // bilgisayar kapalı: önbellekteki paket açılır + sakin "Bilgisayar bekleniyor" ekranı; PC gelince kendiliğinden bağlanır
+    s.kapali = true; s.kopar();
+    await p.reload(); await p.waitForSelector('#yeni-isaret', { timeout: 10000 });
+    await p.waitForFunction(function () { return /bekleniyor/.test(document.querySelector('#e-ara h1').textContent) && document.querySelector('#e-ara').className.indexOf('acik') >= 0; }, null, { timeout: 10000 });
+    assert.strictEqual(await p.evaluate(function () { return window.AKYukleyici.kaynak; }), 'onbellek'); ok('§18.3/2: bilgisayar yokken önbellekteki son paket + "Bilgisayar bekleniyor…"');
+    await p.screenshot({ path: path.join(SHOT, 'webos-bekleniyor.png') });
+    // bilgisayar güncellendi ve geri geldi: yeni sürüm algılanır, sayfa kendiliğinden yeniden yüklenir
+    var YENI2 = JSON.parse(JSON.stringify(YENI)); YENI2.surum = 'abcdef000002'; YENI2.html = PAKET.html + '<div id="yeni-isaret2">daha yeni</div>';
+    s.tvPaket = YENI2; s.kapali = false;
+    await p.waitForSelector('#yeni-isaret2', { timeout: 15000 }); await p.waitForSelector('#e-calis.acik', { timeout: 8000 });
+    assert.deepStrictEqual(await p.evaluate(function () { return [window.AKYukleyici.kaynak, window.AKYukleyici.paket]; }), ['pc', 'abcdef000002']);
+    ok('§18.3/5: bilgisayar geri gelince kendiliğinden bağlandı, yeni sürümü aldı ve yeniden yüklendi');
+    assert.deepStrictEqual(hy.filter(function (x) { return x.indexOf('pageerror') === 0; }), []); await c.close();
+    // 3e) bozuk paket: ilk saniyelerde hata → o sürüm "kötü", gömülü paketle açılır (TV asla boş ekranda kalmaz)
+    var BOZUK = JSON.parse(JSON.stringify(PAKET)); BOZUK.surum = 'bozuk0000001'; BOZUK.js = BOZUK.js.concat([['bozuk.js', 'throw new Error("bozuk paket");']]);
+    s.tvPaket = BOZUK;
+    c = await b.newContext({ locale: 'tr-TR', viewport: { width: 1920, height: 1080 } });
+    await c.addInitScript(function () { if (!sessionStorage.getItem('ak_test_ilk')) { sessionStorage.setItem('ak_test_ilk', '1'); localStorage.setItem('ak_son_pc', '127.0.0.1:8642'); } });
+    p = await c.newPage();
+    await p.goto(url);
+    await p.waitForFunction(function () { return window.AKYukleyici && window.AKYukleyici.kaynak === 'gomulu'; }, null, { timeout: 10000 });
+    assert.strictEqual(await p.evaluate(function () { return localStorage.getItem('ak_paket_kotu'); }), 'bozuk0000001'); ok('§18.3/4: hata veren paket kötü işaretlendi, gömülü paketle açıldı');
+    await c.close(); s.tvPaket = PAKET;
     console.log('\nTÜM KONTROLLER GEÇTİ (' + sonuc.length + ')');
   } catch (e) { console.error('\nBAŞARISIZ:', e && e.stack || e); process.exitCode = 1; }
   finally { await b.close(); s.close(); process.exit(process.exitCode || 0); }

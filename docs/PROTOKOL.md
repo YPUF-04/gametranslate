@@ -884,3 +884,149 @@ Sahibin kararı. Bu bölüm §7.3'ün **yerine geçer** (eski "günde 30 dk ücr
   basışta kısa bir izin ekranı gösterir: "Kabul et ve reklamı izle" (`reklam_izni:true`) / "Vazgeç" (`false`; yine
   destek ekranıyla +30 dk). İzin Gelişmiş ayarlardan her an geri alınır. `GET /api/erisim` ayrıca
   `"reklam_izni": null|true|false` verir. Ayrıntı: GIZLILIK.md.
+
+## 18. LG TV uygulaması bir daha yeniden kurulmaz: başlatıcı + bilgisayardan gelen uygulama, geliştirici modu uzatma (sonraki sürüm)
+
+Sahibin isteği: "televizyondaki şeyi her seferinde 0'dan kurmaktansa direkt yapamıyor muyuz". Bu bölüm §8 (LG kurulumu)
+ve §16.1'deki "örtü için TV uygulaması bir kez yeniden kurulur" notunun yerine geçer.
+
+### 18.1 Parçalar
+- **Başlatıcı** (`tv/webos/`, `.ipk` içinde, uygulama kimliği yine `com.altyazikoprusu.tv`, sürüm `0.2.0`; ACG'siz
+  yedek varyant `0.2.1`): `index.html` (sakin "Yükleniyor…/Bilgisayar bekleniyor" ekranı), `yukleyici.js` (ES5, kararlı;
+  değişmesi gerekmez), yazı tipleri, simgeler ve paketleme anında üretilen `gomulu.js` (uygulamanın pakete gömülü son
+  hâli, `window.AK_GOMULU_PAKET`). Başlatıcı sürümü (`yukleyici`) tam sayıdır: eski (`0.1.x`) uygulama = 1, bu = **2**.
+- **Uygulama** (değişen her şey): `kopru/web/tv/webos/govde.html` (gövde işaretlemesi), `webos/style.css`, `ortak.css`,
+  `marka.js`, `webos/i18n.js`, `webos/platform-webos.js`, `ortak.js`, `reklam.js`, `webos/app.js` (bu sırayla).
+  Bilgisayar bunları tek bir JSON "paket" olarak sunar; her program güncellemesi TV'yi kendiliğinden günceller.
+- Yazı tipleri ve simgeler pakette kalır (CSS `url(yazi-latin.woff2)` başlatıcının klasörüne göre çözülür).
+
+### 18.2 `GET /kopru/tv/uygulama`  (yerel ağ, CORS `*`)
+Sorgu: `yukleyici=<n>` (başlatıcı sürümü), `surum=<elindeki paket sürümü>` (isteğe bağlı).
+- Elindeki sürüm güncelse: `{"uygulama":"altyazikoprusu-tv","surum":"<12 hex>","ayni":true}`.
+- Değilse tam paket:
+  `{"uygulama":"altyazikoprusu-tv","surum":"<12 hex>","yukleyici_en_az":2,"kopru_surum":"0.1.4",
+    "html":"<gövde>","css":["…","…"],"js":[["ortak.js","…"],…]}`.
+  `surum` = bütün içeriğin SHA-256'sının ilk 12 hex'i (dosya değişmedikçe aynı).
+- Başlatıcı `yukleyici_en_az`'dan eskiyse `{"uygulama":"altyazikoprusu-tv","eski_yukleyici":true,"yukleyici_en_az":n}`
+  döner; başlatıcı elindeki (önbellek/gömülü) paketle açılır ve panel "bir kez yeniden kurun" der.
+- Her istek TV'yi kayda geçirir (§18.5).
+
+### 18.3 Başlatıcının akışı (`yukleyici.js`)
+1. Kayıtlı bilgisayar (`localStorage.ak_son_pc`) varsa paketi ondan ister (4 sn sınır).
+   Gelen paket doğrulanır (`uygulama`, `surum`, `html`, `css[]`, `js[][2]`), **önbelleğe** yazılır
+   (`localStorage.ak_paket`, en çok ~1,5 MB; sığmazsa yazılmaz) ve çalıştırılır (`kaynak:"pc"`).
+2. Bilgisayar yanıt vermezse önbellekteki son iyi paket (`kaynak:"onbellek"`), o da yoksa gömülü paket
+   (`kaynak:"gomulu"`) çalışır. Uygulama kayıtlı bilgisayarı beklerken sakin **"Bilgisayar bekleniyor…"** ekranını
+   gösterir ve 5 sn'de bir yeniden dener (arama/elle adres/deneme düğmeleri durur).
+3. Çalıştırma: CSS'ler `<style>`, gövde `<body>` içine, JS'ler sırayla satır içi `<script>` olarak eklenir (webOS
+   paketli uygulamalarında CSP yoktur; köken `file://` kalır, böylece `PalmServiceBridge`/Luna ve HDMI `<video>`
+   eskisi gibi çalışır — uygulamayı `http://` adresine yönlendirmek bu yetkileri kaybettirirdi).
+4. Güvenlik ağı: paketin ilk 8 sn'sinde yakalanmamış bir hata olursa (ya da paket hiç açılamazsa) o sürüm "kötü"
+   işaretlenir (`localStorage.ak_paket_kotu`), önbellek silinir ve uygulama bir kez gömülü paketle yeniden açılır.
+5. `window.AKYukleyici = {surum:2, paket:"<surum>", kaynak, denetle(adres, cb)}`. Uygulama bilgisayar bulup
+   seçtiğinde ve akış koptuktan sonra yeniden bağlandığında `denetle` çağırır; bilgisayardaki sürüm farklıysa yeni paket
+   önbelleğe yazılır ve sayfa yeniden yüklenir (reklam oynarken yüklenmez, bitince yüklenir).
+6. Uygulama akışa `…/kopru/akis?reklam=1&yukleyici=2&paket=<surum>` ile bağlanır.
+
+### 18.4 Eski kurulumlar
+`0.1.x` uygulaması aynen çalışır (akış değişmedi), yalnız kendini güncelleyemez. Başlatıcıya geçmek için **bir son kez**
+yeniden kurulur (panelde tek tuş, §8); sonra bir daha kurulum gerekmez (geliştirici modu süresi dolmadıkça, §18.6).
+
+### 18.5 TV kaydı ve panel API'si (yalnız yerel)
+- Sunucu, `/kopru/tv/uygulama` ve `/kopru/akis` isteklerinden TV'leri RAM'de tutar (adres başına; en çok 16):
+  `yukleyici` (akış sorgusunda yoksa ve istek `Origin: null` ile — paketli uygulama — geliyorsa **1** = eski uygulama;
+  tarayıcıdaki `/tv` sayfası kaydedilmez), `paket`, son görülme.
+- `GET /api/tv/uygulama` →
+  `{"paket_surum":"<12 hex>","yukleyici_guncel":2,"durum":"guncel"|"eski"|"bilinmiyor","mesaj":"…",
+    "tvler":[{"adres":"192.168.1.30","yukleyici":2,"paket":"<12 hex>","guncel":true,"son_gorulme_sn":4}]}`.
+  `durum`: en az bir TV görülmüşse ve hepsinin başlatıcısı güncelse `guncel`; biri eskiyse `eski`
+  ("TV uygulaması eski: bir kez yeniden kurun, sonra hep kendiliğinden güncellenir"); hiç TV görülmediyse `bilinmiyor`.
+  TV'nin paketi henüz eski sürümse (`paket` ≠ `paket_surum`) `guncel:false` ama `yukleyici` 2 ise yeniden kurulum
+  gerekmez: TV bir sonraki bağlantıda kendini günceller.
+
+### 18.6 Geliştirici modu oturumunu kendiliğinden uzatma
+LG'nin Developer Mode uygulaması bir oturum süresi sayar (LG'nin sunucusunda; bugün 1000 sa, eskiden 50 sa) ve süre
+dolunca TV açılışta geliştirici modunu ve kurulu uygulamaları siler. Süre LG'nin kendi adresiyle sıfırlanır.
+- **Belirteç:** TV'deki `/var/luna/preferences/devmode_enabled` dosyası (Developer Mode uygulamasının LG hesabıyla
+  aldığı oturum belirteci). Kurulumda (SSH `prisoner` zaten açıkken) `cat` ile okunur; yalnız harf/rakam/`-_`,
+  8–256 karakter kabul edilir. **Şifreli kasaya** yazılır (`keyring`, ad `lg_devmode`); ayar dosyasına, günlüğe,
+  yanıta asla girmez. Kasa yoksa saklanmaz (uzatma kapalı kalır, panel hatırlatır).
+- **Uzatma:** program açıkken saatte bir bakılır; son başarılı uzatmadan 24 sa geçtiyse (ya da hiç yapılmadıysa)
+  `GET https://developer.lge.com/secure/ResetDevModeSession.dev?sessionToken=<belirteç>` çağrılır, ardından kalan süre
+  için `GET https://developer.lge.com/secure/CheckDevModeSession.dev?sessionToken=<belirteç>`. Yanıt
+  `{"result":"success","errorCode":"200","errorMsg":"999:58:40"}` (Check: kalan `SSS:DD:SS`; Reset'in `errorMsg`'i
+  anlamsızdır). Yalnız bu iki adres, yalnız `https`, yönlendirme izlenmez, vekil (proxy) ayarına uyulur, başka hiçbir
+  veri gönderilmez. Hata olursa 1 sa sonra yeniden denenir. `result` `fail` (ör. `ERR_006 Check sessionToken`) ise
+  belirteç geçersiz sayılır (TV'de geliştirici modu yeniden açılmış olabilir): panel "TV'yi bir kez daha bağlayın" der.
+- Not (LG'nin davranışı): TV ekranındaki sayaç yalnız TV tamamen kapatılıp açılınca güncellenir; süre denetimi açılışta
+  yapılır. Uzatma TV kapalıyken de çalışır.
+- Durum dosyası `<ayar_dizini>/lg_devmode.json` (belirteç YOK): `{"otomatik":true,"son_uzatma":<epoch>,
+  "son_deneme":<epoch>,"kalan_sn":3599920,"bitis_tahmini":<epoch>,"hata":null|"ag"|"gecersiz","tv":"192.168.1.30"}`.
+- API (yalnız yerel):
+  - `GET /api/tv/lg/gelistirici` → `{"belirtec_var":true,"otomatik":true,"son_uzatma":<epoch|null>,
+    "kalan_sn":n|null,"bitis_tahmini":<epoch|null>,"hata":null|"ag"|"gecersiz"|"kasa_yok","mesaj":"…",
+    "hatirlatma":bool}` (`hatirlatma`: belirteç yok/geçersizken ve son kurulumdan 40 sa geçtiyse true).
+  - `POST /api/tv/lg/gelistirici` `{"otomatik":bool}` → aç/kapat; `{"uzat":true}` → hemen uzat (en çok 5 dk'da bir);
+    `{"belirtec":"…"}` → belirteci elle kaydet (boş = sil).
+  - `POST /api/tv/lg/kur` yeni `paket:"oturum"`: kurulum yapmadan yalnız SSH ile bağlanıp belirteci okur
+    (eski kurulumu olanlar için "Oturum uzatmayı aç").
+
+## 19. Profesyonel altyazı çevirisi 2: sahne bağlamı, hitap hafızası, iki aşamalı kalite, okuma temizliği (sonraki sürüm)
+
+Sahibin isteği: "aşırı iyi, profesyonel çevirsin" — gecikmeyi artırmadan. Bu bölüm §6.3 ve §6.5'i günceller.
+
+### 19.1 İstem (prompt)
+- **Sahne bağlamı:** son **8** altyazı satırı (konuşan adıyla, `AD: asıl => çeviri`), eskiden 6.
+- **Hitap hafızası:** yayınlanan her konuşanlı satırda Türkçe çevirinin hitabı (sen/siz) basit eklerle sezilir
+  (`siz`, `-sınız/-siniz`, `-ınız`, `lütfen … -ın` …) ve "konuşan → önceki farklı konuşan" çifti için tutulur
+  (oyun başına, yalnız RAM, en çok 40 çift). İstemde `Address memory (speaker -> listener: form)` olarak verilir; oyun
+  bilgisindeki `hitap` varsayılandır.
+- **Sözlük öğrenme:** motorun `yeni_terimler` önerisi aynı biçimle **2 kez** gelirse (ya da kullanıcı öneriyi kabul
+  ederse — o zaten sözlüğe girer) oturum için "öğrenilmiş ad" olur (en çok 60) ve istemde `KNOWN NAMES` altında verilir;
+  böylece aynı ad hep aynı yazılır. Sözlüğe kendiliğinden girmez (öneri listesi §6.3 aynen).
+- **Türkçe altyazı kuralları** (kısa): sokak ağzı doğal Türkçe argoyla (zorlama/"cringe" olmadan, ör. "bro" → "kanka"
+  yalnız konuşan o ağızdaysa), küfür aynı şiddette (yumuşatma da sertleştirme de yok), deyimler karşılığıyla, kelime
+  kelime çeviri yok; sayılar rakamla, para birimi `$500` → `500 dolar` (oyundaki para işareti `$`, HUD'da aynen kalır),
+  mil/feet/pound çevrilmez (oyun dünyasının birimi), saat 24 sa değil olduğu gibi; satır başına ≤ 42 karakter, ≤ 2 satır,
+  bölme anlam öbeğinde (`\n`), iki satır mümkünse dengeli.
+- **Örnekler (few-shot):** istemin kararlı kısmında 8 kısa, elle yazılmış İngilizce → Türkçe oyun altyazısı örneği
+  (sokak ağzı, küfür, şaka, görev metni, menü, düğme belirteci, para). Kararlı kısım önbelleğe alınır (Claude),
+  böylece maliyet ve gecikme artmaz.
+
+### 19.2 İki aşamalı kalite
+- Yeni ayar `ceviri_kalitesi`: `"hizli"` | `"dengeli"` (varsayılan, önerilen) | `"en_iyi"`. Panel: "Çeviri kalitesi:
+  Hızlı / Dengeli (önerilen) / En iyi". (`kalite` §6.5 model seçimidir ve aynen kalır.)
+- İlk çeviri her zaman hızlı yoldan hemen gösterilir (§16.4 değişmez). Sonra **iyileştirme**:
+  - `dengeli`: ekranda **2,5 sn**'den uzun kalan altyazı satırı ve **2,5 sn**'den uzun duran ekran öğesi (menü/görev)
+    için bir kez; `en_iyi`: altyazıda **1,2 sn**, öğede 2,5 sn; `hizli`: hiç.
+  - Yalnız motor desteklerse (Claude, Gemini, DeepSeek; yerel/DeepL/sahte hayır), yedekteyken değil, kaynak `motor` iken
+    (kullanıcı düzeltmesi/paket iyileştirilmez) ve satır bu oturumda henüz iyileştirilmediyse.
+  - İyileştirme isteği "derin" kiptedir: Gemini aynı modelde daha çok düşünme (`thinkingLevel:"medium"`, 15 sn),
+    Claude `claude-opus-5-5` + `effort:"medium"` (15 sn), DeepSeek aynı model. İstemde ilk taslak verilir; model taslak
+    iyiyse **aynen** döndürür.
+  - Sonuç yalnız **anlamlı biçimde farklıysa** (normalize metin farklı ve benzerlik < 0,98) uygulanır: satır hâlâ
+    gösteriliyorsa aynı `id` ile `yazi {"devam":true}` (yerinde, titreme yok); kuyrukta bekliyorsa metni değişir; çoktan
+    kalktıysa yalnız hafızaya/önbelleğe yazılır. Aynı metin asla yeniden yayınlanmaz. Kuyruk sırası ve zamanlama (§16.4)
+    değişmez; iyileştirme süreyi uzatmaz.
+  - İyileştirilmiş çeviri hafızaya (`motor`) ve önbelleğe yazılır; aynı satır bir daha geldiğinde hemen iyi hâli çıkar.
+- `GET /api/durum` `gecikme` içine `iyilestirilen` (değişen satır sayısı) ve `iyilestirme_istek` eklenir.
+
+### 19.3 Çeviri öncesi okuma temizliği (§16.3'e ek)
+- **Satır birleştirme:** altyazı kümesinin satırları tek cümle olarak birleştirilir; satır sonu kısa çizgiyle bölünmüş
+  kelime (`some-` + `thing`, sonraki küçük harfle başlıyorsa) birleşir; `-` ile başlayan iki konuşmacılı satırlar
+  `\n` ile ayrı kalır.
+- **Okuma karışıklıkları (temkinli):** tek başına `l`/`|` → `I` (İngilizce kaynakta; `l'm`, `l'll`, `l've`, `l'd` dahil);
+  harfler arasındaki `0` → `O`/`o` (komşu harfin büyüklüğüne göre; düğme belirteçleri ve sayılar dokunulmaz);
+  `rn` → `m` yalnız sonuç sık kullanılan bir İngilizce kelimeyse ve asıl hâli kelime değilse (`rnore` → `more`,
+  `sorne` → `some`, `turn` aynen).
+- **Konuşan ön eki:** `AD: metin` (`：` dahil, iki nokta sonrası boşluksuz da), `[AD] metin`; AD en çok 3 kelime ve
+  büyük harfle başlar. Konuşan istemde bağlamdır, çeviriye eklenmez (§16.4 aynen).
+- **Daktilo kareleri:** metin bir önceki karenin uzantısı olarak büyüyorsa (daktilo) ve cümle sonu noktalamasıyla
+  bitmiyorsa kesinleşmek için **3** aynı kare beklenir (eskiden 2); önden çeviri büyürken atılmaz. Cümle sonu
+  noktalaması varsa ya da büyüme yoksa 2 kare (§16.4 aynen).
+
+### 19.4 Değerlendirme
+- `tests/ceviri_ornekleri.json`: ~40 gerçekçi GTA benzeri satır (argo, şaka, görev, menü, para, düğme) ve her biri için
+  beklenen nitelikler (`yasak` sözcükler, `en_cok_karakter`, korunacak belirteçler).
+- `araclar/ceviri_degerlendir.py`: istemi kurar, sahte modelle yapıyı denetler; `GEMINI_API_KEY` varsa (ve
+  `--canli`) gerçek modelle çalıştırıp kuralları puanlar. CI'da canlı kısım atlanır.

@@ -29,6 +29,8 @@ from .katman import yonetim as katman_yonetim
 from .okuma import OkumaHatasi
 from .onbellek import Onbellek, normallestir
 from .tv_kurulum.lg import LgKurulum
+from .tv_kurulum import uygulama as tv_uygulama
+from .tv_kurulum.gelistirici import GelistiriciModu
 from .yakalama import YakalamaHatasi
 from .yayin import Yayin, sse_bicim
 
@@ -46,6 +48,8 @@ YAZMA_ZAMAN_ASIMI_SN = 15.0  # donmuş istemciye yazma bu süreyi aşarsa bağla
 DURUM = web.AppKey("durum", object)
 GUNCELLEME = web.AppKey("guncelleme", object)
 LG_KURULUM = web.AppKey("lg_kurulum", object)
+TV_KAYDI = web.AppKey("tv_kaydi", object)          # PROTOKOL 18.5
+LG_GELISTIRICI = web.AppKey("lg_gelistirici", object)   # PROTOKOL 18.6
 PSN_ISTEK = web.AppKey("psn_istek", object)   # testlerde sahte Sony istemcisi
 
 
@@ -476,6 +480,7 @@ async def akis(request: web.Request) -> web.StreamResponse:
     await r.prepare(request)
     q = d.yayin.abone_ol()
     reklam = request.query.get("reklam") == "1"   # PROTOKOL 17.3: bu istemci reklam oynatabilir (TV uygulaması)
+    _tv_gor(request)
     if reklam:
         d.reklam_istemci += 1
     try:
@@ -506,6 +511,61 @@ async def akis(request: web.Request) -> web.StreamResponse:
         if reklam:
             d.reklam_istemci -= 1
     return r
+
+
+def _tv_gor(request: web.Request) -> None:
+    """PROTOKOL 18.5: paketli TV uygulamasını (Origin: null ya da yukleyici sorgusu) kayda geçirir."""
+    kayit = request.app.get(TV_KAYDI)
+    if kayit is None:
+        return
+    q = request.query
+    try:
+        y: int | None = int(q["yukleyici"]) if "yukleyici" in q else None
+    except ValueError:
+        y = None
+    if y is None:
+        if request.headers.get("Origin") != "null" or request.path != "/kopru/akis":
+            return          # tarayıcıdaki /tv sayfası ya da başka istemci: TV uygulaması değil
+        y = 1               # eski (0.1.x) uygulama: kendini güncelleyemez
+    kayit.gor(request.remote, max(0, min(y, 999)), q.get("paket") or q.get("surum"))
+
+
+async def kopru_tv_uygulama(request: web.Request) -> web.Response:
+    """PROTOKOL 18.2: başlatıcıya uygulama paketi (yerel ağ)."""
+    _tv_gor(request)
+    v = await asyncio.to_thread(tv_uygulama.yanit, request.query.get("yukleyici"), request.query.get("surum"), SURUM)
+    return web.json_response(v, headers={"Cache-Control": "no-cache"})
+
+
+async def api_tv_uygulama(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    p = await asyncio.to_thread(tv_uygulama.paket, None, SURUM)
+    return web.json_response(request.app[TV_KAYDI].durum(p["surum"], d.ayar.get("arayuz_dili", "tr")))
+
+
+async def api_tv_lg_gelistirici_al(request: web.Request) -> web.Response:
+    g: GelistiriciModu = request.app[LG_GELISTIRICI]
+    return web.json_response(await asyncio.to_thread(g.durum))
+
+
+async def api_tv_lg_gelistirici_yaz(request: web.Request) -> web.Response:
+    g: GelistiriciModu = request.app[LG_GELISTIRICI]
+    v = await _json(request)
+    if "otomatik" in v:
+        if not isinstance(v["otomatik"], bool):
+            return hata("gecersiz_istek", 400, request)
+        g.otomatik_ayarla(v["otomatik"])
+    if "belirtec" in v:
+        if not isinstance(v["belirtec"], str):
+            return hata("gecersiz_istek", 400, request)
+        kod = await asyncio.to_thread(g.belirtec_kaydet, v["belirtec"])
+        if kod:
+            return web.json_response({"hata": kod, "mesaj": g.mesaj(kod)}, status=400)
+    if v.get("uzat") is True:
+        kod = await asyncio.to_thread(g.elle_uzat)
+        if kod == "cok_sik":
+            return web.json_response({"hata": kod, "mesaj": g.mesaj(kod)}, status=429)
+    return web.json_response(await asyncio.to_thread(g.durum))
 
 
 def _dosya(yol: Path, kok: Path) -> web.StreamResponse:
@@ -626,6 +686,8 @@ def _dogrula(k: dict[str, Any]) -> bool:
         if "hafiza_izni" in k and k["hafiza_izni"] is not None and not isinstance(k["hafiza_izni"], bool):
             return False
         if "kalite" in k and k["kalite"] not in ("en_iyi", "dengeli", "hizli"):
+            return False
+        if "ceviri_kalitesi" in k and k["ceviri_kalitesi"] not in ("en_iyi", "dengeli", "hizli"):
             return False
         if "gosterim" in k and k["gosterim"] not in ayarlar.GOSTERIMLER:
             return False
@@ -1757,16 +1819,19 @@ async def api_ps5_unut(request: web.Request) -> web.Response:
 
 
 def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None, lg_kurulum: Any = None,
-                     psn_istek: Any = None, **fabrikalar: Any) -> web.Application:
+                     psn_istek: Any = None, lg_gelistirici: Any = None, **fabrikalar: Any) -> web.Application:
     app = web.Application(middlewares=[kopru_katman, yerel_katman])
     app[PSN_ISTEK] = psn_istek
     durum = Durum(ayar if ayar is not None else ayarlar.yukle(), **fabrikalar)
     app[DURUM] = durum
     app[GUNCELLEME] = guncelleme or guncelleme_mod.Guncelleme(lambda: durum.ayar)
-    app[LG_KURULUM] = lg_kurulum or LgKurulum(lambda: durum.ayar)
+    app[LG_GELISTIRICI] = lg_gelistirici or GelistiriciModu(lambda: durum.ayar)
+    app[LG_KURULUM] = lg_kurulum or LgKurulum(lambda: durum.ayar, belirtec_al=app[LG_GELISTIRICI].kurulumdan)
+    app[TV_KAYDI] = tv_uygulama.TvKaydi()
     r = app.router
     r.add_get("/kopru/merhaba", merhaba)
     r.add_get("/kopru/akis", akis)
+    r.add_get("/kopru/tv/uygulama", kopru_tv_uygulama)
     r.add_get("/kopru/ses/{kimlik}.wav", kopru_ses)
     r.add_get("/", panel_ana)
     r.add_get("/panel/{yol:.+}", panel_dosya)
@@ -1809,6 +1874,9 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/guncelleme/kur", api_guncelleme_kur)
     r.add_post("/api/tv/lg/kur", api_tv_lg_kur)
     r.add_get("/api/tv/lg/durum", api_tv_lg_durum)
+    r.add_get("/api/tv/lg/gelistirici", api_tv_lg_gelistirici_al)
+    r.add_post("/api/tv/lg/gelistirici", api_tv_lg_gelistirici_yaz)
+    r.add_get("/api/tv/uygulama", api_tv_uygulama)
     r.add_get("/api/oneriler", api_oneriler_al)
     r.add_post("/api/oneriler", api_oneriler_yaz)
     r.add_get("/api/ekran-katmani", api_katman_al)
@@ -1874,6 +1942,16 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
             except Exception:   # noqa: BLE001
                 log.exception("Ekran katmanı denetimi başarısız")
 
+    async def gelistirici_dongusu() -> None:   # PROTOKOL 18.6: LG geliştirici modu oturumu (günde bir)
+        g = app[LG_GELISTIRICI]
+        await asyncio.sleep(g.ILK_BEKLEME_SN)
+        while True:
+            try:
+                await asyncio.to_thread(g.gerekirse_uzat)
+            except Exception:   # noqa: BLE001 — uzatma hatası döngüyü öldürmesin
+                log.exception("LG geliştirici modu uzatma adımı başarısız")
+            await asyncio.sleep(g.DENETIM_SN)
+
     async def ac(_: web.Application) -> None:
         durum._dongu = asyncio.get_running_loop()
         await asyncio.to_thread(anahtarlar.isit)
@@ -1889,9 +1967,10 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
             except Exception:   # noqa: BLE001
                 pass
         app["nvidia_gorevi"] = asyncio.create_task(nvidia_isit())
+        app["gelistirici_gorevi"] = asyncio.create_task(gelistirici_dongusu())
 
     async def kapat(_: web.Application) -> None:
-        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi", "katman_gorevi") if k in app]
+        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi", "katman_gorevi", "gelistirici_gorevi") if k in app]
         for t in arka:
             t.cancel()
         await asyncio.gather(*arka, return_exceptions=True)

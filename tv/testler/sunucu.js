@@ -19,6 +19,12 @@ function olustur() {
       r.setHeader('Content-Type', 'text/xml'); r.end(sunucu.vast[u]); return;
     }
     if (u === '/reklam/video.webm' && sunucu.video) { r.setHeader('Content-Type', 'video/webm'); r.end(sunucu.video); return; }
+    if (sunucu.kapali && u.indexOf('/kopru/') === 0) { q.socket.destroy(); return; }   // bilgisayar kapalı gibi
+    if (u === '/kopru/tv/uygulama') {   // PROTOKOL 18.2
+      var qs = require('url').parse(q.url, true).query, pk = sunucu.tvPaket; sunucu.paketIstekleri.push(qs);
+      r.setHeader('Content-Type', 'application/json');
+      r.end(JSON.stringify(qs.surum && pk && qs.surum === pk.surum ? { uygulama: pk.uygulama, surum: pk.surum, ayni: true } : pk)); return;
+    }
     if (u === '/kopru/merhaba') { r.setHeader('Content-Type', 'application/json'); r.end('{"uygulama":"altyazikoprusu","surum":"0.1.0","protokol":1,"ad":"TEST-PC"}'); return; }
     if (u === '/kopru/akis') {
       r.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Access-Control-Allow-Origin': '*' });
@@ -39,7 +45,7 @@ function olustur() {
   sunucu.gorunum = { yazi_boyutu: 44, konum: 'alt', kenar_bosluk: 0.08, arka_plan: 0.55, yazi_rengi: '#FFFFFF', konusan_rengi: '#FFD166', asil_goster: false, ekran_cevir: true };
   sunucu.yayinla = function (ad, veri) { var s = 'event: ' + ad + '\ndata: ' + JSON.stringify(veri || {}) + '\n\n'; istemciler.forEach(function (c) { c.write(s); }); };
   sunucu.istemciSayisi = function () { return istemciler.length; };
-  sunucu.akisSorgulari = []; sunucu.reklamBitti = []; sunucu.pikseller = []; sunucu.video = null;
+  sunucu.akisSorgulari = []; sunucu.paketIstekleri = []; sunucu.tvPaket = null; sunucu.kapali = false; sunucu.reklamBitti = []; sunucu.pikseller = []; sunucu.video = null;
   var P = 'http://127.0.0.1:8642/reklam/piksel/';
   sunucu.vast = {
     '/reklam/vast.xml': '<?xml version="1.0"?><VAST version="4.0"><Ad id="1"><InLine><AdSystem>Test</AdSystem><AdTitle>T</AdTitle>' +
