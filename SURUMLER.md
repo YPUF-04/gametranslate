@@ -1,5 +1,15 @@
 # Sürüm notları
 
+## 0.1.4 — Altyazı yeniden çevriliyor, dublaj hızlandı (2026-11-23)
+- **Altyazı çevrilmiyordu, düzeltildi.** Gemini'ye gönderilen bir hız ayarı yeni modelde geçersizdi; her çeviri zaman aşımına uğruyordu. Artık her modele uygun ayar gidiyor; Gemini yoğunsa yedek modelle bir kez daha deneniyor.
+- **Daha doğal çeviri:** konuşan karakterin adı ve kadın/erkek olduğu dikkate alınır; günlük konuşma Türkçesi kuralları eklendi.
+- **Dublaj çok daha hızlı:** altyazının Türkçesi doğrudan seslendirilir (ikinci çeviri beklenmez), ses modeli ekran kartında hazır bekler, cümleler sırayla ve parça parça TV'ye gider.
+- **Kadın karakter kadın sesiyle:** ses inceliğinden ve oyun bilgisinden kadın/erkek anlaşılır; karakterin sesi henüz toplanmadıysa uygun hazır ses kullanılır.
+- **Daha az robot sesi:** ses ayarları Türkçe için yeniden ayarlandı.
+- **Dublaj tanı:** dublaj kartında "Ekran kartında çalışıyor ✓" ya da "İşlemcide çalışıyor" yazar; işlemcideyse **Onar** düğmesiyle düzeltilir. Son 5 cümlenin gecikmesi de görünür.
+- **Ses yapay zekâsının yüklenmesi** artık takılırsa sonsuza dek beklemez, açık hata verir.
+- **LG TV uygulamasını bir kez yeniden kur** (panelde **TV'ye kur**).
+
 ## 0.1.3 — Altyazı sınırsız, dublaj "+30 dk", çeviri İngilizcenin üstünü kaplar (2026-11-23)
 - **Altyazı çevirisi artık herkese sınırsız ve ücretsiz.** Günlük 30 dakika sınırı kalktı.
 - **Türkçe dublaj süreyle çalışır:** panelde **"+30 dk ekle"**ye bas, kısa bir reklam (ya da 15 saniyelik teşekkür ekranı) izle, 30 dakika dublaj kazan. Üst üste ekleyebilirsin (en fazla 4 saat). Süre yalnız dublaj çalışırken azalır; program kapanınca silinir.
