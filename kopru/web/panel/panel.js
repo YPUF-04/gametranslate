@@ -225,6 +225,8 @@
       if (!S.kaynak && S.ayarlar && S.ayarlar.kaynak) S.kaynak = S.ayarlar.kaynak;
     });
   }
+  // motor adı: marka adları olduğu gibi; "Yerel" gibi genel adlar arayüz dilinde
+  function motorAdi(m) { if (!m) return ''; var k = 'motor.ad.' + m.kod, v = t(k); return v !== k ? v : m.ad; }
   function motorBilgi(kod) { return S.motorlar.filter(function (m) { return m.kod === kod; })[0]; }
 
   // ---------- kare (oyun görüntüsü): zaman aşımlı, dostça hata ----------
@@ -797,7 +799,7 @@
       c.sifirla(); sonuc.textContent = ''; sonuc.appendChild(yukleniyor(t('dene.calisiyor'), 'dene-bekle'));
       return api('POST', '/api/ayarlar', { motor: m.kod }).then(function () { S.ayarlar.motor = m.kod; return api('POST', '/api/dene', { metin: DENE, motor: m.kod }, 45000); }).then(function (r) {
         sonuc.textContent = '';
-        c.tamam(t('ceviri.tamam', { ad: m.ad }), h('div', { class: 'ceviri-ornek', id: 'dene-ornek' }, [
+        c.tamam(t('ceviri.tamam', { ad: motorAdi(m) }), h('div', { class: 'ceviri-ornek', id: 'dene-ornek' }, [
           h('div', { class: 'asil', text: DENE }), h('div', { class: 'ceviri', text: '→ ' + r.ceviri }),
           r.sure_ms != null ? h('div', { class: 'sessiz', text: t('ceviri.sure', { n: r.sure_ms }) }) : null]));
         banner('', '');
@@ -874,7 +876,7 @@
       detay.textContent = ''; clearTimeout(yerelZaman);
       var m = motorBilgi(S.motor); if (!m) return;
       var kart = h('div', { class: 'kart acil' });
-      kart.appendChild(h('h2', { text: m.ad }));
+      kart.appendChild(h('h2', { text: motorAdi(m) }));
       if (S.motor === 'claude') kart.appendChild(h('div', { class: 'not', text: t('motor.claude.abonelik') }));
       if (m.kod === 'yerel') {
         kart.appendChild(yerelBolum());
@@ -909,7 +911,7 @@
     var izgara = h('div', { class: 'izgara', role: 'group', 'aria-label': t('asama3.baslik') }, liste.map(function (m) {
       var rozet = h('span', { class: 'rozet' + (m.kod === 'claude' ? ' sari' : ''), text: t('motor.' + m.kod + '.rozet') });
       return h('button', { type: 'button', class: 'karo', 'data-motor': m.kod, 'aria-pressed': String(S.motor === m.kod), onclick: function () { motorSec(m.kod); } },
-        [h('span', { class: 'b', text: m.ad }), rozet, h('span', { class: 'k', text: t('motor.' + m.kod + '.kisa') })]);
+        [h('span', { class: 'b', text: motorAdi(m) }), rozet, h('span', { class: 'k', text: t('motor.' + m.kod + '.kisa') })]);
     }));
     c = asamaCerceve(3, {
       baslik: t('asama3.baslik'), alt: t('asama3.alt'), ne: 'asama3.ne', sorun: 'sorun.asama3',
@@ -1056,7 +1058,7 @@
     function ozet(n) {
       if (n === 1) { var k = S.kaynaklar.filter(function (x) { return x.kod === (S.kaynak || a.kaynak); })[0]; return k ? k.ad : ''; }
       if (n === 2) return S.okunan && S.okunan.length ? t('okuma.tamam', { n: S.okunan.length }) : '';
-      if (n === 3) { var m = motorBilgi(a.motor || S.motor); return m ? m.ad : ''; }
+      if (n === 3) { var m = motorBilgi(a.motor || S.motor); return m ? motorAdi(m) : ''; }
       if (n === 4) return t('gosterim.' + (S.gosterim || a.gosterim || 'bilgisayar'));
       if (n === 5) return bolgeOzet();
       return '';
@@ -1448,7 +1450,7 @@
     var m = motorBilgi(a.motor || S.motor);
     var motorAlt = !m ? '' : (m.kod === 'yerel' ? t('pano.motor_yerel') : t('pano.kalite', { ad: t('kalite.' + (a.kalite || 'en_iyi')) }));
     var motorK = panoKart({ ad: 'motor', ik: 'ceviri', baslik: t('pano.motor'), degistir: function () { asamaAc(3, 'ana'); },
-      govde: [h('p', { class: 'pk-deger', id: 'pk-motor-deger', text: m ? m.ad : t('pano.secilmedi') }), h('p', { class: 'pk-alt', text: motorAlt })] });
+      govde: [h('p', { class: 'pk-deger', id: 'pk-motor-deger', text: m ? motorAdi(m) : t('pano.secilmedi') }), h('p', { class: 'pk-alt', text: motorAlt })] });
 
     var gos = S.gosterim || a.gosterim || 'bilgisayar';
     ekran.gosAlt = h('p', { class: 'pk-alt', id: 'pk-gosterim-alt' });
@@ -1491,6 +1493,7 @@
     guncellemeCiz();
     oyunCiz(); gosterimCiz(); kisayolOzetCiz(); kisayolIpucuCiz(); sonCiz(); oneriCiz(); durumCiz(); erisimCiz(); listeYenile();
     kisayolYukle();
+    if ((S.gosterim || a.gosterim) === 'tv') tvUygulamaYukle();
     if (!S.panoKare && !S.panoKareIstendi) panoKareAl();
   }
 
@@ -1509,6 +1512,10 @@
       ul.appendChild(h('li', {}, dugme));
     });
     return ul;
+  }
+  // TV uygulaması durumu (PROTOKOL 18.5): şerit ve TV kartı için; yalnız gösterim TV iken sorulur
+  function tvUygulamaYukle() {
+    return api('GET', '/api/tv/uygulama', undefined, 8000).then(function (u) { S.tvUygulama = u; baglantiCiz(); return u; }, function () { return null; });
   }
   function baglantiAc(ad) {
     if (ad === 'goruntu') asamaAc(1, 'ana');
@@ -1535,14 +1542,16 @@
     if (ad === 'motor') {
       var m = motorBilgi(a.motor || S.motor);
       if (!m) return { saglik: 'sorun', ad: t('pano.motor'), deger: t('pano.secilmedi') };
-      if (m.anahtar_gerekli && !m.anahtar_kayitli) return { saglik: 'sorun', ad: m.ad, deger: t('bg.anahtar_yok') };
-      if (d.calisiyor && d.yedekte) return { saglik: 'uyari', ad: m.ad, deger: t('bg.yedekte') };
-      return { saglik: 'iyi', ad: m.ad, deger: m.cevrimdisi ? t('bg.cevrimdisi') : t('bg.hazir') };
+      var ma = motorAdi(m);
+      if (m.anahtar_gerekli && !m.anahtar_kayitli) return { saglik: 'sorun', ad: ma, deger: t('bg.anahtar_yok') };
+      if (d.calisiyor && d.yedekte) return { saglik: 'uyari', ad: ma, deger: t('bg.yedekte') };
+      return { saglik: 'iyi', ad: ma, deger: m.cevrimdisi ? t('bg.cevrimdisi') : t('bg.hazir') };
     }
     if (ad === 'gosterim') {
       var gos = S.gosterim || a.gosterim || 'bilgisayar';
       if (gos === 'bilgisayar') return { saglik: 'iyi', ad: t('bg.gosterim.bilgisayar'), deger: t('bg.bu_ekran') };
-      var n = d.tv_sayisi || 0;
+      var n = d.tv_sayisi || 0, tu = S.tvUygulama;
+      if (gos === 'tv' && tu && tu.durum === 'eski') return { saglik: 'uyari', ad: t('bg.gosterim.tv'), deger: t('bg.tv_eski') };
       return n > 0 ? { saglik: 'iyi', ad: t('bg.gosterim.' + gos), deger: t('bg.tv_bagli', { n: n }) }
         : { saglik: 'uyari', ad: t('bg.gosterim.' + gos), deger: t('bg.tv_bekleniyor') };
     }
@@ -1976,15 +1985,95 @@
     var sonuc = h('div', { id: 'tv-sonuc', 'aria-live': 'polite' });
     var kurDugme = h('button', { type: 'button', class: 'dugme', id: 'tv-kur', text: t('tv.kart.kur'), onclick: function () { kur('asil'); } });
     var denemeDugme = h('button', { type: 'button', class: 'dugme ikincil', id: 'tv-deneme', text: t('tv.kart.deneme'), onclick: function () { kur('deneme'); } });
+    var uygKutu = h('div', { class: 'tv-uygulama', id: 'tv-uygulama', 'aria-live': 'polite' });
+    var gelKutu = h('div', { class: 'tv-gelistirici', id: 'tv-gelistirici' });
     var kart = h('div', { class: 'kart', id: 'tv-kart' }, [
-      h('h2', { text: t('tv.kart.baslik') }), ne('tv.kart.ne', 'isi'),
+      h('h2', { text: t('tv.kart.baslik') }), ne('tv.kart.ne', 'isi'), uygKutu,
       adimlar('tv.kart.adimlar'),
       h('label', { class: 'etiket', for: 'tv-ip', text: t('tv.kart.ip') }), ip,
       h('label', { class: 'etiket', for: 'tv-parola', text: t('tv.kart.parola') }), kod,
       h('div', { class: 'satir', style: 'margin-top:16px' }, [kurDugme, denemeDugme]),
-      asamalar, sonuc
+      asamalar, sonuc, gelKutu
     ]);
     var zaman = null, sonAsama = 0, sonPaket = 'asil';
+
+    // --- TV uygulaması: güncel mi, bir kez yeniden kurulmalı mı? (PROTOKOL 18.4/18.5)
+    function uygCiz(u) {
+      var imza = u ? [u.durum, u.mesaj, dil].join('|') : '';
+      if (uygKutu.dataset.imza === imza) return;
+      uygKutu.dataset.imza = imza; uygKutu.textContent = '';
+      if (!u || u.durum === 'bilinmiyor') return;
+      if (u.durum === 'guncel') { uygKutu.appendChild(h('span', { class: 'rozet tv-rozet', id: 'tv-uygulama-guncel', text: t('tv.uyg.guncel') })); return; }
+      uygKutu.appendChild(h('div', { class: 'bilgi-kutu tv-eski', id: 'tv-uygulama-eski' }, [
+        h('strong', { text: t('tv.uyg.eski') }), h('p', { text: t('tv.uyg.eski.k') }),
+        h('div', { class: 'satir', style: 'margin-top:10px' }, h('button', { type: 'button', class: 'dugme kucuk sari', id: 'tv-yeniden-kur', text: t('tv.uyg.yeniden'), onclick: function () {
+          if (!ip.value.trim() || !kod.value.trim()) { (ip.value.trim() ? kod : ip).focus(); }
+          kur('asil');
+        } }))
+      ]));
+    }
+    function uygYokla() {
+      if (!document.body.contains(kart)) return;
+      tvUygulamaYukle().then(function (u) { if (u) uygCiz(u); setTimeout(uygYokla, 8000); });
+    }
+
+    // --- Geliştirici modu oturumu: son uzatma, kalan süre, otomatik uzat, şimdi uzat (PROTOKOL 18.6)
+    var gelMesaj = '';
+    function sureYazi(sn) {
+      sn = Math.max(0, Math.round(sn || 0));
+      var g = Math.floor(sn / 86400), sa = Math.floor(sn % 86400 / 3600), dk = Math.floor(sn % 3600 / 60);
+      return g ? t('tv.gel.gun_sa', { g: g, sa: sa }) : (sa ? t('tv.gel.sa_dk', { sa: sa, dk: dk }) : t('tv.gel.dk', { dk: dk }));
+    }
+    function oncesi(epoch) {
+      if (!epoch) return t('tv.gel.hic');
+      var sn = Date.now() / 1000 - epoch;
+      return sn < 90 ? t('tv.gel.az_once_zaman') : t('tv.gel.once', { sure: sureYazi(sn) });
+    }
+    function gelCiz(g) {
+      var imza = g ? JSON.stringify([g, gelMesaj, dil]) : 'yok';
+      if (gelKutu.dataset.imza === imza) return;
+      gelKutu.dataset.imza = imza; gelKutu.textContent = '';
+      if (!g) return;
+      var kurmali = !g.belirtec_var || g.hatirlatma || g.durum === 'gecersiz';
+      var saglik = kurmali ? 'uyari' : (g.durum === 'tamam' ? 'iyi' : (g.durum === 'kapali' ? 'kapali' : 'uyari'));
+      gelKutu.appendChild(h('h3', { class: 'ara-baslik', id: 'tv-gel-baslik', text: t('tv.gel.baslik') }));
+      gelKutu.appendChild(h('p', { class: 'tv-gel-durum ' + saglik, id: 'tv-gel-mesaj' }, [h('span', { class: 'bg-nokta', 'aria-hidden': 'true' }), h('span', { text: g.mesaj || '' })]));
+      if (g.belirtec_var) {
+        gelKutu.appendChild(h('dl', { class: 'tv-gel-bilgi', id: 'tv-gel-bilgi' }, [
+          h('div', {}, [h('dt', { text: t('tv.gel.son') }), h('dd', { id: 'tv-gel-son', text: oncesi(g.son_uzatma) })]),
+          h('div', {}, [h('dt', { text: t('tv.gel.kalan') }), h('dd', { id: 'tv-gel-kalan', text: g.kalan_sn != null ? sureYazi(g.kalan_sn) : t('tv.gel.bilinmiyor') })])
+        ]));
+        gelKutu.appendChild(anahtar(t('tv.gel.otomatik'), t('tv.gel.otomatik.k'), g.otomatik, function (v) {
+          api('POST', '/api/tv/lg/gelistirici', { otomatik: v }).then(gelCiz).catch(hataGoster);
+        }, 'tv-gel-otomatik'));
+      }
+      var dugmeler = h('div', { class: 'satir', style: 'margin-top:12px' });
+      if (kurmali) {
+        dugmeler.appendChild(h('button', { type: 'button', class: 'dugme kucuk', id: 'tv-oturum-ac', text: t('tv.gel.ac'), onclick: function () { kur('oturum'); } }));
+      }
+      if (g.belirtec_var) {
+        dugmeler.appendChild(h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'tv-gel-uzat', text: t('tv.gel.uzat'), onclick: function () {
+          gelMesaj = '';
+          return api('POST', '/api/tv/lg/gelistirici', { uzat: true }).then(function (y) { gelMesaj = t('tv.gel.uzatildi'); gelCiz(y); })
+            .catch(function (e) { gelMesaj = e.http === 429 ? t('tv.gel.az_once') : (e.mesaj || e.message); gelKutu.dataset.imza = ''; gelCiz(g); });
+        } }));
+      }
+      gelKutu.appendChild(dugmeler);
+      if (kurmali) gelKutu.appendChild(h('p', { class: 'sessiz', text: t('tv.gel.ac.k') }));
+      if (gelMesaj) gelKutu.appendChild(h('p', { class: 'sessiz', id: 'tv-gel-sonuc', role: 'status', text: gelMesaj }));
+      // gelişmiş: belirteci elle yapıştır
+      var bel = h('input', { type: 'password', id: 'tv-gel-belirtec', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('tv.gel.belirtec') });
+      gelKutu.appendChild(h('details', { class: 'kucuk-ac', id: 'tv-gel-belirtec-kap' }, [
+        h('summary', { text: t('tv.gel.belirtec') }),
+        h('p', { class: 'sessiz', text: t('tv.gel.belirtec.k') }),
+        h('div', { class: 'satir' }, [bel, h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'tv-gel-belirtec-kaydet', text: t('tv.gel.belirtec.kaydet'), onclick: function () {
+          return api('POST', '/api/tv/lg/gelistirici', { belirtec: bel.value.trim() }).then(function (y) { bel.value = ''; gelMesaj = t('tv.gel.belirtec.tamam'); gelCiz(y); })
+            .catch(function (e) { gelMesaj = e.mesaj || e.message; gelKutu.dataset.imza = ''; gelCiz(g); });
+        } })])
+      ]));
+    }
+    function gelYukle() { return api('GET', '/api/tv/lg/gelistirici', undefined, 8000).then(gelCiz, function () { /* eski sunucu: bölüm gizli */ }); }
+    setTimeout(function () { uygYokla(); gelYukle(); }, 0);
 
     function mesgul(m) { kurDugme.disabled = m; denemeDugme.disabled = m; }
     function hataKutu(mesaj, ayrinti) {
@@ -2012,7 +2101,7 @@
       });
       sonuc.textContent = '';
       if (d.asama === 'hata') { sonuc.appendChild(hataKutu(d.mesaj, d.ayrinti)); mesgul(false); }
-      else if (d.asama === 'bitti') { sonuc.appendChild(h('div', { class: 'sonuc', id: 'tv-bitti', text: d.mesaj })); kod.value = ''; mesgul(false); }
+      else if (d.asama === 'bitti') { sonuc.appendChild(h('div', { class: 'sonuc', id: 'tv-bitti', text: d.mesaj })); kod.value = ''; mesgul(false); gelYukle(); tvUygulamaYukle().then(function (u) { if (u) uygCiz(u); }); }
       else if (d.asama !== 'bosta') { sonuc.appendChild(h('p', { class: 'sessiz', id: 'tv-mesaj', text: d.mesaj })); }
     }
     function takip() {
@@ -2038,6 +2127,24 @@
 
   // ---------- GELİŞMİŞ AYARLAR (tek bağlantı arkasında) ----------
   function gelismisYenile() { if (S.gelismisEkrani && S.kurulumBitti) ciz(); }
+  // §19.2: ilk çeviri hep hızlı; uzun kalan satırlar arka planda yeniden çevrilip yerinde düzeltilir
+  var CEVIRI_KALITELERI = ['hizli', 'dengeli', 'en_iyi'];
+  function ceviriKalitesiBolumu() {
+    var simdi = (S.ayarlar && S.ayarlar.ceviri_kalitesi) || 'dengeli';
+    var liste = h('div', { class: 'liste', role: 'group', 'aria-label': t('ck.baslik') });
+    CEVIRI_KALITELERI.forEach(function (k) {
+      liste.appendChild(h('button', { type: 'button', class: 'sec', id: 'ceviri-kalitesi-' + k, 'data-ck': k, 'aria-pressed': String(simdi === k), onclick: function () {
+        liste.querySelectorAll('[data-ck]').forEach(function (x) { x.setAttribute('aria-pressed', String(x.dataset.ck === k)); });
+        return ayarKaydet({ ceviri_kalitesi: k });
+      } }, [
+        h('span', { class: 'sec-ad' }, [t('ck.' + k), k === 'dengeli' ? h('span', { class: 'rozet sari', text: t('kalite.onerilen') }) : null]),
+        h('span', { class: 'sec-alt', text: t('ck.' + k + '.k') })
+      ]));
+    });
+    var b = bolum(t('ck.baslik'), 'ck.ne', [liste]);
+    b.id = 'ceviri-kalitesi';
+    return b;
+  }
   function anahtar(baslik, kucuk, deger, degisti, id) {
     var inp = h('input', { type: 'checkbox', id: id, onchange: function () { degisti(inp.checked); } });
     inp.checked = !!deger;
@@ -2123,7 +2230,7 @@
       anaDonusLink(don),
       h('h1', { text: t('gelismis.link') }),
       h('p', { class: 'alt-baslik', text: t('gelismis.uyari') }),
-      hafizaBolumu(), ne1, dilB, gorB, sozlukBolumu(), guncellemeBolumu(), motorBolumu(), reklamBolumu(), kur,
+      hafizaBolumu(), ne1, ceviriKalitesiBolumu(), dilB, gorB, sozlukBolumu(), guncellemeBolumu(), motorBolumu(), reklamBolumu(), kur,
       h('div', { class: 'alt-gezinme' }, [h('span'), h('button', { type: 'button', class: 'dugme', id: 'gelismis-don', text: t('asama.ana_don'), onclick: don })])
     ]));
     durumCiz();
@@ -2249,7 +2356,7 @@
       ekran.gecikme.hidden = !gk;
       if (gk) {
         var sn = function (ms) { return ((ms || 0) / 1000).toFixed(1).replace('.', ','); };
-        var ayr = t('gecikme.ozet', { okuma: gk.okuma_ms || 0, ceviri: sn(gk.ceviri_ms), toplam: sn(gk.toplam_ms) }) + (gk.kuyruk > 1 ? ' · ' + t('gecikme.kuyruk', { n: gk.kuyruk }) : '');
+        var ayr = t('gecikme.ozet', { okuma: gk.okuma_ms || 0, ceviri: sn(gk.ceviri_ms), toplam: sn(gk.toplam_ms) }) + (gk.kuyruk > 1 ? ' · ' + t('gecikme.kuyruk', { n: gk.kuyruk }) : '') + (gk.iyilestirilen ? ' · ' + t('gecikme.iyilestirilen', { n: gk.iyilestirilen }) : '');
         var hapYazi = t('gecikme.hap', { n: sn(gk.toplam_ms) });
         ekran.gecikme.className = 'gecikme-hap ' + (gk.toplam_ms <= 2000 ? 'iyi' : (gk.toplam_ms <= 4000 ? 'uyari' : 'sorun'));
         if (ekran.gecikme.textContent !== hapYazi) ekran.gecikme.textContent = hapYazi;

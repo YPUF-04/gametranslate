@@ -69,6 +69,8 @@ function sahteSunucu() {
       konum: 'C:\\Users\\Oyuncu\\AppData\\Local\\AltYaziKoprusu\\dublaj-ortami', destek: true,
       asamalar: ['python', 'ffmpeg', 'paketler', 'modeller', 'denetim'].map((k) => ({ kod: k, durum: 'bekliyor', yuzde: 0 })) },
     paketKur: [], video: { durum: 'bosta' }, videoBasla: [], videoGoster: 0, profiller: [{ ad: 'Lucia', sure_sn: 18.2, klip: 3, tarih: '2026-11-20' }], profilSil: [],
+    tvUyg: { paket_surum: 'a1b2c3d4e5f6', yukleyici_guncel: 2, durum: 'eski', mesaj: 'TV uygulaması eski: bir kez yeniden kurun, sonra hep kendiliğinden güncellenir', tvler: [{ adres: '192.168.1.30', yukleyici: 1, paket: null, guncel: false, son_gorulme_sn: 4 }] },
+    gel: { belirtec_var: false, otomatik: true, son_uzatma: null, kalan_sn: null, bitis_tahmini: null, hata: null, durum: 'belirtec_yok', mesaj: 'Geliştirici modu süresi uzatılamıyor: TV\'yi bir kez daha bağlayın.', hatirlatma: true, tv: '192.168.1.30' }, gelPostlari: [],
     okumaMod: 'iyi', okumaIstekleri: 0, kaynakCihazlar: [], kartVar: false, uyari: null, bilgiMod: 'ok',
     yerel: { hazir: false, boyut_mb: 95, indirme: { durum: 'yok', yuzde: 0, mesaj: null } }, yerelHazirla: 0, yerelDene: 0, yerelAdim: 0,
     katman: { destek: true, acik: false, ekran: 1, ekranlar: [{ no: 1, ad: 'Ekran 1 (1920×1080)' }, { no: 2, ad: 'Ekran 2 (2560×1440)' }] }, katmanDene: [],
@@ -116,7 +118,7 @@ function sahteSunucu() {
         case 'GET /api/durum':
           return j({ calisiyor: st.calisiyor, motor: st.ayarlar.motor, yedekte: false, tv_sayisi: st.calisiyor ? 1 : 0,
             son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir, uyari: st.uyari || null, bildirim: st.bildirim || null,
-            gecikme: st.calisiyor ? (st.gecikme || { kare_ms: 40, okuma_ms: 120, ceviri_ms: 1000, toplam_ms: 1400, kuyruk: 0, olcum: 12 }) : undefined, hata: st.durumHata });
+            gecikme: st.calisiyor ? (st.gecikme || { kare_ms: 40, okuma_ms: 120, ceviri_ms: 1000, toplam_ms: 1400, kuyruk: 0, olcum: 12, iyilestirilen: 2, iyilestirme_istek: 3 }) : undefined, hata: st.durumHata });
         case 'GET /api/kisayollar': {   // PROTOKOL 13.1
           const k = st.ayarlar.kisayollar || { baslat_durdur: 'ctrl+shift+t', gizle_goster: 'ctrl+shift+h', yeniden_oku: 'ctrl+shift+r' }, hata = st.kisayolHata || {};
           const kayitli = {}; for (const ad of Object.keys(k)) kayitli[ad] = !!k[ad] && !hata[ad];
@@ -236,7 +238,22 @@ function sahteSunucu() {
           st.tvSon = { asama: 'anahtar', mesaj: 'TV\'den anahtar alınıyor...', ayrinti: '' };
           return j(st.tvSon);
         }
-        case 'GET /api/tv/lg/durum': if (st.tvKuyruk.length) st.tvSon = st.tvKuyruk.shift(); return j(st.tvSon);
+        case 'GET /api/tv/lg/durum':
+          if (st.tvKuyruk.length) st.tvSon = st.tvKuyruk.shift();
+          if (st.tvSon.asama === 'bitti' && st.tvIstekleri.length && st.tvIstekleri[st.tvIstekleri.length - 1].paket === 'oturum')
+            Object.assign(st.gel, { belirtec_var: true, hatirlatma: false, durum: 'tamam', otomatik: true, son_uzatma: Math.floor(Date.now() / 1000) - 7200, kalan_sn: 3599000, mesaj: 'Geliştirici modu süresi kendiliğinden uzatılıyor.' });
+          return j(st.tvSon);
+        case 'GET /api/tv/uygulama': return j(st.tvUyg);
+        case 'GET /api/tv/lg/gelistirici': return j(st.gel);
+        case 'POST /api/tv/lg/gelistirici':
+          st.gelPostlari.push(b);
+          if (typeof b.otomatik === 'boolean') st.gel.otomatik = b.otomatik;
+          if (typeof b.belirtec === 'string') st.gel.belirtec_var = !!b.belirtec;
+          if (b.uzat === true) {
+            if (st.gelUzatildi) return j({ hata: 'cok_sik', mesaj: 'Çok sık.' }, 429);
+            st.gelUzatildi = true; Object.assign(st.gel, { son_uzatma: Math.floor(Date.now() / 1000), kalan_sn: 3600000 });
+          }
+          return j(st.gel);
         case 'GET /api/dublaj': {
           const i = st.dublajIndirme, pk = st.paket;
           if (pk.durum === 'kuruluyor') {   // her sorguda bir aşama ilerler
@@ -609,6 +626,45 @@ function dilKontrol() {
     assert.strictEqual(await sayfa.inputValue('#tv-parola'), '', 'kod başarıdan sonra silinir');
     assert.ok(!JSON.stringify(await sayfa.evaluate(() => Object.assign({}, localStorage))).match(/BAD000|GOOD12/), 'kod tarayıcıda saklanmaz');
     await kes('4-tv-kurulum.png', '#tv-kart');
+    // --- PROTOKOL 18: TV uygulaması eski → "bir kez yeniden kur"; geliştirici modu süresi: oturum uzatmayı aç, otomatik, şimdi uzat
+    await sayfa.waitForSelector('#tv-uygulama-eski');
+    assert.match(await metin('#tv-uygulama-eski'), /TV uygulaması eski: bir kez yeniden kur \(son kez\)/);
+    assert.ok(await sayfa.isVisible('#tv-yeniden-kur'));
+    await sayfa.waitForSelector('#tv-oturum-ac');
+    assert.match(await metin('#tv-gel-mesaj'), /TV'yi bir kez daha bağlayın/);
+    assert.strictEqual(await sayfa.locator('#tv-gel-uzat, #tv-gel-otomatik').count(), 0, 'belirteç yokken uzatma denetimleri yok');
+    st.tvUyg = Object.assign({}, st.tvUyg, { durum: 'guncel', mesaj: '' });
+    await sayfa.fill('#tv-parola', 'GOOD34');
+    await sayfa.click('#tv-oturum-ac');
+    await sayfa.waitForSelector('#tv-bitti', { timeout: 8000 });
+    assert.strictEqual(st.tvIstekleri[st.tvIstekleri.length - 1].paket, 'oturum');
+    await sayfa.waitForSelector('#tv-gel-otomatik', { state: 'attached', timeout: 6000 });
+    await sayfa.waitForSelector('#tv-uygulama-guncel', { timeout: 6000 });
+    assert.match(await metin('#tv-uygulama-guncel'), /TV kendiliğinden güncellenir/);
+    assert.match(await metin('#tv-gel-kalan'), /41 gün 15 sa/);
+    assert.match(await metin('#tv-gel-son'), /2 sa 0 dk önce/);
+    assert.strictEqual(await sayfa.locator('#tv-oturum-ac').count(), 0);
+    await sayfa.click('#tv-gel-otomatik', { force: true });
+    await sayfa.waitForFunction(() => !document.querySelector('#tv-gel-otomatik').checked);
+    assert.deepStrictEqual(st.gelPostlari[st.gelPostlari.length - 1], { otomatik: false });
+    await sayfa.click('#tv-gel-uzat');
+    await sayfa.waitForFunction(() => /Süre uzatıldı\./.test((document.querySelector('#tv-gel-sonuc') || {}).textContent || ''));
+    assert.match(await metin('#tv-gel-son'), /Az önce/);
+    await sayfa.click('#tv-gel-uzat');
+    await sayfa.waitForFunction(() => /az önce uzatıldı/.test((document.querySelector('#tv-gel-sonuc') || {}).textContent || ''));
+    await sayfa.click('#tv-gel-belirtec-kap > summary');
+    await sayfa.fill('#tv-gel-belirtec', 'abcDEF123_-xyz');
+    await sayfa.click('#tv-gel-belirtec-kaydet');
+    await sayfa.waitForFunction(() => /Belirteç kaydedildi/.test((document.querySelector('#tv-gel-sonuc') || {}).textContent || ''));
+    assert.deepStrictEqual(st.gelPostlari[st.gelPostlari.length - 1], { belirtec: 'abcDEF123_-xyz' });
+    assert.ok(!JSON.stringify(await sayfa.evaluate(() => Object.assign({}, localStorage))).includes('abcDEF'), 'belirteç tarayıcıda saklanmaz');
+    if (process.env.AXE) {
+      await sayfa.addScriptTag({ path: process.env.AXE });
+      const ihlal = await sayfa.evaluate(() => window.axe.run(document.querySelector('#tv-kart')).then((r) => r.violations.map((v) => v.id + ': ' + v.nodes.map((n) => n.target.join(' ')).join(', '))));
+      assert.deepStrictEqual(ihlal, [], 'axe (TV kartı): ' + ihlal.join(' | '));
+    }
+    await kes('4b-tv-gelistirici.png', '#tv-kart');
+    adim('4. LG TV: uygulama eski → "bir kez yeniden kur", güncel rozeti; geliştirici modu: Oturum uzatmayı aç (paket oturum), kalan süre, otomatik uzat, Şimdi uzat (429 → az önce), belirteç elle');
     await sayfa.click('#deneme-yazi');
     await sayfa.waitForSelector('#hayir');
     await sayfa.click('#hayir');
@@ -851,7 +907,7 @@ function dilKontrol() {
     await sayfa.waitForSelector('#gecikme-hap:not([hidden])');
     assert.strictEqual(await metin('#gecikme-hap'), '1,4 sn');
     assert.match(await sayfa.getAttribute('#gecikme-hap', 'class'), /\biyi\b/);
-    assert.match(await sayfa.getAttribute('#gecikme-hap', 'aria-label'), /okuma 120 ms · çeviri 1,0 sn · ekrana 1,4 sn/);
+    assert.match(await sayfa.getAttribute('#gecikme-hap', 'aria-label'), /okuma 120 ms · çeviri 1,0 sn · ekrana 1,4 sn · iyileştirilen: 2/);
     assert.match(await metin('#canli-yazi'), /Merhaba, bu bir deneme altyazısı/);
     assert.strictEqual(await sayfa.locator('#pano > #hero + #baglantilar').count(), 1, 'şerit hero\'nun hemen altında');
     assert.strictEqual(await sayfa.locator('#baglantilar button.bg').count(), 4);
@@ -1364,6 +1420,15 @@ function dilKontrol() {
     // gelişmiş ayarlar: tek bağlantının arkasında, ayrı ekran; ana ekrandaki şeyler burada tekrar edilmez
     await sayfa.click('#gelismis-ac');
     await sayfa.waitForSelector('#gelismis');
+    // §19.2: çeviri kalitesi (iyileştirme) — model seçimi "kalite"den ayrı
+    assert.strictEqual(await sayfa.getAttribute('#ceviri-kalitesi-dengeli', 'aria-pressed'), 'true', 'varsayılan dengeli');
+    assert.match(await metin('#ceviri-kalitesi'), /Çeviri kalitesi[\s\S]*Dengeli: ekranda uzun kalan satırlar arka planda daha iyi çevrilip yerinde düzeltilir\.[\s\S]*Hızlı[\s\S]*Dengeli[\s\S]*Önerilen[\s\S]*En iyi/);
+    const kaliteOnce = st.ayarlar.kalite;
+    await sayfa.click('#ceviri-kalitesi-en_iyi');
+    await sayfa.waitForTimeout(150);
+    assert.strictEqual(st.ayarlar.ceviri_kalitesi, 'en_iyi');
+    assert.strictEqual(st.ayarlar.kalite, kaliteOnce, 'model kalitesi değişmez');
+    await kes('7-ceviri-kalitesi.png', '#ceviri-kalitesi');
     // §17.7: reklam izni ayardan verilir/geri alınır; VAST adresi yalnız https
     assert.strictEqual(await sayfa.isChecked('#reklam-izni'), false);
     await sayfa.click('#reklam-izni', { force: true });
@@ -1428,6 +1493,8 @@ function dilKontrol() {
     assert.match(await sayfa.textContent('#pk-kisayol h2'), /Hotkeys/);
     assert.match(await sayfa.getAttribute('#degistir-gosterim', 'aria-label'), /^Change: Where do I see it\?$/);
     assert.doesNotMatch(await sayfa.textContent('#pano'), /Değiştir|Oyun içinde|Son çeviriler/);
+    assert.match(await metin('#pk-motor-deger'), /^Local$/, 'motor adı arayüz dilinde');
+    assert.match(await metin('#bg-motor'), /Translation engine[\s\S]*Local/);
     await gor('5-ana-en.png');
     await sayfa.click('#tercih-ac');
     assert.match(await sayfa.textContent('#rehber-menu'), /Connection guides/);

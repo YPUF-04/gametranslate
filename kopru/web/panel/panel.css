@@ -1034,3 +1034,19 @@ html.buyuk-yazi .baglantilar{grid-template-columns:repeat(2,minmax(0,1fr))}
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat}
 .tv-asamalar li.simdi::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+/* TV kartı: uygulama durumu ve geliştirici modu süresi (PROTOKOL 18) */
+.tv-uygulama:empty{display:none}
+.tv-uygulama{margin:0 0 14px}
+.rozet.tv-rozet{display:inline-flex;align-items:center;gap:6px}
+.rozet.tv-rozet::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--iyi)}
+.tv-gelistirici:empty{display:none}
+.tv-gelistirici{margin-top:22px;padding-top:6px;border-top:1px solid var(--cizgi)}
+.tv-gel-durum{display:flex;align-items:baseline;gap:9px;margin:4px 0 10px}
+.tv-gel-durum .bg-nokta{transform:translateY(-1px)}
+.tv-gel-durum.iyi .bg-nokta{background:var(--iyi);box-shadow:0 0 0 3px var(--iyi-zemin)}
+.tv-gel-durum.uyari .bg-nokta{background:var(--uyari);box-shadow:0 0 0 3px var(--uyari-zemin)}
+.tv-gel-bilgi{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px;margin:0 0 4px}
+.tv-gel-bilgi>div{padding:10px 14px;border-radius:12px;background:var(--zemin2);border:1px solid var(--cizgi)}
+.tv-gel-bilgi dt{font-size:.82rem;color:var(--sessiz);font-weight:600}
+.tv-gel-bilgi dd{margin:2px 0 0;font-weight:700;font-variant-numeric:tabular-nums}
+#tv-gel-belirtec{flex:1 1 220px;min-width:0}
