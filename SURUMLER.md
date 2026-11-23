@@ -1,5 +1,8 @@
 # Sürüm notları
 
+## 0.1.6 — Kısa yazılar artık çevrilmeden kalmıyor (2026-11-24)
+- **"Hang up" gibi kısa yazılar** bazen çevrilmeden aynen gösteriliyordu. Program artık çeviri İngilizcenin aynısı gelirse ve içinde sıradan İngilizce kelimeler varsa (isim değilse) "bu bir isim değil, mutlaka çevir" diyerek bir kez daha soruyor. "Vice City" gibi gerçek isimlere dokunulmuyor.
+
 ## 0.1.5 — Yeni arayüz, TV kendiliğinden güncellenir, daha iyi çeviri (2026-11-24)
 - **Yepyeni arayüz:** üstte büyük durum alanı (Çalışıyor / Durdu, gecikme), son çevrilen cümle, bağlantı şeridi (Görüntü · Çeviri · Gösterim · Dublaj) ve sorun varsa tek tıkla **Düzelt**. Program yavaşlarsa ya da kapanırsa sakin bir uyarı çıkar.
 - **TV uygulaması artık kendiliğinden güncellenir:** TV'ye **son bir kez** yeni uygulamayı kur (panelde **TV'ye kur**); sonra laptoptaki program güncellenince TV de güncellenir.

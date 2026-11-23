@@ -14,6 +14,7 @@ from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import normallestir
 from ..onbellek import Onbellek
+from . import ingilizce
 from .istem import SON_SATIR_ADEDI, dublaj_ipucu, hitap_sez, iyilestirme_ipucu, video_dublaj_ipucu
 from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri, ModelBulunamadi, MotorHatasi
 
@@ -330,6 +331,31 @@ class CeviriYoneticisi:
             raise MotorHatasi("Çeviri eşlenemedi")
         return sonuc  # type: ignore[return-value]
 
+    async def _cevrilmeyenleri_zorla(self, metinler: list[str], ceviriler: list[Ceviri], kaynak: str, hedef: str,
+                                     aciklama: bool, ipucu: str) -> list[Ceviri]:
+        """Motor sıradan İngilizce bir satırı aynen döndürdüyse ("Hang up" => "Hang up") bir kez daha,
+        "bunlar isim değil, mutlaka çevir" uyarısıyla sorar. Hedef Türkçe değilse ya da satır sözlükte /
+        bilinen isimlerdeyse dokunmaz. İkinci deneme de aynıysa ilk sonuç kalır."""
+        if hedef != "tr":
+            return ceviriler
+        bilinen = {a.casefold() for a in self.terimler}
+        supheli = [i for i, (m, c) in enumerate(zip(metinler, ceviriler))
+                   if normallestir(c.metin) == normallestir(m) and m.strip().casefold() not in bilinen
+                   and ingilizce.siradan_ingilizce_mi(m)]
+        if not supheli:
+            return ceviriler
+        try:
+            ek = "\n\n".join(x for x in (ipucu, ingilizce.ZORUNLU_CEVIR_IPUCU) if x)
+            ikinci, _ = await self._motorla([metinler[i] for i in supheli], kaynak, hedef, aciklama, ek)
+        except Exception:   # noqa: BLE001 — ikinci deneme olmazsa ilk sonuç kalır, altyazı akışı durmaz
+            log.info("Çevrilmeden gelen satırlar yeniden sorulamadı")
+            return ceviriler
+        sonuc = list(ceviriler)
+        for i, c in zip(supheli, ikinci):
+            if c.metin.strip() and normallestir(c.metin) != normallestir(metinler[i]):
+                sonuc[i] = c
+        return sonuc
+
     async def _ucustaki(self, ayri: list[str], kaynak: str, hedef: str,
                         aciklama: bool, ipucu: str = "") -> dict[str, Ceviri]:
         """Aynı anda aynı metin için tek istek (dedupe)."""
@@ -348,6 +374,7 @@ class CeviriYoneticisi:
                 ceviriler, motor_kodu = await self._motorla(yeni, kaynak, hedef, aciklama, ipucu)
                 if len(ceviriler) != len(yeni):   # savunma: zip sessizce kısaltırdı ve bekleyenler sonsuza dek asılırdı
                     raise MotorHatasi("Çeviri sayısı uyuşmuyor")
+                ceviriler = await self._cevrilmeyenleri_zorla(yeni, ceviriler, kaynak, hedef, aciklama, ipucu)
                 for m, c in zip(yeni, ceviriler):
                     c = Ceviri(dugmeler.dugme_koru(m, sozluk_mod.son_kontrol(m, c.metin, self.terimler)), c.aciklama)
                     if normallestir(c.metin) == normallestir(m):
