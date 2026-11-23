@@ -25,6 +25,7 @@ from .temel import DublajHatasi, IlerlemeCb
 
 log = logging.getLogger("kopru.dublaj.isci")
 EN_COK_SATIR = 64 * 1024 * 1024
+YUKLE_SN = 600.0            # model yükleme üst sınırı (ilk açılışta yavaş disk + CUDA derlemesi)
 MERHABA_SN = 240.0          # ilk açılışta torch + CUDA yüklemesi uzun sürebilir
 YENIDEN_SINIR = 3           # dakikada en çok bu kadar başlatma
 KOPYALANACAK = ["__init__.py", "ses/__init__.py", "dublaj/__init__.py", "dublaj/temel.py", "dublaj/dsp.py",
@@ -299,7 +300,9 @@ class IsciMotoru:
             await self._model_indir(ilerleme_cb)
         if ilerleme_cb:
             ilerleme_cb(100.0, "yukleniyor")
-        await self.isci.iste("yukle", ayar)
+        # İlk yükleme (torch + CUDA + ~3 GB model) dakikalar sürebilir ama sonsuza dek beklenmez:
+        # takılırsa kullanıcı "Yükleniyor…"da kalmasın, ne olduğunu söyleyen bir hata görsün (isci.log).
+        await self.isci.iste("yukle", ayar, zaman_asimi=YUKLE_SN)
         self._yuklu = imza
         if ilerleme_cb:
             ilerleme_cb(100.0, "bitti")
