@@ -816,3 +816,12 @@ Sahibin kararı. Bu bölüm §7.3'ün **yerine geçer** (eski "günde 30 dk ücr
 - `POST /api/dublaj/video` süre yoksa `402 dublaj_suresi_yok`.
 - Not (dürüstçe): program açık kaynaktır (AGPL). Bütün bu sınırlar kullanıcının kendi bilgisayarında çalışır;
   kaldıran bir kopya yapılabilir. Sistem dürüst kullanıcılar ve projeyi desteklemek içindir, bir kilit değildir.
+
+### 17.7 Reklam izni (KVKK)
+- Reklam şirketinin (VAST) reklamı yalnız kullanıcı **açıkça izin verdiyse** açılır. Ayar `erisim.reklam_izni`:
+  `null` (sorulmadı) | `true` | `false`. `true` değilse `POST /api/erisim/reklam` her zaman `"vast": null` döner ve
+  yalnız kendi destek ekranımız gösterilir; destek ekranı **hiçbir yere bağlanmaz** (ağ isteği yok).
+- Panel, VAST adresi tanımlıyken (`GET /api/erisim` → `"vast_var": true`) ve izin `null` iken "+30 dk ekle"ye ilk
+  basışta kısa bir izin ekranı gösterir: "Kabul et ve reklamı izle" (`reklam_izni:true`) / "Vazgeç" (`false`; yine
+  destek ekranıyla +30 dk). İzin Gelişmiş ayarlardan her an geri alınır. `GET /api/erisim` ayrıca
+  `"reklam_izni": null|true|false` verir. Ayrıntı: GIZLILIK.md.

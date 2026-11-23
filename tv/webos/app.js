@@ -26,7 +26,7 @@
   // ---- durum ----
   var ekran = null, onceki = null, pc = null, hdmiNo = parseInt(depoOku(KEY_HDMI), 10) || 0;
   var baglanti = 'yok', bilgi = null, kontrol = null, hdmiKapat = null, demoZamanci = null, aramaNo = 0, elleMetin = '';
-  var panelAcik = false, ipucuZamani = null;
+  var panelAcik = false, ipucuZamani = null, reklam = null;
 
   // ---- ekran yönetimi ----
   var EKRANLAR = ['e-ara', 'e-hdmi', 'e-elle', 'e-calis'];
@@ -161,11 +161,29 @@
       var h = $('calis-hata');
       if (d === 'hata') { h.textContent = T('hdmi_hata'); h.style.display = 'block'; } else { h.style.display = 'none'; }
     });
-    kontrol = window.AKOverlay.baslat(adresUrl(pc) + '/kopru/akis', $('kok'), {
+    kontrol = window.AKOverlay.baslat(adresUrl(pc) + '/kopru/akis?reklam=1', $('kok'), {
       onDurum: bilgiDurumu, onBilgi: function (v) { bilgi = v; panelYenile(); }, onYazi: function () { panelYenile(); },
+      onReklam: reklamOynat, onReklamBitti: function () { if (reklam) { reklam.durdur(); reklam = null; } },
       metinKoptu: T('rozet_koptu'), metinBaglaniyor: T('rozet_baglaniyor')
     });
     ipucuGoster();
+  }
+
+  // ---- "+30 dk" reklamı (PROTOKOL 17.3): TV yalnız oynatır ve "bitti" der; süreyi PC verir ----
+  function reklamBitti(v, s, deneme) {
+    var x = new XMLHttpRequest();
+    try {
+      x.open('POST', adresUrl(pc) + (v.bitti || '/kopru/reklam/bitti'), true); x.setRequestHeader('Content-Type', 'text/plain;charset=UTF-8');   // ön istek (CORS preflight) olmasın
+      x.onload = function () { if (x.status === 409 && deneme < 5) { setTimeout(function () { reklamBitti(v, s, deneme + 1); }, 2000); } };
+      x.onerror = function () { if (deneme < 3) { setTimeout(function () { reklamBitti(v, s, deneme + 1); }, 2000); } };
+      x.send(JSON.stringify({ id: s.id, sure_sn: s.sure_sn }));
+    } catch (e) { /* PC'nin yedek zamanlayıcısı tamamlar */ }
+  }
+  function reklamOynat(v) {
+    if (!v || !v.id || reklam || !window.AKReklam || !pc) { return; }
+    reklam = window.AKReklam.oynat(document.body, { id: v.id, vast: v.vast, en_az_sn: v.en_az_sn,
+      metin: { reklam: T('reklam'), sn: T('sn'), destek: T('destek'), destek_alt: T('destek_alt') },
+      bitti: function (s) { reklam = null; reklamBitti(v, s, 0); } });
   }
 
   // ---- deneme kipi ----
@@ -203,6 +221,7 @@
 
   // ---- tuşlar ----
   function geri() {
+    if (reklam) { return; }   // reklam en çok ~2 dk; geri tuşu onu kapatmaz
     if (panelAcik) { panelKapat(); return; }
     if (ekran === 'e-calis') { if (demoZamanci) { durdurHepsi(); ara(); } else { durdurHepsi(); hdmiEkrani(); } return; }
     if (ekran === 'e-elle') { ara(); return; }
@@ -212,6 +231,7 @@
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode, a = document.activeElement;
     if (k === P.geriTusu || k === 8 || k === 27) { e.preventDefault(); geri(); return; }
+    if (reklam) { e.preventDefault(); return; }
     if (ekran === 'e-calis' && !panelAcik && (k === 13 || k === 405 || k === 406 || k === 403 || k === 404) && !demoZamanci) { e.preventDefault(); panelAc(); return; }
     if (ekran === 'e-elle' && !panelAcik && ((k >= 48 && k <= 57) || k === 190)) { elleTus(k === 190 ? '.' : String(k - 48)); return; }
     var y = k === 37 ? 'sol' : k === 39 ? 'sag' : k === 38 ? 'yukari' : k === 40 ? 'asagi' : null;

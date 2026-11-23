@@ -676,6 +676,8 @@
       dinle('ses-dur', function () { sesDurdur(); });
       dinle('gorunum', function (v) { gorunumUygula(v); });
       dinle('durum', function (v) { bildir('onBilgi', v); });
+      dinle('reklam', function (v) { bildir('onReklam', v); });            // §17.3: yalnız reklam=1 ile bağlanan istemciler oynatır
+      dinle('reklam-bitti', function (v) { bildir('onReklamBitti', v); });
     }
 
     // §13.1: yazılar gizlendi/gösteriliyor (çeviri sürer; yalnız çizim saklanır)

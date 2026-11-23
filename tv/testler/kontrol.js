@@ -13,7 +13,7 @@ function hatalar(sayfa) { var l = []; sayfa.on('pageerror', function (e) { l.pus
 function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme betiğinin yaptığı gibi)
   var d = fs.mkdtempSync(path.join(os.tmpdir(), 'akwebos-')), w = path.join(KOK, 'tv', 'webos');
   fs.readdirSync(w).forEach(function (f) { fs.copyFileSync(path.join(w, f), path.join(d, f)); });
-  ['ortak.js', 'ortak.css'].forEach(function (f) { fs.copyFileSync(path.join(KOK, 'kopru', 'web', 'tv', f), path.join(d, f)); });
+  ['ortak.js', 'ortak.css', 'reklam.js'].forEach(function (f) { fs.copyFileSync(path.join(KOK, 'kopru', 'web', 'tv', f), path.join(d, f)); });
   return d;
 }
 
@@ -289,6 +289,8 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     var bg = await p.evaluate(function () { return getComputedStyle(document.body).backgroundColor + '|' + getComputedStyle(document.documentElement).backgroundColor; });
     assert(/rgba\(0, 0, 0, 0\)|transparent/.test(bg.split('|')[0])); ok('obs.html arka planı saydam');
     await bekle(300); assert.deepStrictEqual(ho, []); await c.close();
+    assert(s.akisSorgulari.some(function (q) { return q === 'reklam=1'; }), 'tv.html reklam=1 ile bağlanmadı: ' + JSON.stringify(s.akisSorgulari));
+    assert.strictEqual(s.akisSorgulari[s.akisSorgulari.length - 1], '', 'obs.html reklam istememeli'); ok('§17.3: /tv reklam=1 ile bağlanır, /obs reklam almaz');
 
     // ---------- 3) webOS uygulaması ----------
     console.log('webOS uygulaması');
@@ -318,6 +320,44 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     await p.keyboard.press('Enter'); await p.waitForSelector('#panel.acik');
     var pt = await p.textContent('#panel'); assert(/127\.0\.0\.\d+:8642/.test(pt) && pt.indexOf('Bağlı') >= 0 && pt.indexOf('HDMI 1') >= 0 && pt.indexOf('TV üzerinden altyazı') >= 0 && pt.indexOf('0.1.0') >= 0, pt); ok('bilgi paneli adres/bağlantı/HDMI/son altyazı/sürüm gösteriyor');
     await p.screenshot({ path: path.join(SHOT, 'webos-panel.png') });
+    // §17.3: "+30 dk" reklamı TV'de: SSE reklam → oynat → bitti çağrısı (süreyi PC verir)
+    assert(s.akisSorgulari.slice(-1)[0] === 'reklam=1', 'webOS reklam=1 ile bağlanmadı'); ok('webOS akışa reklam=1 ile bağlandı');
+    await p.keyboard.press('Escape'); await p.waitForSelector('#panel.acik', { state: 'detached', timeout: 1 }).catch(function () {});
+    s.reklamBitti.length = 0;
+    var istekler = []; p.on('request', function (q) { istekler.push(q.url()); });
+    s.yayinla('reklam', { id: 'r1', vast: null, en_az_sn: 2, bitti: '/kopru/reklam/bitti' });
+    await p.waitForSelector('.akr-kok .akr-destek', { timeout: 3000 });
+    var rt = await p.textContent('.akr-kok'); assert(rt.indexOf('AltYazıKöprüsü\'nü desteklediğin için teşekkürler') >= 0 && /Reklam · \d+ sn/.test(rt), rt);
+    var kap = await p.evaluate(function () { var r = document.querySelector('.akr-kok').getBoundingClientRect(); return [r.width, r.height, getComputedStyle(document.querySelector('.akr-kok')).zIndex]; });
+    assert(kap[0] === 1920 && kap[1] === 1080 && +kap[2] > 1000000, JSON.stringify(kap)); ok('VAST yokken destek ekranı oyunun üstünde tam ekran + "Reklam · n sn"');
+    await p.screenshot({ path: path.join(SHOT, 'webos-reklam-destek.png') });
+    await p.keyboard.press('Escape'); await bekle(200); assert(await p.isVisible('.akr-kok'), 'Geri reklamı kapatmamalı'); ok('Geri tuşu reklamı kapatmaz');
+    await p.waitForSelector('.akr-kok', { state: 'detached', timeout: 5000 });
+    for (i = 0; i < 30 && !s.reklamBitti.length; i++) { await bekle(100); }
+    assert.strictEqual(s.reklamBitti.length, 1); assert.strictEqual(s.reklamBitti[0].id, 'r1'); ok('destek ekranı bitince TV /kopru/reklam/bitti çağırdı');
+    assert.deepStrictEqual(istekler.filter(function (u) { return u.indexOf('/kopru/reklam/bitti') < 0; }), []); ok('destek ekranı hiçbir yere (reklam şirketine) bağlanmaz');
+    // VAST: sarmalayıcı → inline → webm (VPAID atlanır), izleme pikselleri, bitti(sure_sn≈2)
+    var webm = path.join(os.tmpdir(), 'ak-reklam-test.webm');
+    try { require('child_process').execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x2ec4b6:s=320x180:d=2', '-c:v', 'libvpx', '-b:v', '200k', webm]); s.video = fs.readFileSync(webm); } catch (fe) { s.video = null; }
+    if (s.video) {
+      s.reklamBitti.length = 0; s.pikseller.length = 0;
+      s.yayinla('reklam', { id: 'r2', vast: 'http://127.0.0.1:8642/reklam/sarma.xml', en_az_sn: 1, bitti: '/kopru/reklam/bitti' });
+      await p.waitForSelector('.akr-kok video', { timeout: 6000 });
+      await p.screenshot({ path: path.join(SHOT, 'webos-reklam-video.png') });
+      for (i = 0; i < 80 && !s.reklamBitti.length; i++) { await bekle(100); }
+      assert.strictEqual(s.reklamBitti.length, 1, 'VAST reklamı bitmedi: ' + JSON.stringify(s.pikseller)); assert.strictEqual(s.reklamBitti[0].id, 'r2');
+      assert(Math.abs(s.reklamBitti[0].sure_sn - 2) < 0.6, JSON.stringify(s.reklamBitti[0]));
+      ['sarma-imp', 'imp', 'start', 'q1', 'mid', 'complete', 'sarma-complete'].forEach(function (k) { assert(s.pikseller.indexOf(k) >= 0, k + ' pikseli yok: ' + JSON.stringify(s.pikseller)); });
+      ok('VAST sarmalayıcı + inline: webm oynadı, gösterim/çeyrek/bitiş pikselleri, bitti sure_sn≈2');
+    } else { ok('ffmpeg yok: VAST video kontrolü atlandı'); }
+    // reklam gelmedi (boş VAST) → hata pikseli 303 + destek ekranı; PC "reklam-bitti" derse kapanır
+    s.pikseller.length = 0; s.reklamBitti.length = 0;
+    s.yayinla('reklam', { id: 'r3', vast: 'http://127.0.0.1:8642/reklam/bos.xml', en_az_sn: 30, bitti: '/kopru/reklam/bitti' });
+    await p.waitForSelector('.akr-kok .akr-destek', { timeout: 4000 });
+    for (i = 0; i < 20 && s.pikseller.indexOf('bos') < 0; i++) { await bekle(100); }
+    assert(s.pikseller.indexOf('bos') >= 0, JSON.stringify(s.pikseller)); ok('boş VAST (reklam yok): hata pikseli + destek ekranı');
+    s.yayinla('reklam-bitti', { id: 'r3' }); await p.waitForSelector('.akr-kok', { state: 'detached', timeout: 2000 });
+    assert.strictEqual(s.reklamBitti.length, 0); ok('reklam-bitti olayı reklamı kapattı (çift bitti yok)');
     var kayit = await p.evaluate(function () { return localStorage.getItem('ak_son_pc') + '|' + localStorage.getItem('ak_hdmi'); }); assert(/^127\.0\.0\.\d+:8642\|1$/.test(kayit), kayit); ok('son bilgisayar ve HDMI hatırlandı');
     var sayfaHatalari = hs.filter(function (x) { return x.indexOf('pageerror') === 0; }); assert.deepStrictEqual(sayfaHatalari, []); ok('tarama/çalışma akışında JS hatası yok (HDMI kaynak hatası Chromium\'da beklenir)');
     // 3c) elle adres: sayı tuşları

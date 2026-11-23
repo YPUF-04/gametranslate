@@ -647,6 +647,8 @@ def _dogrula(k: dict[str, Any]) -> bool:
         if e is not None:
             if not isinstance(e, dict) or not erisim_mod.vast_gecerli(e.get("vast_adresi", "")):
                 return False
+            if e.get("reklam_izni") not in (None, True, False):
+                return False
         g = k.get("gorunum")
         if g is not None:
             if not isinstance(g, dict) or g.get("konum", "alt") not in ("alt", "ust"):

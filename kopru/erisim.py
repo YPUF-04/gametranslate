@@ -315,6 +315,10 @@ class Erisim:
         varsayilan = getattr(reklam_ayari, "VAST_ADRESI", "") or ""
         return varsayilan if vast_gecerli(varsayilan) else ""
 
+    def reklam_izni(self) -> bool | None:
+        v = (self._ayar().get("erisim") or {}).get("reklam_izni")
+        return v if v in (True, False) else None
+
     def acik_reklam(self) -> dict[str, Any] | None:
         r = self._reklam
         if r is not None and self.saat() - r["baslangic"] > REKLAM_UNUT_SN:
@@ -328,7 +332,9 @@ class Erisim:
             raise ReklamHatasi("dublaj_sure_dolu")
         r = self.acik_reklam()
         if r is None:
-            r = {"id": "r" + secrets.token_hex(8), "baslangic": self.saat(), "vast": self.vast_adresi() or None,
+            # izin yoksa yalnız kendi destek ekranımız (hiçbir yere bağlanmaz)
+            vast = (self.vast_adresi() or None) if self.reklam_izni() is True else None
+            r = {"id": "r" + secrets.token_hex(8), "baslangic": self.saat(), "vast": vast,
                  "hedef": "tv" if tv_var and yer != "panel" else "panel"}
             self._reklam = r
         return self.reklam_gorunum(r)
@@ -374,6 +380,7 @@ class Erisim:
             "kod": k["tur"] if k else None, "bitis": k["bitis"] if k else None,
             "cihaz": cihaz_mod.gorunum(self.cihaz()) if self.cihaz() else "",
             "tv_reklam": bool(tv_reklam),
+            "vast_var": bool(self.vast_adresi()), "reklam_izni": self.reklam_izni(),
             "reklam": None if r is None else {"id": r["id"], "hedef": r["hedef"], "en_az_sn": int(REKLAM_EN_AZ_SN),
                                               "gecen_sn": round(self.saat() - r["baslangic"], 1)},
         }

@@ -441,6 +441,14 @@ async def test_api_reklam_panelde_erken_bitti_reddedilir(istemci):
 async def test_api_reklam_tvde_oynar_tv_bitirir(istemci, monkeypatch):
     d = istemci.server.app[sunucu.DURUM]
     monkeypatch.setattr(erisim.reklam_ayari, "VAST_ADRESI", "https://ornek.test/vast")
+    g = await (await istemci.get("/api/erisim")).json()
+    assert g["vast_var"] is True and g["reklam_izni"] is None
+    j = await (await istemci.post("/api/erisim/reklam", json={})).json()
+    assert j["vast"] is None            # izin yok: yalnız kendi destek ekranımız, kimseye bağlanmaz
+    d.erisim._reklam = None
+    assert (await istemci.post("/api/ayarlar", json={"erisim": {"reklam_izni": "evet"}})).status == 400
+    assert (await istemci.post("/api/ayarlar", json={"erisim": {"reklam_izni": True}})).status == 200
+    d.erisim._ayar = lambda: d.ayar
     q = d.yayin.abone_ol()
     d.reklam_istemci = 1
     j = await (await istemci.post("/api/erisim/reklam", json={})).json()

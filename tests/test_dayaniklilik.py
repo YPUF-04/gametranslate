@@ -62,7 +62,7 @@ def test_yanlis_turdeki_ayar_alanlari_varsayilana_doner(tmp_path):
     assert a["bolgeler"] == [] and a["dublaj"]["motor"] == "kapali" and a["dublaj"]["hiz_siniri"] == 1.25
     assert a["arayuz_dili"] == "tr" and a["hafiza_izni"] is None
     assert a["modeller"] == {"gemini": "m"} and a["bolge_altyazi"] == VARSAYILAN["bolge_altyazi"]
-    assert a["erisim"] == {"vast_adresi": ""}
+    assert a["erisim"] == {"vast_adresi": "", "reklam_izni": None}
     assert a["yedek_motor"] is None and a["kaynak"] == "ekran:2"     # geçerli seçimler korunur
 
 

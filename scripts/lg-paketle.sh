@@ -22,7 +22,7 @@ rm -rf "$CIKTI" "$ARA"; mkdir -p "$CIKTI" "$ARA" "$KOK/tv/paketler"
 # 1) Ana uygulama: ortak bindirme (ortak.js/ortak.css), marka adı (marka.js) ve yazı tipi tek kaynaktan
 #    (kopru/web/tv/) paketin içine kopyalanır. tv/webos içindeki marka.js/yazi-*.woff2 bunlara bağlantıdır (symlink);
 #    cp bağlantıyı izler, pakete gerçek dosya girer.
-ORTAK="ortak.js ortak.css marka.js yazi-latin.woff2 yazi-latin-ext.woff2 yazi-LISANS-OFL.txt"
+ORTAK="ortak.js ortak.css reklam.js marka.js yazi-latin.woff2 yazi-latin-ext.woff2 yazi-LISANS-OFL.txt"
 hazirla_tv() { # $1=hedef klasör
   mkdir -p "$1"
   cp -L "$KOK"/tv/webos/* "$1"/
