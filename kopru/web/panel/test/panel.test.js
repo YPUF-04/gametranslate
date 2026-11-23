@@ -115,7 +115,8 @@ function sahteSunucu() {
       switch (q.method + ' ' + url.pathname) {
         case 'GET /api/durum':
           return j({ calisiyor: st.calisiyor, motor: st.ayarlar.motor, yedekte: false, tv_sayisi: st.calisiyor ? 1 : 0,
-            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir, uyari: st.uyari || null, bildirim: st.bildirim || null });
+            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir, uyari: st.uyari || null, bildirim: st.bildirim || null,
+            gecikme: st.calisiyor ? (st.gecikme || { kare_ms: 40, okuma_ms: 120, ceviri_ms: 1000, toplam_ms: 1400, kuyruk: 0, olcum: 12 }) : undefined, hata: st.durumHata });
         case 'GET /api/kisayollar': {   // PROTOKOL 13.1
           const k = st.ayarlar.kisayollar || { baslat_durdur: 'ctrl+shift+t', gizle_goster: 'ctrl+shift+h', yeniden_oku: 'ctrl+shift+r' }, hata = st.kisayolHata || {};
           const kayitli = {}; for (const ad of Object.keys(k)) kayitli[ad] = !!k[ad] && !hata[ad];
@@ -175,7 +176,7 @@ function sahteSunucu() {
           }
           return j({ ceviri: 'Merhaba, nasılsın?', sure_ms: 640 });
         case 'POST /api/baslat': st.calisiyor = true; return j({ tamam: true });
-        case 'POST /api/durdur': st.calisiyor = false; return j({ tamam: true });
+        case 'POST /api/durdur': st.durdurSayi = (st.durdurSayi || 0) + 1; return setTimeout(() => { st.calisiyor = false; j({ tamam: true }); }, st.durdurGecikme || 0);
         case 'POST /api/deneme-yazi': st.sonYazi = 'Merhaba, bu bir deneme altyazısı'; return j({ tamam: true });
         case 'GET /api/kaynaklar': {   // PROTOKOL 12.2: cihaza göre "onerilen" + "tur"
           const cihaz = url.searchParams.get('cihaz') || st.ayarlar.cihaz;
@@ -329,10 +330,24 @@ function dilKontrol() {
   sayfa.on('pageerror', (e) => hatalar.push(String(e)));
   const gor = async (ad, tam) => { if (SHOTS && tam) await sayfa.waitForFunction(() => !document.querySelector('.tost'), null, { timeout: 8000 }).catch(() => {}); if (SHOTS) await sayfa.screenshot({ path: path.join(SHOTS, ad), fullPage: !!tam || !!process.env.FULL }); };
   const adim = (s) => console.log('  ok -', s);
+  // ARAYUZ_DIR: tasarım için karşılaştırma görüntüleri (öğe ya da ekran; isteğe bağlı boyutlarda)
+  const ARAYUZ = process.env.ARAYUZ_DIR || '';
+  const kes = async (ad, sec, boyut) => {
+    if (!ARAYUZ) return;
+    await sayfa.waitForFunction(() => !document.querySelector('.tost'), null, { timeout: 8000 }).catch(() => {});
+    const eski = sayfa.viewportSize();
+    if (boyut) { await sayfa.setViewportSize(boyut); await sayfa.waitForTimeout(250); }
+    if (sec) { const el = sayfa.locator(sec).first(); await el.scrollIntoViewIfNeeded(); await el.screenshot({ path: path.join(ARAYUZ, ad) }); }
+    else await sayfa.screenshot({ path: path.join(ARAYUZ, ad), fullPage: !!(boyut && boyut.tam) });
+    if (boyut) { await sayfa.setViewportSize(eski); await sayfa.waitForTimeout(150); }
+  };
 
   try {
     await sayfa.goto(taban + '/');
     await sayfa.waitForSelector('h1');
+    await sayfa.waitForTimeout(700);
+    await kes('1-sihirbaz-1.png');
+    await kes('1-sihirbaz-1-dar.png', null, { width: 390, height: 844 });
     const yakin = (a, b, ne) => assert.ok(Math.abs(a - b) < 0.006, ne + ': ' + a + ' ≠ ' + b);
     const metin = async (s) => (await sayfa.textContent(s)) || '';
 
@@ -593,6 +608,7 @@ function dilKontrol() {
     assert.strictEqual(await sayfa.locator('#tv-asamalar li.bitti').count(), 5);
     assert.strictEqual(await sayfa.inputValue('#tv-parola'), '', 'kod başarıdan sonra silinir');
     assert.ok(!JSON.stringify(await sayfa.evaluate(() => Object.assign({}, localStorage))).match(/BAD000|GOOD12/), 'kod tarayıcıda saklanmaz');
+    await kes('4-tv-kurulum.png', '#tv-kart');
     await sayfa.click('#deneme-yazi');
     await sayfa.waitForSelector('#hayir');
     await sayfa.click('#hayir');
@@ -831,6 +847,56 @@ function dilKontrol() {
     await sayfa.waitForFunction(() => !document.querySelector('#pano-kare-yenile.donuyor'));
     assert.strictEqual(st.kareIstekleri, kareOnce + 1, 'kare yalnız istekle yenilenir');
     adim('ana ekran: büyük düğme, durum, kısayol ipucu; 6 kart tek "Değiştir" ile; küçük kare ve kutulu harita; eski dağınık denetimler yok');
+    // --- hero: canlı gecikme hapı + son çevrilen satır; altında Bağlantılar şeridi (renk + yazı, tek dokunuşla düzelt)
+    await sayfa.waitForSelector('#gecikme-hap:not([hidden])');
+    assert.strictEqual(await metin('#gecikme-hap'), '1,4 sn');
+    assert.match(await sayfa.getAttribute('#gecikme-hap', 'class'), /\biyi\b/);
+    assert.match(await sayfa.getAttribute('#gecikme-hap', 'aria-label'), /okuma 120 ms · çeviri 1,0 sn · ekrana 1,4 sn/);
+    assert.match(await metin('#canli-yazi'), /Merhaba, bu bir deneme altyazısı/);
+    assert.strictEqual(await sayfa.locator('#pano > #hero + #baglantilar').count(), 1, 'şerit hero\'nun hemen altında');
+    assert.strictEqual(await sayfa.locator('#baglantilar button.bg').count(), 4);
+    assert.match(await metin('#bg-goruntu'), /PS Remote Play[\s\S]*Okunuyor/);
+    assert.match(await metin('#bg-motor'), /Yerel[\s\S]*Çevrimdışı, hazır/);
+    assert.match(await metin('#bg-gosterim'), /Bu bilgisayar[\s\S]*Bu ekranda/);
+    assert.match(await metin('#bg-dublaj'), /Dublaj[\s\S]*Türkçe ses[\s\S]*Kapalı/);
+    assert.match(await sayfa.getAttribute('#bg-motor', 'class'), /\biyi\b/);
+    assert.match(await sayfa.getAttribute('#bg-dublaj', 'class'), /\bkapali\b/);
+    assert.match(await sayfa.getAttribute('#bg-motor', 'aria-label'), /^Çeviri motoru: Yerel, Çevrimdışı, hazır\. Değiştir$/);
+    await sayfa.click('#bg-dublaj');
+    await sayfa.waitForFunction(() => document.querySelector('#dublaj-kart').open && document.activeElement === document.querySelector('#dublaj-kart > summary'));
+    await sayfa.evaluate(() => { document.querySelector('#dublaj-kart').open = false; window.scrollTo(0, 0); });
+    await sayfa.click('#bg-motor');
+    await sayfa.waitForSelector('[data-motor=gemini]');
+    await sayfa.click('#vazgec-3');
+    await sayfa.waitForSelector('#baglantilar');
+    // görüntü alınamayıp durduysa: kırmızı nokta + "Düzelt"; dururken gecikme hapı yok, canlı satır boş durum metni
+    st.calisiyor = false; st.durumHata = 'yakalama';
+    await sayfa.waitForFunction(() => /Görüntü alınamıyor/.test(document.querySelector('#bg-goruntu').textContent) && /Düzelt/.test(document.querySelector('#bg-goruntu').textContent), null, { timeout: 6000 });
+    assert.match(await sayfa.getAttribute('#bg-goruntu', 'class'), /\bsorun\b/);
+    assert.match(await sayfa.getAttribute('#bg-goruntu', 'aria-label'), /Görüntü: PS Remote Play, Görüntü alınamıyor\. Düzelt/);
+    assert.ok(await sayfa.isHidden('#gecikme-hap'), 'dururken gecikme hapı yok');
+    assert.match(await metin('#canli-yazi'), /Başlat'a bastığında/);
+    await kes('2-pano-sorun.png', '#pano > #hero');
+    await kes('2-baglantilar-sorun.png', '#baglantilar');
+    st.calisiyor = true; st.durumHata = undefined;
+    await sayfa.waitForFunction(() => /Okunuyor/.test(document.querySelector('#bg-goruntu').textContent) && /Durdur/.test(document.querySelector('#baslat-durdur').textContent), null, { timeout: 6000 });
+    // çift tık: iş sürerken ikinci basış yok sayılır (aria-busy), tek istek gider
+    st.durdurGecikme = 700; const dsOnce = st.durdurSayi || 0;
+    await sayfa.click('#baslat-durdur');
+    assert.strictEqual(await sayfa.getAttribute('#baslat-durdur', 'aria-busy'), 'true');
+    await sayfa.click('#baslat-durdur');
+    await sayfa.waitForFunction(() => /Başlat/.test(document.querySelector('#baslat-durdur').textContent), null, { timeout: 6000 });
+    assert.strictEqual(st.durdurSayi - dsOnce, 1, 'çift tıkta tek durdur isteği');
+    st.durdurGecikme = 0;
+    await sayfa.click('#baslat-durdur');
+    await sayfa.waitForFunction(() => /Durdur/.test(document.querySelector('#baslat-durdur').textContent));
+    if (process.env.AXE) {
+      await sayfa.addScriptTag({ path: process.env.AXE });
+      const ihlal = await sayfa.evaluate(() => window.axe.run(document, { rules: { 'color-contrast': { enabled: true } } }).then((r) => r.violations.map((v) => v.id + ': ' + v.nodes.slice(0, 4).map((n) => n.target.join(' ')).join(', '))));
+      assert.deepStrictEqual(ihlal, [], 'axe (ana ekran): ' + ihlal.join(' | '));
+      adim('axe: ana ekranın tamamında 0 erişilebilirlik ihlali');
+    }
+    adim('ana ekran: gecikme hapı, canlı altyazı satırı, Bağlantılar şeridi (sağlık + Düzelt, tek dokunuş), çift tık koruması');
     // --- /api/durum uyari.mesaj ana ekranda nazik bir bant olarak
     assert.ok(!(await sayfa.isVisible('#uyari-banner')));
     st.uyari = { mesaj: 'Tüm ekranı okuyorum. PS Remote Play penceresini seçersen daha temiz sonuç alırsın.' };
@@ -1111,6 +1177,11 @@ function dilKontrol() {
     assert.deepStrictEqual(await sayfa.$$eval('#guncelleme-yenilikler li', l => l.map(x => x.textContent)), ['Tek tuşla güncelleme', 'LG TV düzeltmesi']);
     assert.ok(await sayfa.locator('#guncelle-sonra').count(), '"Sonra" düğmesi var');
     await gor('pano-calisiyor.png');
+    await sayfa.evaluate(() => window.scrollTo(0, 0));
+    await kes('2-pano-1280x720.png', null, { width: 1280, height: 720 });
+    await kes('2-pano-1920x1080.png', null, { width: 1920, height: 1080 });
+    await kes('2-pano-390-tam.png', null, { width: 390, height: 844, tam: true });
+    await kes('5-guncelleme.png', '#guncelleme-alani');
     if (SHOTS) {   // tam sayfa (güncelleme bandıyla) ve dar ekran
       await sayfa.screenshot({ path: path.join(SHOTS, 'pano-tam.png'), fullPage: true });
       await sayfa.setViewportSize({ width: 390, height: 860 }); await sayfa.waitForTimeout(200);
@@ -1212,6 +1283,7 @@ function dilKontrol() {
     await sayfa.waitForFunction(() => !document.querySelector('#dublaj-eleven-klon'));
     assert.strictEqual(st.ayarlar.dublaj.motor, 'kapali'); assert.strictEqual(st.ayarlar.dublaj.elevenlabs_klon_onay, false);
     await gor('3-dublaj.png');
+    await kes('3-dublaj-kart.png', '#dublaj-kart');
     adim('dublaj: ElevenLabs ancak onayla seçilir; ikinci onay ayrıdır; onay geri alınınca motor kapanır');
 
     // Türkçe dublaj 2 (PROTOKOL 14): dublaj paketi, canlı seçenekler, video
@@ -1381,6 +1453,14 @@ function dilKontrol() {
     await new Promise((r) => sunucu.close(r));
     await sayfa.waitForSelector('#afis:not([hidden])', { timeout: 6000 });
     assert.match(await sayfa.textContent('#afis'), /seems to be closed/);
+    assert.match(await sayfa.getAttribute('#afis', 'class'), /\bkopuk\b/, 'sakin bağlantı afişi');
+    assert.strictEqual(await sayfa.getAttribute('#afis', 'role'), 'status');
+    assert.match(await sayfa.textContent('#durum-metin'), /Can't reach the program/, 'eski "Running" yazısı kalmaz');
+    assert.ok(await sayfa.isHidden('#gecikme-hap'));
+    await sayfa.waitForTimeout(4500);
+    assert.strictEqual(await sayfa.locator('#afis').count(), 1, 'afiş üst üste binmez');
+    assert.strictEqual(await sayfa.locator('.tost.hata, .afis.hata').count(), 0, 'hata bildirimi yığılmaz');
+    if (ARAYUZ) await sayfa.screenshot({ path: path.join(ARAYUZ, '6-baglanti-koptu.png') });
     adim('API kapalıyken "program kapalı" uyarısı görüldü');
 
     const beklenen = hatalar.filter((h) => !/Failed to load resource|ERR_CONNECTION|ERR_EMPTY|ERR_FAILED/.test(h));
