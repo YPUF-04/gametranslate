@@ -1,5 +1,13 @@
 # Sürüm notları
 
+## 0.1.5 — Yeni arayüz, TV kendiliğinden güncellenir, daha iyi çeviri (2026-11-24)
+- **Yepyeni arayüz:** üstte büyük durum alanı (Çalışıyor / Durdu, gecikme), son çevrilen cümle, bağlantı şeridi (Görüntü · Çeviri · Gösterim · Dublaj) ve sorun varsa tek tıkla **Düzelt**. Program yavaşlarsa ya da kapanırsa sakin bir uyarı çıkar.
+- **TV uygulaması artık kendiliğinden güncellenir:** TV'ye **son bir kez** yeni uygulamayı kur (panelde **TV'ye kur**); sonra laptoptaki program güncellenince TV de güncellenir.
+- **Geliştirici modu süresi kendiliğinden uzar:** program açıkken her gün yenilenir, TV'de "Extend"e basmana gerek kalmaz.
+- **Daha iyi çeviri:** sahnedeki son 8 cümle ve konuşanlar hatırlanır, karakterler arası "sen/siz" tutarlı kalır, sokak ağzı doğal Türkçeye çevrilir.
+- **Çeviri kalitesi ayarı:** Hızlı / **Dengeli (önerilen)** / En iyi. Dengeli'de ekranda uzun kalan cümleler arka planda daha iyi çevrilip yerinde düzeltilir.
+- **Ekran okuma düzeltmeleri:** iki satıra bölünmüş cümleler birleşir, I/l ve 0/O karışıklıkları düzelir.
+
 ## 0.1.4 — Altyazı yeniden çevriliyor, dublaj hızlandı (2026-11-23)
 - **Altyazı çevrilmiyordu, düzeltildi.** Gemini'ye gönderilen bir hız ayarı yeni modelde geçersizdi; her çeviri zaman aşımına uğruyordu. Artık her modele uygun ayar gidiyor; Gemini yoğunsa yedek modelle bir kez daha deneniyor.
 - **Daha doğal çeviri:** konuşan karakterin adı ve kadın/erkek olduğu dikkate alınır; günlük konuşma Türkçesi kuralları eklendi.

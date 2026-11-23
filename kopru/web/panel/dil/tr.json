@@ -169,7 +169,7 @@
   "oneri.red": "Geç",
   "oneri.eklendi": "Sözlüğe eklendi.",
   "oneri.atildi": "Tamam, bunu eklemeyeceğim.",
-  "kalite.baslik": "Çeviri kalitesi",
+  "kalite.baslik": "Çeviri modeli (hız / kalite)",
   "kalite.ne": "Kalite arttıkça çeviri biraz daha yavaş ve pahalı olabilir.",
   "kalite.en_iyi": "En iyi çeviri",
   "kalite.onerilen": "Önerilen",

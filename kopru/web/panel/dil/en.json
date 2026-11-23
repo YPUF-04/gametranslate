@@ -169,7 +169,7 @@
   "oneri.red": "Skip",
   "oneri.eklendi": "Added to the glossary.",
   "oneri.atildi": "OK, I will not add this.",
-  "kalite.baslik": "Translation quality",
+  "kalite.baslik": "Translation model (speed / quality)",
   "kalite.ne": "Higher quality can be a little slower and cost more.",
   "kalite.en_iyi": "Best translation",
   "kalite.onerilen": "Recommended",
