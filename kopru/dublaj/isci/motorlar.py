@@ -32,6 +32,12 @@ STT_SR = 16000
 TTS_REF_SR = 24000
 WHISPER_NORMAL = "large-v3-turbo"
 WHISPER_HAFIF = "small"
+# Yerleşik yedek sesler (karakterin sesi henüz yakalanamadıysa; cinsiyete göre). VCTK derlemi (Edinburgh
+# Üniversitesi, CC BY 4.0), Kyutai'nin tts-voices deposundaki temizlenmiş kayıtlar; sürümü sabit (bkz. THIRD-PARTY-NOTICES).
+HAZIR_SES_DEPO = "kyutai/tts-voices"
+HAZIR_SES_SURUM = "323332d33f997de8394f24a193e1a76df720e01a"
+HAZIR_SESLER = {"k": "vctk/p228_023_enhanced.wav", "e": "vctk/p226_023_enhanced.wav"}
+KOSUL_ONBELLEK = 8        # Chatterbox konuşmacı koşulları (prepare_conditionals pahalı): son 8 ses bellekte
 BLOK_SN = 60.0            # uzun videolarda ayırma blok boyu (RAM ve VRAM sınırlı kalsın)
 BLOK_PAY_SN = 2.0         # blok kenarlarında bağlam payı
 
@@ -119,6 +125,10 @@ class GercekIsleyici:
         self._tts: Any = None
         self._tts_kod = ""
         self._ref_ozet = ""
+        self._kosullar: "dict[str, Any]" = {}     # ses özeti -> Chatterbox Conditionals (LRU, yalnız RAM)
+        self._hazir_ses: dict[str, tuple[np.ndarray, int]] = {}
+        self._yari: Any = None                     # T3'ün yarı hassas türü (torch.bfloat16 / float16) ya da None
+        self._son_uretim: dict[str, Any] = {}
         self._canli: Any = None
         self._kilit = threading.RLock()
         self._son_kullanim = time.monotonic()
@@ -132,6 +142,7 @@ class GercekIsleyici:
             time.sleep(15)
             try:
                 if (self._tts is not None and self.cihaz == "cuda" and not self._gpu_disinda
+                        and self._canli is None   # canlı dublaj sürerken model ekran kartında kalır (ilk satır yavaşlamasın)
                         and time.monotonic() - self._son_kullanim > self.bosta_sn):
                     with self._kilit:
                         self._tts_tasi("cpu")
@@ -150,6 +161,7 @@ class GercekIsleyici:
         if hasattr(m, "device"):
             m.device = cihaz
         self._ref_ozet = ""         # koşullar yeniden hazırlansın (doğru cihazda)
+        self._kosullar.clear()
 
     def _kullan(self) -> None:
         self._son_kullanim = time.monotonic()
@@ -162,20 +174,51 @@ class GercekIsleyici:
 
     # ---------- bilgi ----------
     def cihaz_bilgisi(self) -> dict[str, Any]:
+        """El sıkışmada (merhaba) ana programa ve isci.log'a: hangi cihazda çalışıyoruz, neden.
+
+        `durum`: "gpu" | "cpu_torch_cpu" (NVIDIA kart var ama kurulu torch CUDA'sız: paketin torch'u yanlış
+        kurulmuş, onarılabilir) | "cpu_surucu" (torch CUDA'lı ama kart/sürücü görülmüyor) | "cpu" (NVIDIA yok) |
+        "mps" | "torch_yok"."""
         bilgi: dict[str, Any] = {"cihaz": "cpu", "ekran_karti": None, "vram_gb": None, "python": sys.version.split()[0]}
         try:
             import torch
             self._torch = torch
+            bilgi["torch"] = torch.__version__
+            bilgi["torch_cuda"] = getattr(torch.version, "cuda", None)       # None: CPU yapısı
             if torch.cuda.is_available():
                 p = torch.cuda.get_device_properties(0)
                 bilgi.update(cihaz="cuda", ekran_karti=torch.cuda.get_device_name(0),
-                             vram_gb=round(p.total_memory / 1024 ** 3, 1))
+                             vram_gb=round(p.total_memory / 1024 ** 3, 1), durum="gpu")
+                try:
+                    bilgi["bf16"] = bool(torch.cuda.is_bf16_supported())
+                    bilgi["cudnn"] = torch.backends.cudnn.version()
+                except Exception:   # noqa: BLE001
+                    pass
             elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-                bilgi.update(cihaz="mps", ekran_karti="Apple Silicon")
-            bilgi["torch"] = torch.__version__
+                bilgi.update(cihaz="mps", ekran_karti="Apple Silicon", durum="mps")
+            else:
+                kart = _nvidia_karti()
+                if kart:
+                    bilgi.update(ekran_karti=kart[0], vram_gb=kart[1])
+                    bilgi["durum"] = "cpu_torch_cpu" if not bilgi["torch_cuda"] else "cpu_surucu"
+                    try:
+                        torch.cuda.init()
+                    except Exception as e:   # noqa: BLE001 — sürücü/CUDA neden açılmadı
+                        bilgi["cuda_hata"] = f"{type(e).__name__}: {e}"[:200]
+                else:
+                    bilgi["durum"] = "cpu"
         except Exception as e:   # torch yok/bozuk: yine de yanıt veririz
             bilgi["torch_hata"] = type(e).__name__
+            bilgi["durum"] = "torch_yok"
         self.cihaz = bilgi["cihaz"]
+        if not getattr(self, "_cihaz_yazildi", False):
+            self._cihaz_yazildi = True
+            log.info("Cihaz: %s | durum=%s | kart=%s | VRAM=%s GB | torch=%s (CUDA %s) | python=%s%s",
+                     bilgi["cihaz"], bilgi.get("durum"), bilgi.get("ekran_karti"), bilgi.get("vram_gb"),
+                     bilgi.get("torch"), bilgi.get("torch_cuda"), bilgi["python"],
+                     f" | {bilgi['cuda_hata']}" if bilgi.get("cuda_hata") else "")
+            if bilgi.get("durum") in ("cpu_torch_cpu", "cpu_surucu"):
+                log.warning("NVIDIA ekran kartı var ama dublaj İŞLEMCİDE çalışacak (çok yavaş): %s", bilgi.get("durum"))
         return bilgi
 
     def k_merhaba(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
@@ -205,6 +248,9 @@ class GercekIsleyici:
         for i, (ad, repo, desen) in enumerate(isler):
             is_.ilerleme(100.0 * i / (len(isler) + 1), ad)
             snapshot_download(repo_id=repo, allow_patterns=desen)
+        if "tts" in liste:
+            for c in HAZIR_SESLER:          # yerleşik yedek sesler (küçük; olmazsa ilk kullanımda yeniden denenir)
+                self._hazir_ses_al(c)
         if "ayirma" in liste:
             is_.ilerleme(100.0 * len(isler) / (len(isler) + 1), "HT-Demucs-ft")
             self._demucs_yukle(sadece_indir=True)
@@ -213,20 +259,70 @@ class GercekIsleyici:
     def k_yukle(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
         self.cihaz_bilgisi()
         self.hafif = bool(v.get("hafif"))
+        isinma_ms = None
         if v.get("tts"):
             is_.ilerleme(10, "ses motoru")
+            t0 = time.monotonic()
             self._tts_yukle(str(v["tts"]))
+            log.info("Ses motoru yüklendi: %s, %s%s, %d ms", v["tts"], self.cihaz,
+                     f" (T3 {str(self._yari).replace('torch.', '')})" if self._yari is not None else "",
+                     (time.monotonic() - t0) * 1000)
+            if v.get("isit", True):
+                is_.ilerleme(40, "ısınma")
+                isinma_ms = self._isit()
         if v.get("stt"):
             is_.ilerleme(50, "konuşma tanıma")
             self._whisper_yukle(str(v["stt"]))
         if v.get("ayirma") and not self.hafif:
             is_.ilerleme(80, "ayırıcı")
             self._demucs_yukle()
-        return {"cihaz": self.cihaz, **self.k_bellek({}, is_)}
+        return {"cihaz": self.cihaz, "isinma_ms": isinma_ms, **self.k_bellek({}, is_)}
+
+    def _isit(self) -> int | None:
+        """Yüklemeden hemen sonra bir kısa üretim (CUDA çekirdekleri derlenir, bellek ayrılır) ve yerleşik yedek
+        seslerin koşulları önceden hazırlanır: oyundaki ilk gerçek satır yavaş olmasın."""
+        t0 = time.monotonic()
+        try:
+            if self._tts_kod == "pocket":    # Pocket örneksiz üretemez: yerleşik sesle ısınır
+                hs = self._hazir_ses_al("e")
+                if hs is None:
+                    return None
+                self._uret("Merhaba.", hs[0], hs[1], {})
+                return int((time.monotonic() - t0) * 1000)
+            self._uret("Merhaba.", np.zeros(0, np.float32), TTS_REF_SR, {})
+            for c in ("k", "e"):
+                hs = self._hazir_ses_al(c)
+                if hs is not None:
+                    with self._kilit:
+                        self._referans_hazirla(hs[0], hs[1], 0.5)
+        except Exception as e:   # noqa: BLE001 — ısınma olmazsa da çalışırız
+            log.info("Isınma üretimi başarısız: %s", type(e).__name__)
+            return None
+        ms = int((time.monotonic() - t0) * 1000)
+        log.info("Isınma: %d ms", ms)
+        return ms
+
+    def _hazir_ses_al(self, cinsiyet: str) -> tuple[np.ndarray, int] | None:
+        """Yerleşik yedek ses ("k" | "e"): ilk kullanımda Hugging Face önbelleğine iner (sabit sürüm), sonra RAM'de."""
+        if cinsiyet not in HAZIR_SESLER:
+            return None
+        if cinsiyet in self._hazir_ses:
+            return self._hazir_ses[cinsiyet]
+        try:
+            from huggingface_hub import hf_hub_download
+            yol = hf_hub_download(HAZIR_SES_DEPO, HAZIR_SESLER[cinsiyet], revision=HAZIR_SES_SURUM)
+            pcm2, sr = _ses_oku(yol)
+            pcm = _yeniden_ornekle(pcm2.mean(0), sr, TTS_REF_SR)
+        except Exception as e:   # noqa: BLE001 — çevrimdışı vb.: motorun kendi sesi kullanılır
+            log.info("Yerleşik %s ses alınamadı: %s", cinsiyet, type(e).__name__)
+            return None
+        self._hazir_ses[cinsiyet] = (pcm, TTS_REF_SR)
+        return self._hazir_ses[cinsiyet]
 
     def k_birak(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
         self._demucs = self._whisper = self._tts = None
         self._tts_kod = self._whisper_ad = self._ref_ozet = ""
+        self._kosullar.clear()
         if self._torch is not None and self.cihaz == "cuda":
             self._torch.cuda.empty_cache()
         return {}
@@ -406,15 +502,51 @@ class GercekIsleyici:
             self._tts = ChatterboxMultilingualTTS.from_pretrained(self.cihaz)
             c = getattr(self._tts, "conds", None)
             self._varsayilan_kosul = (c.t3, c.gen) if c is not None else None
-            if self.cihaz == "cuda" and self.hafif and not os.environ.get("KOPRU_TAM_HASSAS"):
-                try:   # hafif mod: konuşma dil modelinin ağırlıkları yarım hassas (~1 GB daha az VRAM)
-                    self._tts.t3.half()
-                    self._t3_yarim = True
-                except Exception:   # noqa: BLE001
-                    log.info("t3 yarım hassasa çevrilemedi")
+            self._kosullar.clear()
+            self._yari_hassas_kur(torch)
         self._tts_kod = kod
         self._ref_ozet = ""
         return self._tts
+
+    def _yari_hassas_kur(self, torch: Any) -> None:
+        """Ekran kartında YALNIZ konuşma dil modeli (T3, Llama tabanlı; sürenin çoğu) yarı hassas çalışır: bf16
+        destekleniyorsa bf16 (fp16'nın taşma kaynaklı bozuk/robotik çıktısı olmaz), değilse fp16. Ses üreteci
+        (S3Gen: akış eşleme + HiFiGAN) tam hassas kalır; eskiden tüm üretim fp16 autocast altındaydı ve
+        vokoder fp16'da metalik/robotik ses verebiliyordu. KOPRU_TAM_HASSAS=1: hepsi fp32."""
+        self._yari = None
+        tur = os.environ.get("KOPRU_YARI_HASSAS_CIHAZ") or self.cihaz      # sınama: "cpu" ile bf16 yolu
+        if tur not in ("cuda", "cpu") or (tur == "cpu" and self.cihaz != "cpu") or os.environ.get("KOPRU_TAM_HASSAS"):
+            return
+        if tur == "cpu" and not os.environ.get("KOPRU_YARI_HASSAS_CIHAZ"):
+            return
+        try:
+            bf16 = tur == "cpu" or bool(torch.cuda.is_bf16_supported())
+            tip = torch.bfloat16 if bf16 else torch.float16
+            t3 = self._tts.t3
+            t3.to(dtype=tip)
+            ic = t3.inference
+
+            def inference(*a: Any, **k: Any) -> Any:
+                with torch.autocast(tur, dtype=tip):
+                    return ic(*a, **k)
+            t3.inference = inference
+            self._t3_ic = ic
+            self._yari = tip
+        except Exception as e:   # noqa: BLE001
+            log.info("T3 yarı hassasa çevrilemedi (%s); tam hassas", type(e).__name__)
+            self._tam_hassasa_don()
+
+    def _tam_hassasa_don(self) -> None:
+        t3 = getattr(self._tts, "t3", None)
+        if t3 is None:
+            return
+        try:
+            t3.to(dtype=self._torch.float32)
+            if getattr(self, "_t3_ic", None) is not None:
+                t3.inference = self._t3_ic
+        except Exception:   # noqa: BLE001
+            pass
+        self._yari = None
 
     def _referans_hazirla(self, pcm: np.ndarray, sr: int, canlilik: float) -> None:
         ozet = hashlib.sha1(pcm.tobytes()).hexdigest() + str(sr)
@@ -427,6 +559,13 @@ class GercekIsleyici:
                 self._tts.conds = Conditionals(t3, gen)
             self._ref_ozet = ozet
             return
+        if self._tts_kod != "pocket" and ozet in self._kosullar:   # bu ses daha önce hazırlandı: yeniden hesap yok
+            self._tts.conds = self._kosullar.pop(ozet)
+            self._kosullar[ozet] = self._tts.conds
+            self._ref_ozet = ozet
+            self._son_uretim["kosul"] = "onbellek"
+            return
+        t0 = time.monotonic()
         if len(pcm):   # kısık konuşma (oyunda diyalog sesi düşük): örneği sabit düzeye getir
             r = float(np.sqrt(np.mean(np.square(pcm, dtype=np.float64))))
             if r > 1e-5:
@@ -441,31 +580,54 @@ class GercekIsleyici:
             sf.write(tampon, pcm, sr, format="WAV", subtype="FLOAT")   # bellekte; diske yazılmaz
             tampon.seek(0)
             self._tts.prepare_conditionals(tampon, exaggeration=canlilik)
+            self._kosullar[ozet] = self._tts.conds
+            while len(self._kosullar) > KOSUL_ONBELLEK:
+                self._kosullar.pop(next(iter(self._kosullar)))
+        self._son_uretim["kosul"] = int((time.monotonic() - t0) * 1000)
         self._ref_ozet = ozet
 
     def _uret(self, metin: str, ref: np.ndarray, ref_sr: int, duygu: dict[str, float]) -> tuple[np.ndarray, int]:
-        torch = self._torch
-        canlilik = float(np.clip(duygu.get("canlilik", 0.5), 0.25, 1.2))
-        cfg = float(np.clip(duygu.get("cfg", 0.5), 0.3, 0.7))
+        # Diller arası klonda (İngilizce örnek → Türkçe) düşük cfg_weight İngilizce aksanın ve "okuma" havasının
+        # Türkçeye taşınmasını azaltır (Chatterbox önerisi: dil aktarımında cfg düşük); canlılık 0,5 civarı doğal.
+        canlilik = float(np.clip(duygu.get("canlilik", 0.5), 0.25, 1.0))
+        cfg = float(np.clip(duygu.get("cfg", 0.3), 0.15, 0.6))
         with self._kilit:
             self._kullan()
+            self._son_uretim = {"kosul": 0}
             self._referans_hazirla(ref, ref_sr, canlilik)
+            t0 = time.monotonic()
             if self._tts_kod == "pocket":
                 ses = self._tts.generate_audio(self._pocket_durum, metin)
-                return np.asarray(ses.detach().cpu().numpy(), dtype=np.float32).reshape(-1), int(self._tts.sample_rate)
-
-            def uret() -> Any:
-                return self._tts.generate(metin, language_id="tr", exaggeration=canlilik, cfg_weight=cfg, temperature=0.8)
-            if self.cihaz == "cuda" and (getattr(self, "_t3_yarim", False) or not os.environ.get("KOPRU_TAM_HASSAS")):
-                try:   # yarı hassas hesap: daha az VRAM, daha hızlı
-                    with torch.autocast("cuda", dtype=torch.float16):
-                        wav = uret()
-                except RuntimeError:
-                    log.info("fp16 üretim başarısız; tam hassasiyetle yeniden")
-                    wav = uret()
+                pcm = np.asarray(ses.detach().cpu().numpy(), dtype=np.float32).reshape(-1)
+                sr = int(self._tts.sample_rate)
             else:
-                wav = uret()
-            return np.asarray(wav.squeeze().detach().float().cpu().numpy(), dtype=np.float32), int(self._tts.sr)
+                def uret() -> Any:
+                    return self._tts.generate(metin, language_id="tr", exaggeration=canlilik, cfg_weight=cfg,
+                                              temperature=0.8)
+                try:
+                    wav = uret()
+                except RuntimeError as e:
+                    if self._yari is None:
+                        raise
+                    log.warning("Yarı hassas üretim başarısız (%s); tam hassasa dönülüyor", e)
+                    self._tam_hassasa_don()
+                    wav = uret()
+                pcm = np.asarray(wav.squeeze().detach().float().cpu().numpy(), dtype=np.float32)
+                sr = int(self._tts.sr)
+            ms = int((time.monotonic() - t0) * 1000)
+            self._son_uretim.update(uretim_ms=ms, ses_sn=round(len(pcm) / sr, 2), ref_sn=round(len(ref) / max(1, ref_sr), 1))
+            log.info("Seslendirme: %d harf → %.1f sn ses, %d ms (%s; koşul %s; örnek %.1f sn)", len(metin),
+                     len(pcm) / sr, ms, self.cihaz, self._son_uretim.get("kosul"), len(ref) / max(1, ref_sr))
+            return pcm, sr
+
+    def _ref_sec(self, v: dict[str, Any]) -> tuple[np.ndarray, int]:
+        """İstekteki örnek; yoksa istenen cinsiyetin yerleşik yedek sesi; o da yoksa boş (motorun kendi sesi)."""
+        if v.get("ref_pcm"):
+            return protokol.pcm_coz(v["ref_pcm"]), int(v["ref_sr"])
+        hs = self._hazir_ses_al(str(v.get("varsayilan") or "")) if v.get("varsayilan") else None
+        if hs is not None:
+            return hs
+        return np.zeros(0, dtype=np.float32), TTS_REF_SR
 
     def k_seslendir(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
         if self._tts is None or (v.get("motor") and v["motor"] != self._tts_kod):
@@ -476,15 +638,14 @@ class GercekIsleyici:
         if v.get("ref_yol"):
             ref2, ref_sr = _ses_oku(v["ref_yol"])
             ref = ref2.mean(0)
-        elif not v.get("ref_pcm"):
-            ref, ref_sr = np.zeros(0, dtype=np.float32), TTS_REF_SR
         else:
-            ref, ref_sr = protokol.pcm_coz(v["ref_pcm"]), int(v["ref_sr"])
+            ref, ref_sr = self._ref_sec(v)
         pcm, sr = self._uret(metin, ref, ref_sr, v.get("duygu") or {})
         if v.get("cikis"):
             _ses_yaz(v["cikis"], pcm, sr)
             return {"sure_sn": len(pcm) / sr, "sr": sr}
-        return {"pcm": protokol.pcm_kodla(pcm), "sr": sr, "sure_sn": len(pcm) / sr}
+        return {"pcm": protokol.pcm_kodla(pcm), "sr": sr, "sure_sn": len(pcm) / sr, "cihaz": self.cihaz,
+                **{k: self._son_uretim.get(k) for k in ("uretim_ms", "kosul", "ref_sn")}}
 
     def k_seslendir_cal(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
         """Canlı: metni parça parça seslendirir ve İLK parça hazır olur olmaz çalmaya başlar (akışlı).
@@ -497,7 +658,7 @@ class GercekIsleyici:
         if self._tts is None or (v.get("motor") and v["motor"] != self._tts_kod):
             self._tts_yukle(str(v.get("motor") or "chatterbox"))
         metin = str(v.get("metin") or "").strip()
-        ref, ref_sr = (protokol.pcm_coz(v["ref_pcm"]), int(v["ref_sr"])) if v.get("ref_pcm") else (np.zeros(0, np.float32), TTS_REF_SR)
+        ref, ref_sr = self._ref_sec(v)
         duygu = v.get("duygu") or {}
         hedef = float(v.get("hedef_sn") or 0)
         sinir = float(v.get("hiz_siniri") or 1.25)
@@ -585,11 +746,15 @@ class GercekIsleyici:
         from .canli import CanliYakalama
         if self._canli is not None:
             self._canli.durdur()
-        istek = (v.get("ayirma") and not self.hafif) or v.get("tamamen_turkce")
-        ayirici = (lambda pcm, sr: self._ayir_canli(pcm, sr)) if istek else None
-        self._canli = CanliYakalama(self._gonder, pid=v.get("pid"), ayirici=ayirici,
-                                    tamamen_turkce=bool(v.get("tamamen_turkce")), giris=str(v.get("giris") or ""),
-                                    ps5_ses=v.get("ps5_ses") if isinstance(v.get("ps5_ses"), dict) else None)
+        tamamen = bool(v.get("tamamen_turkce"))
+        ps5 = v.get("ps5_ses") if isinstance(v.get("ps5_ses"), dict) else None
+        ayir = lambda pcm, sr: self._ayir_canli(pcm, sr)   # noqa: E731
+        # akışlı ayırma yalnız "Tamamen Türkçe"de; yoksa konuşma parçası başına bir kez (klon örneği için). PS5
+        # gizli bağlantıda oyun bu bilgisayarın ekran kartında değildir: hafif kipte de parça ayrılır.
+        parca = bool(v.get("ayirma")) and not tamamen and (not self.hafif or ps5 is not None)
+        self._canli = CanliYakalama(self._gonder, pid=v.get("pid"), ayirici=ayir if tamamen else None,
+                                    tamamen_turkce=tamamen, giris=str(v.get("giris") or ""), ps5_ses=ps5,
+                                    parca_ayirici=ayir if parca else None)
         return self._canli.baslat()
 
     def _ayir_canli(self, pcm: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
@@ -601,6 +766,14 @@ class GercekIsleyici:
     def k_girisler(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
         from .canli import girisleri_listele
         return {"girisler": girisleri_listele()}
+
+    def k_canli_son(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        """Son ~1,5 sn konuşma (anında; seslendirme sırasını beklemez). Canlı yakalama yoksa boş."""
+        c = self._canli
+        if c is None or not hasattr(c, "son_ses"):
+            return {}
+        pcm = c.son_ses(float(v.get("sn") or 1.5))
+        return {"pcm": protokol.pcm_kodla(pcm), "sr": 16000} if len(pcm) else {}
 
     def k_canli_durdur(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
         if self._canli is not None:
@@ -629,6 +802,29 @@ def blok_plani(n: int, blok: int, pay: int) -> list[tuple[int, int, int, int]]:
         plan.append((max(0, yb - pay), min(n, ys + pay), yb, ys))
         yb = ys
     return plan
+
+
+def _nvidia_karti() -> tuple[str, float | None] | None:
+    """torch CUDA görmediğinde: NVIDIA kart gerçekten var mı (nvidia-smi; dizüstünde uyanması sürebilir)."""
+    adaylar = ["nvidia-smi"]
+    if sys.platform == "win32":
+        kok = os.environ.get("SystemRoot", r"C:\Windows")
+        adaylar += [os.path.join(kok, "System32", "nvidia-smi.exe"),
+                    os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "NVIDIA Corporation", "NVSMI",
+                                 "nvidia-smi.exe")]
+    for yol in adaylar:
+        try:
+            cikti = subprocess.run([yol, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                                   capture_output=True, text=True, timeout=15, check=True,
+                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+            ad, bellek = [p.strip() for p in cikti.strip().splitlines()[0].split(",", 1)]
+            try:
+                return ad, round(float(bellek) / 1024.0, 1)
+            except ValueError:
+                return ad, None
+        except Exception:   # noqa: BLE001
+            continue
+    return None
 
 
 def _zaman_damgasi() -> float:

@@ -376,6 +376,7 @@ class DublajOrtami:
         self.model_indirici: ModelIndirici | None = None     # DublajYonetici bağlar (işçi üzerinden)
         self.isci_denetci: IsciDenetci | None = None
         self.bilgi_ = OrtamBilgisi(asamalar={k: _Asama(k) for k in ASAMALAR})
+        self.onarim: dict[str, Any] = {"durum": "yok", "mesaj": None}
         self._iptal = threading.Event()
         self._gorev: asyncio.Task | None = None
         self._durum_oku()
@@ -469,7 +470,8 @@ class DublajOrtami:
         return {"durum": b.durum, "kurulu": self.kurulu(), "tamam": self.tamamen_hazir(),
                 "gelistirici": self.gelistirici, "indirme_mb": ind, "disk_mb": int(ind * DISK_CARPANI),
                 "asama": b.asama, "asamalar": asamalar, "yuzde": round(toplam), "mesaj": b.mesaj,
-                "hata": b.hata or neden, "ayrinti": b.ayrinti, "konum": str(self.kok), "destek": destek}
+                "hata": b.hata or neden, "ayrinti": b.ayrinti, "konum": str(self.kok), "destek": destek,
+                "onarim": dict(self.onarim)}
 
     # -- kurulum --
     def kuruluyor(self) -> bool:
@@ -548,6 +550,34 @@ class DublajOrtami:
         if self.platform[0] == "win32":
             await self._arsiv_kur("ffmpeg", FFMPEG_WINDOWS)
 
+    def torch_onar_komutu(self) -> list[str]:
+        """NVIDIA kart varken paketteki torch CUDA'sız kalmışsa (ör. kurulumda kart algılanamadı): yalnız torch
+        ve torchaudio CUDA yapısıyla yeniden kurulur (diğer paketlere dokunulmaz)."""
+        return [str(self.python_yolu()), "-E", "-s", "-m", "pip", "install", "--disable-pip-version-check",
+                "--no-warn-script-location", "--progress-bar", "raw", "--force-reinstall", "--no-deps",
+                *TORCH, "--index-url", TORCH_DIZINI]
+
+    async def torch_onar(self) -> bool:
+        """PROTOKOL 14.1: "Onar" — torch'u CUDA yapısıyla yeniden kurar. Dönen: başarılı mı."""
+        if self.gelistirici or self.platform[0] == "darwin":
+            return False
+        self.onarim = {"durum": "suruyor", "mesaj": None}
+        son: list[str] = []
+
+        def satir(x: str) -> None:
+            son.append(x)
+            del son[:-40]
+        kod = await asyncio.to_thread(self.calistirici, self.torch_onar_komutu(), satir, self._iptal,
+                                      {"PIP_NO_INPUT": "1", "HF_HOME": str(self.model_dizini())})
+        try:
+            with open(self.kok / "kurulum.log", "a", encoding="utf-8") as f:
+                f.write("--- torch onarımı ---\n" + "\n".join(son) + "\n")
+        except OSError:
+            pass
+        self.onarim = {"durum": "bitti" if kod == 0 else "hata", "mesaj": None if kod == 0 else (son[-1] if son else f"çıkış {kod}")}
+        log.info("torch CUDA onarımı: %s", self.onarim["durum"])
+        return kod == 0
+
     def pip_komutlari(self) -> list[tuple[list[str], float]]:
         """(komut, beklenen MB) listesi. torch önce, sonra kalanlar torch sabitiyle."""
         py = str(self.python_yolu())
@@ -623,11 +653,21 @@ class DublajOrtami:
             self._durum_oku()
 
 
+_NVIDIA_ONBELLEK: dict[str, Any] = {}
+
+
 def _nvidia_var() -> bool:
-    """CUDA'lı torch indirilmeli mi: NVIDIA ekran kartı var mı (nvidia-smi)."""
+    """CUDA'lı torch indirilmeli mi: NVIDIA ekran kartı var mı (nvidia-smi). Panel sık sorar: sonuç
+    önbelleklenir (var: hep; yok: 10 dk), nvidia-smi her sorguda (uyuyan kartta saniyelerce) çalıştırılmaz."""
+    simdi = time.monotonic()
+    k = _NVIDIA_ONBELLEK.get("v")
+    if k is not None and (k[0] or simdi - k[1] < 600):
+        return k[0]
     try:
         from . import donanim
         d = donanim._nvidia_smi()
-        return d is not None and d.tur == "cuda"
+        var = d is not None and d.tur == "cuda"
     except Exception:
-        return False
+        var = False
+    _NVIDIA_ONBELLEK["v"] = (var, simdi)
+    return var

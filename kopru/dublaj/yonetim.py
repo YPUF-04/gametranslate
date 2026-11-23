@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from .. import ses as ses_mod
 from . import MOTORLAR, donanim, motor_olustur, tamamen_turkce_mu
 from .cikis import BilgisayarCikis, SesDeposu, TvCikis, _pencere_islemi
-from .isci_istemci import (IsciCikis, IsciIstemci, IsciMotoru, IsciSesKaynagi, IsciSTT, isci_komutu,
+from .isci_istemci import (IsciCikis, IsciIstemci, IsciMotoru, IsciSesKaynagi, IsciSTT, anlik_ses, isci_komutu,
                            kod_kopyala)
 from .ortam import DublajOrtami
 from .temel import DublajHatasi
@@ -102,7 +102,59 @@ class DublajYonetici:
 
     async def _isci_denetle(self) -> dict[str, Any]:
         b = await self.isci.baslat()
+        if b.get("durum") == "cpu_torch_cpu" and not self.ortam.gelistirici:
+            # NVIDIA kart var ama pakete CUDA'sız torch kurulmuş (kurulumda kart algılanamadı): bir kez onar
+            log.warning("Dublaj paketi CUDA'sız torch ile kurulmuş (%s); CUDA yapısı kuruluyor", b.get("ekran_karti"))
+            if await self.ortam.torch_onar():
+                await self.isci.kapat()
+                b = await self.isci.baslat()
         return {**b, "anahtar_dogru": True}
+
+    async def onar(self) -> dict[str, Any]:
+        """Panel "Onar": torch'u CUDA yapısıyla yeniden kurar, işçiyi yeniden başlatır (§14.1)."""
+        if self._gorev is not None and not self._gorev.done():
+            raise DublajHatasi("dublaj_onar_calisirken")
+        if self._motor is not None and hasattr(self._motor, "kapat"):
+            await self._motor.kapat()
+        await self.isci.kapat()
+        tamam = await self.ortam.torch_onar()
+        b = await self.isci.baslat() if tamam else (self.isci.bilgi or {})
+        return {"tamam": tamam, "tani": self.tani(), "onarim": dict(self.ortam.onarim), "cihaz": b.get("cihaz")}
+
+    def onar_baslat(self) -> None:
+        """Onarımı arka planda başlatır (torch CUDA ~2,6 GB iner); durum `tani()["onarim"]`da."""
+        if self._gorev is not None and not self._gorev.done():
+            raise DublajHatasi("dublaj_onar_calisirken")
+        if getattr(self, "_onar_gorevi", None) is not None and not self._onar_gorevi.done():
+            return
+
+        async def calis() -> None:
+            try:
+                await self.onar()
+            except Exception:   # noqa: BLE001
+                log.exception("Dublaj onarımı başarısız")
+                self.ortam.onarim = {"durum": "hata", "mesaj": "beklenmeyen hata"}
+        self.ortam.onarim = {"durum": "suruyor", "mesaj": None}
+        self._onar_gorevi = asyncio.get_running_loop().create_task(calis())
+
+    def tani(self) -> dict[str, Any]:
+        """"Dublaj tanı" (§14.6): hangi cihazda çalışıyor + son 5 satırın gecikmesi, örneği, cinsiyeti, atılıp atılmadığı."""
+        b = dict(self.isci.bilgi or {}) if self.isci_kullan() else {}
+        cihaz = {k: b.get(k) for k in ("cihaz", "durum", "ekran_karti", "vram_gb", "torch", "torch_cuda", "cuda_hata",
+                                         "bf16") if b.get(k) is not None} or None
+        uyari = None
+        if b.get("durum") in ("cpu_torch_cpu", "cpu_surucu"):
+            uyari = b["durum"]
+        elif b and b.get("cihaz") == "cpu" and self.motor_kodu() == "chatterbox":
+            uyari = "cpu"
+        m = self._motor
+        satirlar = []
+        for o in list(self.isleyici.olcumler if self.isleyici else [])[-5:]:
+            satirlar.append({k: o.get(k) for k in ("yazi_id", "ilk_ses_ms", "bekleme_ms", "ceviri_ms", "ses_ms",
+                                                   "uretim_ms", "ref_sn", "ref_tur", "cinsiyet", "atildi", "erken")
+                             if o.get(k) is not None})
+        return {"cihaz": cihaz, "uyari": uyari, "onarilabilir": uyari == "cpu_torch_cpu" and not self.ortam.gelistirici,
+                "isinma_ms": getattr(m, "isinma_ms", None), "satirlar": satirlar, "onarim": dict(self.ortam.onarim)}
 
     def _oyun_pid(self) -> int | None:
         return _pencere_islemi(str(self.ayar().get("kaynak") or ""))
@@ -136,8 +188,10 @@ class DublajYonetici:
             return None
         son = dict(isl.olcumler[-1])
         bekle = [o["bekleme_ms"] for o in isl.olcumler if o.get("bekleme_ms") is not None]
+        ilk = [o["ilk_ses_ms"] for o in isl.olcumler if o.get("ilk_ses_ms") is not None and not o.get("atildi")]
         return {"son": son, "ortalama_bekleme_ms": int(sum(bekle) / len(bekle)) if bekle else None,
-                "olcum_sayisi": len(isl.olcumler)}
+                "ortalama_ilk_ses_ms": int(sum(ilk) / len(ilk)) if ilk else None,
+                "atilan": sum(1 for o in isl.olcumler if o.get("atildi")), "olcum_sayisi": len(isl.olcumler)}
 
     def profiller(self) -> Any:
         from .. import ayarlar
@@ -201,7 +255,7 @@ class DublajYonetici:
                 "paket": self.ortam.bilgi(), "isci": bool(self.isci_kullan()),
                 "tamamen_turkce": tamamen_turkce_mu(self.ayar()),
                 "tamamen_turkce_destek": sys.platform == "win32" or bool(self._d().get("ses_girisi")),
-                "hafif": self.hafif(), "gecikme": self.gecikme(),
+                "hafif": self.hafif(), "gecikme": self.gecikme(), "tani": self.tani(),
                 "son_hata": self.son_hata or (self.isleyici.son_hata if self.isleyici else None)}
 
     # -- model hazırlama (indirme) --
@@ -290,6 +344,8 @@ class DublajYonetici:
             return
         stt = self.stt_fabrika(self.ayar())
         isleyici = Isleyici(stt, self.yonetici_getir(), self.motor, self.cikis, self.yayin, self.ayar, self.saat)
+        if self.isci_kullan() and not self._kaynak_verildi:   # altyazı anında kim konuşuyor (cinsiyet / kimlik)
+            isleyici.anlik_ses = lambda sn: anlik_ses(self.isci, sn)
         if self._d().get("ses_profili_izni"):       # yalnız izinle: karakter sesleri diskte (yerel, silinebilir)
             profiller = self.profiller()
             try:

@@ -278,15 +278,19 @@ class TvCikis:
         self._bitis_gorevi: asyncio.Task | None = None
 
     async def oynat(self, pcm: np.ndarray, sr: int, ayar: dict[str, Any],
-                    yazi_id: str | None = None) -> OynatmaBilgisi:
+                    yazi_id: str | None = None, bayat_ms: int | None = None) -> OynatmaBilgisi:
+        """`bayat_ms`: TV bu sesi, geldikten sonra en çok bu kadar bekletip çalabilir (önündeki sıra + pay);
+        yoksa TV'nin varsayılanı (6 sn). Böylece akışlı satırın arka parçaları sırada beklerken atılmaz."""
         import numpy as np
         from . import dsp
         d = ayar.get("dublaj") or {}
         veri = np.clip(pcm * float(d.get("ses_seviyesi", 1.0)), -1.0, 1.0).astype(np.float32)
         kimlik = self.depo.koy(dsp.wav_bayt(veri, sr))
         sure = len(veri) / sr
-        self.yayin.yayinla("ses", {"id": kimlik, "url": f"/kopru/ses/{kimlik}.wav",
-                                   "sure_ms": int(sure * 1000), "yazi_id": yazi_id})
+        olay = {"id": kimlik, "url": f"/kopru/ses/{kimlik}.wav", "sure_ms": int(sure * 1000), "yazi_id": yazi_id}
+        if bayat_ms is not None:
+            olay["bayat_ms"] = int(max(1000, min(30000, bayat_ms)))
+        self.yayin.yayinla("ses", olay)
         return OynatmaBilgisi(sure, kimlik)
 
     def durdur(self) -> None:

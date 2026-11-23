@@ -36,17 +36,31 @@ def _torch_bak() -> Donanim | None:
     return Donanim()
 
 
-def _nvidia_smi() -> Donanim | None:
-    """torch yokken: `nvidia-smi` ile ekran kartı adı ve belleği."""
-    try:
-        cikti = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=4, check=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
-        ad, bellek = [p.strip() for p in cikti.strip().splitlines()[0].split(",", 1)]
-        return Donanim("cuda", ad, round(float(bellek) / 1024.0, 1))
-    except Exception:
-        return None
+def _nvidia_smi_yollari() -> list[str]:
+    yollar = ["nvidia-smi"]
+    if sys.platform == "win32":
+        kok = os.environ.get("SystemRoot", r"C:\Windows")
+        yollar += [os.path.join(kok, "System32", "nvidia-smi.exe"),
+                   os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "NVIDIA Corporation", "NVSMI",
+                                "nvidia-smi.exe")]
+    return yollar
+
+
+def _nvidia_smi(zaman_asimi: float = 15.0) -> Donanim | None:
+    """torch yokken: `nvidia-smi` ile ekran kartı adı ve belleği. Dizüstünde (Optimus) uyuyan kartın uyanması
+    birkaç saniye sürebilir: süre 15 sn; PATH'te yoksa Windows'un bilinen yerlerine de bakılır. (Eskiden 4 sn
+    ve yalnız PATH: kart "yok" sanılıp dublaj paketine CUDA'sız torch kurulabiliyordu.)"""
+    for yol in _nvidia_smi_yollari():
+        try:
+            cikti = subprocess.run(
+                [yol, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=zaman_asimi, check=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+            ad, bellek = [p.strip() for p in cikti.strip().splitlines()[0].split(",", 1)]
+            return Donanim("cuda", ad, round(float(bellek) / 1024.0, 1))
+        except Exception:
+            continue
+    return None
 
 
 def ram_gb() -> float | None:

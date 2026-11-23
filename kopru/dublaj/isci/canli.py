@@ -393,8 +393,13 @@ class CanliYakalama:
     def __init__(self, gonder: Callable[[dict[str, Any]], None], pid: int | None = None,
                  ayirici: Callable[[np.ndarray, int], tuple[np.ndarray, np.ndarray]] | None = None,
                  tamamen_turkce: bool = False, kaynak_fabrika: Callable[[], Any] | None = None,
-                 giris: str = "", ps5_ses: dict[str, Any] | None = None) -> None:
+                 giris: str = "", ps5_ses: dict[str, Any] | None = None,
+                 parca_ayirici: Callable[[np.ndarray, int], tuple[np.ndarray, np.ndarray]] | None = None) -> None:
         self.ps5_ses = ps5_ses
+        # Konuşma parçası başına BİR kez ayırma (yalnız klon örneği temiz olsun diye). Akışlı ayırma (her 250 ms'de
+        # 3 sn'lik pencere) yalnız "Tamamen Türkçe"de gerekir; aksi hâlde ekran kartını ve seslendirmenin kilidini
+        # saniyede 4 kez meşgul edip Türkçe sesi geciktiriyordu.
+        self.parca_ayirici = parca_ayirici
         self.gonder = gonder
         self.pid = int(pid) if pid else None
         self.ayirici = ayirici
@@ -410,6 +415,14 @@ class CanliYakalama:
         self._arka_kuyruk: queue.Queue = queue.Queue(maxsize=8)
         self._arka_oynatici: Any = None
         self.tamamen_aktif = False
+        self._son: deque[np.ndarray] = deque(maxlen=int(3.0 * SR / BLOK) + 1)   # son ~3 sn konuşma izi (RAM)
+        self._son_kilit = threading.Lock()
+
+    def son_ses(self, sn: float) -> np.ndarray:
+        """Son `sn` saniyenin konuşma izi (ayırıcı varsa temiz konuşma): kimin konuştuğunu tahmin etmek için."""
+        with self._son_kilit:
+            tum = np.concatenate(list(self._son)) if self._son else np.zeros(0, np.float32)
+        return tum[-int(max(0.1, min(3.0, sn)) * SR):]
 
     def _kaynak_ac(self) -> Any:
         if self.kaynak_fabrika is not None:
@@ -499,6 +512,8 @@ class CanliYakalama:
                         self._arka_ekle(arka)
                 else:
                     konusma = blok
+                with self._son_kilit:
+                    self._son.append(np.asarray(konusma, dtype=np.float32))
                 sonuc = vad.besle(konusma, blok)
                 if sonuc is None:
                     continue
@@ -507,6 +522,11 @@ class CanliYakalama:
                                         "kaynak": self.kaynak_turu, "an": time.monotonic(), "pcm": protokol.pcm_kodla(h)}
                 if akis is not None:
                     olay["temiz"] = protokol.pcm_kodla(k)
+                elif self.parca_ayirici is not None:
+                    try:
+                        olay["temiz"] = protokol.pcm_kodla(self.parca_ayirici(h, SR)[0])
+                    except Exception as e:   # noqa: BLE001 — ayıramazsak ham parça yeter
+                        log.info("parça ayırma başarısız: %s", type(e).__name__)
                 self.gonder(olay)
         except Exception as e:   # noqa: BLE001 — aygıt koptu vb.
             log.warning("Canlı yakalama durdu: %s", e)

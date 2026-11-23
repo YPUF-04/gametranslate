@@ -2903,6 +2903,46 @@
       k.appendChild(h('p', { class: 'sessiz', id: 'dublaj-gecikme', text: parcalar.join(' · ') }));
     }
   }
+  // PROTOKOL 14.6 "Dublaj tanı": hangi cihazda çalışıyor (ekran kartı / işlemci + Onar) ve son 5 satır
+  function dublajTaniCiz(k, b) {
+    var tn = b.tani, c, d, sat, liste, on;
+    if (!tn || (!tn.cihaz && !(tn.satirlar && tn.satirlar.length))) return;
+    on = tn.onarim || {};
+    d = h('div', { class: 'dublaj-tani', id: 'dublaj-tani' });
+    d.appendChild(h('h4', { class: 'ara-baslik', text: t('dublaj.tani.baslik') }));
+    c = tn.cihaz || {};
+    if (c.cihaz === 'cuda') {
+      d.appendChild(h('p', { class: 'tamam', id: 'dublaj-tani-cihaz', text: t('dublaj.tani.gpu', { kart: c.ekran_karti || 'GPU' }) }));
+    } else if (tn.uyari) {
+      d.appendChild(h('p', { class: 'uyari', id: 'dublaj-tani-cihaz', role: 'status', text: t('dublaj.tani.' + tn.uyari, { kart: c.ekran_karti || '' }) }));
+      if (on.durum === 'suruyor') {
+        d.appendChild(h('p', { class: 'sessiz', id: 'dublaj-tani-onarim', text: t('dublaj.tani.onariliyor') }));
+      } else if (tn.onarilabilir) {
+        d.appendChild(h('button', { type: 'button', class: 'dugme', id: 'dublaj-onar', text: t('dublaj.tani.onar'), onclick: function () {
+          api('POST', '/api/dublaj/onar', {}, 20000).then(function (r) { S.dublaj = r; dublajImza = ''; dublajCiz(); }).catch(hataGoster);
+        } }));
+        if (on.durum === 'hata') d.appendChild(h('p', { class: 'hata', text: t('dublaj.tani.onarim_hata') }));
+      }
+    } else if (c.cihaz) {
+      d.appendChild(h('p', { class: 'sessiz', id: 'dublaj-tani-cihaz', text: t('dublaj.tani.cihaz', { cihaz: c.cihaz }) }));
+    }
+    if (tn.satirlar && tn.satirlar.length) {
+      liste = h('ul', { class: 'dublaj-tani-satirlar', id: 'dublaj-tani-satirlar' });
+      tn.satirlar.forEach(function (x) {
+        var p = [];
+        if (x.atildi) p.push(t('dublaj.tani.atildi', { neden: t('dublaj.tani.neden.' + x.atildi) }));
+        else if (x.ilk_ses_ms != null) p.push(t('dublaj.tani.gecikme', { n: (x.ilk_ses_ms / 1000).toFixed(1).replace('.', ',') }));
+        else if (x.bekleme_ms != null) p.push(t('dublaj.tani.gecikme', { n: (x.bekleme_ms / 1000).toFixed(1).replace('.', ',') }));
+        if (x.ref_tur) p.push(t('dublaj.tani.ref.' + (String(x.ref_tur).indexOf('yerlesik') === 0 ? 'yerlesik' : x.ref_tur), { n: x.ref_sn != null ? String(x.ref_sn).replace('.', ',') : '0' }));
+        if (x.cinsiyet) p.push(t('dublaj.tani.cins.' + x.cinsiyet));
+        if (x.uretim_ms != null) p.push(t('dublaj.gecikme.ses_ms', { n: x.uretim_ms }));
+        sat = h('li', { text: p.join(' · ') || '—' });
+        liste.appendChild(sat);
+      });
+      d.appendChild(liste);
+    }
+    k.appendChild(d);
+  }
   // 3) Videoyu Türkçe dublajla (PROTOKOL 14.4)
   function dublajVideoCiz(k, b) {
     var v = S.dublajVideo || { durum: 'bosta' }, pk = b.paket || {};
@@ -2967,7 +3007,7 @@
     var pk = b.paket || {}, vd = S.dublajVideo || {};
     var imza = [sec, b.hazir, b.onerilen, b.ekran_karti, ind.durum, ind.yuzde, ind.hata, b.son_hata, b.elevenlabs_anahtar,
       a.elevenlabs_onay, a.elevenlabs_klon_onay, a.cikis, dublajMesaj, dil, a.orijinal_ses, a.hafif_mod, a.ses_profili_izni, a.ses_girisi,
-      pk.durum, pk.yuzde, pk.kurulu, pk.tamam, pk.mesaj, JSON.stringify(pk.asamalar || []), b.tamamen_turkce, JSON.stringify(b.gecikme || null),
+      pk.durum, pk.yuzde, pk.kurulu, pk.tamam, pk.mesaj, JSON.stringify(pk.asamalar || []), b.tamamen_turkce, JSON.stringify(b.gecikme || null), JSON.stringify(b.tani || null),
       vd.durum, vd.yuzde, vd.kalan_sn, vd.asama, vd.satir && vd.satir.bitti, vd.cikti, vd.mesaj, S.dublajVideoSecim && S.dublajVideoSecim.yol].join('|');
     if (imza === dublajImza) return;   // değişmediyse yeniden çizme (yazı/odak kaybolmasın)
     dublajImza = imza;
@@ -2979,6 +3019,7 @@
     if (b.motor !== undefined) {
       k.appendChild(h('p', { class: 'sessiz', id: 'dublaj-donanim', text: b.ekran_karti ? t('dublaj.donanim', { kart: b.ekran_karti + (b.vram_gb ? ' (' + b.vram_gb + ' GB)' : '') }) : t('dublaj.donanim_yok') }));
     }
+    dublajTaniCiz(k, b);
     var liste = h('div', { class: 'liste', role: 'group', 'aria-label': t('dublaj.motor') });
     DUBLAJ_MOTORLAR.forEach(function (m) {
       liste.appendChild(h('button', { type: 'button', class: 'sec', id: 'dublaj-motor-' + m, 'data-motor': m, 'aria-pressed': String(sec === m), onclick: function () {

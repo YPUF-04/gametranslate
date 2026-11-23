@@ -558,8 +558,9 @@
 
     // ---------- Türkçe dublaj sesi (olay `ses` / `ses-dur`) ----------
     function taban() { var m = /^(https?:\/\/[^\/]+)/.exec(url || ''); return m ? m[1] : ''; }   // PC adresi (TV uygulaması file:// kökenlidir)
-    // Sıra: yeni ses öncekini KESMEZ, arkasına eklenir (konuşmalar art arda). Çok gecikmiş (bekleyen
-    // > SES_BAYAT_MS) ses atılır. Web Audio varsa onunla çalınır: webOS'te HDMI görüntüsü bir <video>
+    // Sıra: yeni ses öncekini KESMEZ, arkasına eklenir (konuşmalar art arda). Çok gecikmiş ses atılır: bekleme
+    // sınırı olayın `bayat_ms`i (PC, önündeki sıranın süresini bilir: akışlı satırın arka parçaları atılmasın;
+    // 1-30 sn), yoksa SES_BAYAT_MS. Web Audio varsa onunla çalınır: webOS'te HDMI görüntüsü bir <video>
     // medya hattıdır; Web Audio ikinci bir medya kaynağı açmadığı için HDMI'yi durdurma riski daha düşüktür.
     // (Gerçek LG TV'de DOĞRULANMADI.) Yoksa <audio> sırasıyla çalınır.
     var SES_BAYAT_MS = 6000, sesSira = [], sesCtx = null, sesSon = 0, sesKaynaklar = [];
@@ -580,7 +581,7 @@
     function sesSonraki() {
       var v, a, p;
       if (sesNesne) { return; }
-      while (sesSira.length && Date.now() - sesSira[0].gelis > SES_BAYAT_MS) { sesSira.shift(); }
+      while (sesSira.length && Date.now() - sesSira[0].gelis > sesSira[0].bayat) { bildir('onSesAtildi', sesSira.shift()); }
       v = sesSira.shift();
       if (!v) { return; }
       a = new pencere.Audio();
@@ -593,15 +594,17 @@
       catch (x) { sesNesne = null; bildir('onSesHata', v); }
       bildir('onSes', v);
     }
+    function sesBayat(v) { return (typeof v.bayat_ms === 'number' && v.bayat_ms === v.bayat_ms) ? sinirla(v.bayat_ms, 1000, 30000) : SES_BAYAT_MS; }
     function sesWebAudio(ctx, v) {
-      var x = new pencere.XMLHttpRequest(), gelis = Date.now();
+      var x = new pencere.XMLHttpRequest(), gelis = Date.now(), bayat = sesBayat(v);
       x.open('GET', taban() + v.url, true);
       x.responseType = 'arraybuffer';
       x.onload = function () {
         if (x.status !== 200) { bildir('onSesHata', v); return; }
         var bitti = function (tampon) {
           var k, bas;
-          if (Date.now() - gelis > SES_BAYAT_MS) { return; }
+          // sıradaki bekleme (sesSon) da sayılır: çalmaya başlayacağı an gelişten `bayat`tan sonraysa atılır
+          if (Date.now() - gelis + Math.max(0, sesSon - ctx.currentTime) * 1000 > bayat) { bildir('onSesAtildi', v); return; }
           if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (r) { /* yok say */ } }
           k = ctx.createBufferSource(); k.buffer = tampon; k.connect(ctx.destination);
           bas = Math.max(ctx.currentTime + 0.02, sesSon);
@@ -629,7 +632,7 @@
       ctx = sesBaglam();
       if (ctx && ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (r) { /* yok say */ } }
       if (ctx && ctx.state !== 'suspended') { sesWebAudio(ctx, v); return; }
-      sesSira.push({ url: v.url, id: v.id, yazi_id: v.yazi_id, gelis: Date.now() });
+      sesSira.push({ url: v.url, id: v.id, yazi_id: v.yazi_id, gelis: Date.now(), bayat: sesBayat(v) });
       sesSonraki();
     }
 

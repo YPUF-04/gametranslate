@@ -277,6 +277,11 @@ function sahneyiHazirla() { // tv/webos + ortak.* geçici klasöre (paketleme be
     var gunluk = await pd.evaluate(function () { return window.__ses.slice(); });
     assert(!gunluk.some(function (x) { return /^pause:.*s1\.wav$/.test(x); }), 'önceki ses kesildi: ' + gunluk.join(','));
     assert(gunluk.indexOf('play:http://127.0.0.1:8642/kopru/ses/s2.wav') > gunluk.indexOf(ilkSes)); ok('<audio>: ikinci ses birinci bitince çaldı (kesmeden sıra)');
+    // göreli bekleme sınırı (`bayat_ms`, PC sıranın süresini bilir): alan bozuk/uç olsa da ses çalar
+    s.yayinla('ses', { id: 's5', url: '/kopru/ses/s5.wav', sure_ms: 400, yazi_id: 'a11', bayat_ms: 20000 });
+    s.yayinla('ses', { id: 's6', url: '/kopru/ses/s6.wav', sure_ms: 400, yazi_id: 'a11', bayat_ms: 'x' });
+    await pd.waitForFunction(function () { return window.__ses.some(function (x) { return /^play:.*s6\.wav$/.test(x); }); }, null, { timeout: 5000 });
+    ok('bayat_ms (göreli bekleme sınırı) olan ve bozuk olan sesler sırayla çaldı');
     s.yayinla('ses', { id: 's4', url: '/kopru/ses/s4.wav', sure_ms: 400 });
     s.yayinla('ses-dur'); await bekle(300);
     assert(!(await pd.evaluate(function () { return window.__ses.some(function (x) { return /^play:.*s4\.wav$/.test(x); }) && !window.__ses.some(function (x) { return /^pause:/.test(x); }); }))); ok('ses-dur çalanı ve sırayı durdurdu');

@@ -273,6 +273,7 @@ class IsciMotoru:
     duygu_destekli = True
     akisli = True            # seslendir_ve_cal: ilk cümlecik hazır olunca çalmaya başlar
     varsayilan_ses = True    # boş örnek → motorun nötr Türkçe sesi
+    yerlesik_ses = True      # boş örnek + `varsayilan` ("k"/"e") → işçinin o cinsiyetteki yerleşik yedek sesi
 
     def __init__(self, kod: str, isci: IsciIstemci, hazir_fn: Callable[[], bool],
                  yukle_ayar: Callable[[], dict[str, Any]], model_indir: Callable[[IlerlemeCb | None], Awaitable[None]] | None = None,
@@ -285,6 +286,8 @@ class IsciMotoru:
         self._yukle_ayar = yukle_ayar
         self._model_indir = model_indir
         self._yuklu: tuple | None = None
+        self.son_uretim: dict[str, Any] = {}     # son seslendirmenin ölçümü (cihaz, üretim ms, koşul)
+        self.isinma_ms: int | None = None
 
     def hazir(self) -> bool:
         return self._hazir_fn()
@@ -302,16 +305,22 @@ class IsciMotoru:
             ilerleme_cb(100.0, "yukleniyor")
         # İlk yükleme (torch + CUDA + ~3 GB model) dakikalar sürebilir ama sonsuza dek beklenmez:
         # takılırsa kullanıcı "Yükleniyor…"da kalmasın, ne olduğunu söyleyen bir hata görsün (isci.log).
-        await self.isci.iste("yukle", ayar, zaman_asimi=YUKLE_SN)
+        r = await self.isci.iste("yukle", ayar, zaman_asimi=YUKLE_SN)
+        self.isinma_ms = r.get("isinma_ms") if isinstance(r, dict) else None
         self._yuklu = imza
         if ilerleme_cb:
             ilerleme_cb(100.0, "bitti")
 
-    async def seslendir(self, metin: str, referans_pcm: Any, sr: int, duygu: dict[str, float] | None = None) -> tuple[Any, int]:
+    async def seslendir(self, metin: str, referans_pcm: Any, sr: int, duygu: dict[str, float] | None = None,
+                        varsayilan: str | None = None) -> tuple[Any, int]:
         if not self.isci.calisiyor() or self._yuklu is None:
             await self.hazirla(None)
-        r = await self.isci.iste("seslendir", {"metin": metin, "ref_pcm": pcm_kodla(referans_pcm), "ref_sr": int(sr),
-                                               "duygu": duygu or {}, "motor": self.kod})
+        istek = {"metin": metin, "ref_pcm": pcm_kodla(referans_pcm) if len(referans_pcm) else "", "ref_sr": int(sr),
+                 "duygu": duygu or {}, "motor": self.kod}
+        if varsayilan in ("k", "e"):
+            istek["varsayilan"] = varsayilan
+        r = await self.isci.iste("seslendir", istek)
+        self.son_uretim = {k: r.get(k) for k in ("cihaz", "uretim_ms", "kosul", "ref_sn") if r.get(k) is not None}
         return pcm_coz(r["pcm"]), int(r["sr"])
 
     async def seslendir_ve_cal(self, metin: str, referans_pcm: Any, sr: int, duygu: dict[str, float] | None,
@@ -327,6 +336,17 @@ class IsciMotoru:
 
     async def kapat(self) -> None:
         self._yuklu = None
+
+
+async def anlik_ses(isci: IsciIstemci, sn: float) -> tuple[Any, int] | None:
+    """Canlı yakalamanın son `sn` saniyelik konuşması (altyazı görününce kimin konuştuğunu tahmin etmek için).
+    İşçide sıraya girmez (okuyucu iş parçacığında anında yanıtlanır); canlı yakalama yoksa None."""
+    if not isci.calisiyor():
+        return None
+    r = await isci.iste("canli_son", {"sn": float(sn)}, zaman_asimi=1.0)
+    if not r.get("pcm"):
+        return None
+    return pcm_coz(r["pcm"]), int(r.get("sr") or 16000)
 
 
 class IsciSTT:

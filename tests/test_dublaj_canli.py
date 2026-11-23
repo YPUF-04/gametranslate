@@ -64,7 +64,8 @@ def test_duygu_bagirma_canli_fisilti_sakin():
     assert bagir["canlilik"] > normal["canlilik"] > fisilti["canlilik"]
     assert fisilti["canlilik"] <= 0.35 and bagir["cfg"] < normal["cfg"]
     for d in (normal, bagir, fisilti):
-        assert 0.25 <= d["canlilik"] <= 1.2 and 0.3 <= d["cfg"] <= 0.7
+        # diller arası klon: abartı en çok 0,9, cfg düşük (0,2-0,45; aksan/robotik okuma azalır)
+        assert 0.25 <= d["canlilik"] <= 0.9 and 0.2 <= d["cfg"] <= 0.45
 
 
 def test_sigdirma_karari():

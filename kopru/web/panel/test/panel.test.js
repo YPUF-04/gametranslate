@@ -248,8 +248,12 @@ function sahteSunucu() {
           return j({ motor: st.ayarlar.dublaj.motor, hazir: st.dublajHazir && st.ayarlar.dublaj.motor !== 'kapali', onerilen: 'chatterbox', ekran_karti: 'NVIDIA GeForce RTX 3060', vram_gb: 12, ram_gb: 16,
             indirme: i, calisiyor: false, son_hata: null, elevenlabs_anahtar: !!st.anahtarlar.elevenlabs, motorlar: [],
             paket: pk, isci: pk.kurulu, tamamen_turkce: false, tamamen_turkce_destek: true, hafif: false,
-            gecikme: pk.kurulu ? { son: { erken: true, stt_ms: 140, ses_ms: 820 }, ortalama_bekleme_ms: 900, olcum_sayisi: 4 } : null });
+            gecikme: pk.kurulu ? { son: { erken: true, stt_ms: 140, ses_ms: 820 }, ortalama_bekleme_ms: 900, olcum_sayisi: 4 } : null,
+            tani: !pk.kurulu ? null : (st.onarildi ? { cihaz: { cihaz: 'cuda', durum: 'gpu', ekran_karti: 'NVIDIA GeForce RTX 4060 Laptop GPU', vram_gb: 8 }, uyari: null, onarilabilir: false,
+              satirlar: [{ yazi_id: 'a1', ilk_ses_ms: 1200, ref_tur: 'konusan', ref_sn: 8.2, cinsiyet: 'k', uretim_ms: 640 }, { yazi_id: 'a2', atildi: 'gecikme', ref_tur: 'yerlesik_e', cinsiyet: 'e' }], onarim: { durum: 'bitti' } }
+              : { cihaz: { cihaz: 'cpu', durum: 'cpu_torch_cpu', ekran_karti: 'NVIDIA GeForce RTX 4060 Laptop GPU', torch: '2.6.0+cpu' }, uyari: 'cpu_torch_cpu', onarilabilir: true, satirlar: [], onarim: { durum: 'yok' } }) });
         }
+        case 'POST /api/dublaj/onar': st.onarildi = true; return j({ motor: st.ayarlar.dublaj.motor, hazir: true, paket: st.paket, isci: true, tani: { cihaz: { cihaz: 'cuda', ekran_karti: 'NVIDIA GeForce RTX 4060 Laptop GPU' }, satirlar: [], onarim: { durum: 'bitti' } } });
         case 'POST /api/dublaj/paket/kur': if (b.onay !== true) return j({ hata: 'dublaj_paket_onay', mesaj: 'Önce onay kutusunu işaretleyin.' }, 400);
           st.paketKur.push(b); st.paket.durum = 'kuruluyor'; return j(st.paket);
         case 'POST /api/dublaj/paket/iptal': st.paket.durum = 'iptal'; return j(st.paket);
@@ -1225,6 +1229,14 @@ function dilKontrol() {
     await sayfa.waitForSelector('#dublaj-diyalog-ipucu');
     assert.match(await sayfa.textContent('#dublaj-diyalog-ipucu'), /Diyalog sesini %10–20'ye indir/);
     assert.match(await sayfa.textContent('#dublaj-gecikme'), /altyazıyla önden hazırlandı · ortalama gecikme 0,9 sn · konuşma→yazı 140 ms · seslendirme 820 ms/);
+    // §14.6 dublaj tanı: işlemcide çalışıyorsa açık uyarı + Onar; onarınca ekran kartı ✓ ve son satırlar
+    assert.match(await sayfa.textContent('#dublaj-tani-cihaz'), /İşlemcide çalışıyor — çok yavaş olur\. NVIDIA GeForce RTX 4060 Laptop GPU ekran kartı var/);
+    await sayfa.click('#dublaj-onar');
+    await sayfa.waitForFunction(() => /Ekran kartında çalışıyor ✓ \(NVIDIA GeForce RTX 4060 Laptop GPU\)/.test((document.querySelector('#dublaj-tani-cihaz') || {}).textContent || ''), null, { timeout: 8000 });
+    await sayfa.waitForSelector('#dublaj-tani-satirlar li');
+    assert.match(await sayfa.textContent('#dublaj-tani-satirlar'), /altyazıdan 1,2 sn sonra ses · karakterin kendi sesi \(8,2 sn\) · kadın · seslendirme 640 ms/);
+    assert.match(await sayfa.textContent('#dublaj-tani-satirlar'), /atlandı \(çok gecikti\) · yerleşik yedek ses · erkek/);
+    adim('dublaj tanı: işlemci uyarısı + Onar → ekran kartı ✓, son satırların gecikmesi/örneği/cinsiyeti/atlanması');
     assert.match(await sayfa.textContent('#dublaj-profiller'), /Lucia · 18 sn/);
     await sayfa.click('#dublaj-profil-izin', { force: true });
     await sayfa.waitForTimeout(200);

@@ -1244,6 +1244,19 @@ async def api_dublaj_hazirla(request: web.Request) -> web.Response:
     return web.json_response(await d.dublaj.bilgi())
 
 
+async def api_dublaj_onar(request: web.Request) -> web.Response:
+    """§14.6 "Onar": dublaj işlemcide çalışıyorsa (NVIDIA kart varken CUDA'sız torch) torch CUDA ile yeniden kurulur."""
+    d: Durum = request.app[DURUM]
+    if not d.dublaj.isci_kullan():
+        return hata("dublaj_paket_yok", 400, request)
+    try:
+        d.dublaj.onar_baslat()
+    except DublajHatasi as e:
+        return hata(e.kod, 409, request)
+    await asyncio.sleep(0)
+    return web.json_response(await d.dublaj.bilgi())
+
+
 async def api_dublaj_dene(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     v = await _json(request)
@@ -1810,6 +1823,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/dublaj", api_dublaj_yaz)
     r.add_post("/api/dublaj/hazirla", api_dublaj_hazirla)
     r.add_post("/api/dublaj/dene", api_dublaj_dene)
+    r.add_post("/api/dublaj/onar", api_dublaj_onar)
     r.add_get("/api/dublaj/paket", api_paket_al)
     r.add_post("/api/dublaj/paket/kur", api_paket_kur)
     r.add_post("/api/dublaj/paket/iptal", api_paket_iptal)
@@ -1868,6 +1882,13 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
         app["katman_gorevi"] = asyncio.create_task(katman_dongusu())   # kasa ilk okuması olay döngüsünü tutmasın
         app["durum_gorevi"] = asyncio.create_task(durum_dongusu())
         app["erisim_gorevi"] = asyncio.create_task(erisim_dongusu())
+
+        async def nvidia_isit() -> None:   # dublaj paketi boyutu "CUDA'lı mı" sorar: nvidia-smi olay döngüsünü tutmasın
+            try:
+                await asyncio.to_thread(durum.dublaj.ortam.cuda_var)
+            except Exception:   # noqa: BLE001
+                pass
+        app["nvidia_gorevi"] = asyncio.create_task(nvidia_isit())
 
     async def kapat(_: web.Application) -> None:
         arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi", "katman_gorevi") if k in app]

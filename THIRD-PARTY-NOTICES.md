@@ -36,6 +36,7 @@ AltYazıKöprüsü AGPL-3.0-only lisanslıdır. Aşağıdaki kütüphaneler kend
 | Kyutai Pocket TTS ana model ağırlıkları (`kyutai/pocket-tts`) | CC BY 4.0 (model kartı etiketi, 2026-11-23 doğrulandı; erişim koşul onaylı). Kyutai'nin belgesindeki "Prohibited use" bölümü, açık ve yasal onay olmadan ses taklidi/klonlamayı yasaklar; bu yüzden dublaj yalnız kişisel kullanım içindir (bkz. docs/kullanim/turkce-dublaj.md) |
 | faster-whisper için Whisper modelleri (`large-v3-turbo`, `small`) | MIT (OpenAI Whisper; `Systran/faster-whisper-small` MIT etiketli; `mobiuslabsgmbh/faster-whisper-large-v3-turbo` dönüşümünde etiket yok, kaynak model MIT) |
 | HT-Demucs-ft (`demucs` 4.1.0 ağırlıkları) | MIT |
+| Yerleşik yedek dublaj sesleri: `vctk/p228_023_enhanced.wav` (kadın), `vctk/p226_023_enhanced.wav` (erkek) — `kyutai/tts-voices`, sürüm `323332d33f997de8394f24a193e1a76df720e01a` | CC BY 4.0 (depo README'si, 2026-11-23 doğrulandı). Kaynak: CSTR VCTK Corpus, Edinburgh Üniversitesi (Yamagishi, Veaux, MacDonald; https://datashare.ed.ac.uk/handle/10283/3443), `mic1` kaydı, 23. cümle; temizlenmiş sürüm Kyutai'nin (ai-coustics ile). Yalnız karakterin kendi sesi henüz yokken nötr yedek olarak kullanılır |
 | Argos Translate en↔tr dil paketi 1.5 (`argos-net.com`) | Dizin lisans BELİRTMİYOR; Argos yazılımı MIT/CC0. Eğitim verisi OPUS derlemleri: bazıları ticari olmayan kullanım şartı taşıyabilir → bkz. docs/KARARLAR.md |
 
 ElevenLabs bir bulut hizmetidir (kullanıcının kendi hesabı ve anahtarı); kullanım koşulları ElevenLabs'e aittir.

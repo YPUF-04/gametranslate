@@ -161,8 +161,9 @@ def perde_degiskenligi(pcm: np.ndarray, sr: int) -> float:
 def duygu(pcm: np.ndarray, sr: int, referans_rms: float | None = None) -> dict[str, float]:
     """Orijinal satırın enerjisi ve perde oynaklığından Chatterbox ayarları.
 
-    `canlilik` (exaggeration): fısıltı ~0.3, düz ~0.5, bağırma ~1.0+. `cfg`: canlılık arttıkça biraz
-    düşer (motorun önerisi: yüksek exaggeration + düşük cfg = daha doğal tempo).
+    `canlilik` (exaggeration): fısıltı ~0.3, düz ~0.5, bağırma ~0.9 (üstü abartılı/robotik olur). `cfg`
+    (cfg_weight): 0,2-0,45, varsayılan ~0,35; canlılık arttıkça biraz düşer. Chatterbox'ın önerisi: örnek başka
+    dildeyse (oyun İngilizce, dublaj Türkçe) cfg düşük tutulmalı, yoksa örneğin aksanı Türkçeye taşınır.
     """
     r = rms(pcm)
     ref = referans_rms if referans_rms and referans_rms > 1e-6 else max(r, 1e-6)
@@ -171,9 +172,61 @@ def duygu(pcm: np.ndarray, sr: int, referans_rms: float | None = None) -> dict[s
     canlilik = 0.5 + 0.045 * gurultu + 0.06 * (pv - 2.0)
     if r < 0.02:                                          # çok kısık: fısıltı
         canlilik = min(canlilik, 0.35)
-    canlilik = float(np.clip(canlilik, 0.25, 1.2))
-    cfg = float(np.clip(0.5 - 0.3 * (canlilik - 0.5), 0.3, 0.7))
+    canlilik = float(np.clip(canlilik, 0.25, 0.9))
+    # Diller arası klon (İngilizce örnek → Türkçe): düşük cfg_weight aksan ve "okuma" havasını azaltır, daha doğal tempo
+    cfg = float(np.clip(0.35 - 0.25 * (canlilik - 0.5), 0.2, 0.45))
     return {"canlilik": round(canlilik, 3), "cfg": round(cfg, 3)}
+
+
+def perde_izi(pcm: np.ndarray, sr: int, en_az_hz: float = 70.0, en_cok_hz: float = 400.0) -> tuple[np.ndarray, float]:
+    """Sesli çerçevelerin temel frekansları (Hz) ve sesli çerçeve oranı (0-1). Düzeyden bağımsız: her çerçeve
+    kendi içinde değerlendirilir (oyunda diyalog sesi kısık olsa da çalışır)."""
+    pcm = np.asarray(pcm, dtype=np.float64).reshape(-1)
+    pen, adim = int(sr * 0.04), int(sr * 0.02)
+    if len(pcm) < pen * 2:
+        return np.zeros(0), 0.0
+    tepe = float(np.max(np.abs(pcm))) or 1.0
+    en_az, en_cok = int(sr / en_cok_hz), int(sr / en_az_hz)
+    f0, toplam = [], 0
+    for b in range(0, len(pcm) - pen, adim):
+        p = pcm[b:b + pen]
+        p = p - p.mean()
+        if rms(p) < 0.02 * tepe:          # sessiz çerçeve: sayılmaz
+            continue
+        toplam += 1
+        ac = np.correlate(p, p, mode="full")[pen - 1:]
+        if ac[0] <= 0 or en_cok >= len(ac):
+            continue
+        g = int(np.argmax(ac[en_az:en_cok])) + en_az
+        if ac[g] / ac[0] > 0.5:
+            f0.append(sr / g)
+    return np.asarray(f0), (len(f0) / toplam if toplam else 0.0)
+
+
+ERKEK_UST_HZ = 160.0     # ortanca perde bundan düşükse erkek
+KADIN_ALT_HZ = 175.0     # bundan yüksekse kadın; arası belirsiz
+
+
+def cinsiyet_tahmini(pcm: np.ndarray, sr: int) -> tuple[str | None, float]:
+    """Konuşmacının cinsiyeti (perde ortancasından): ("e" | "k" | None, ortanca Hz). En az ~0,6 sn sesli
+    konuşma ister; yetişkin erkek ~85-155 Hz, kadın ~165-255 Hz. Belirsizse None."""
+    f0, _ = perde_izi(pcm, sr)
+    if len(f0) < 30:
+        return None, 0.0
+    # oktav hatalarına karşı: ortancanın yarısı/iki katı civarındaki uç değerler atılır
+    m = float(np.median(f0))
+    f0 = f0[(f0 > m * 0.6) & (f0 < m * 1.6)]
+    m = float(np.median(f0)) if len(f0) else m
+    if m < ERKEK_UST_HZ:
+        return "e", m
+    if m > KADIN_ALT_HZ:
+        return "k", m
+    return None, m
+
+
+def sesli_oran(pcm: np.ndarray, sr: int) -> float:
+    """Klon örneğinin kalitesi için: konuşmalı çerçevelerden perdesi net olanların oranı (müzik/gürültü düşük)."""
+    return perde_izi(pcm, sr)[1]
 
 
 # ---------- 4) süreye sığdırma ----------

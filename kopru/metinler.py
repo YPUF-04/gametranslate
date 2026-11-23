@@ -230,6 +230,9 @@ HATALAR: dict[str, dict[str, str]] = {
     "dublaj_yukleme_hata": {
         "tr": "Ses modeli yüklenemedi, bellek yetmemiş olabilir; daha hafif olan Pocket motorunu deneyin.",
         "en": "The voice model could not be loaded, memory may be too low; try the lighter Pocket engine."},
+    "dublaj_onar_calisirken": {
+        "tr": "Onarım için önce çeviriyi durdurun (dublaj çalışırken ses motoru yeniden kurulamaz).",
+        "en": "Stop translation first to repair (the voice engine cannot be reinstalled while dubbing runs)."},
     "dublaj_uretim_hata": {
         "tr": "Ses üretilemedi, birkaç saniye sonra tekrar deneyin; sürerse Pocket motorunu seçin.",
         "en": "The voice could not be generated, try again in a few seconds; if it keeps failing pick the Pocket engine."},

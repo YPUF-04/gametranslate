@@ -403,8 +403,11 @@ olur ve bir sonraki istekte işçi yeniden başlatılır (dakikada en çok 3).
 Kanal: işçinin **stdin/stdout'u üzerinden JSON satırları** (UTF-8, satır başına bir nesne, ≤ 64 MB).
 Başka süreçler bu borulara erişemez; ayrıca ana program her başlatmada rastgele 32 baytlık bir
 anahtar üretir ve `KOPRU_ISCI_ANAHTAR` ortam değişkeniyle verir; işçinin ilk satırı
-`{"olay":"merhaba","anahtar":"<aynısı>","surum":"1","cihaz":"cuda","ekran_karti":"...","vram_gb":8.0}`
-olmalıdır, değilse süreç kapatılır. İşçi kendi stdout'unu stderr'e yönlendirir (kütüphanelerin
+`{"olay":"merhaba","anahtar":"<aynısı>","surum":"1","cihaz":"cuda","ekran_karti":"...","vram_gb":8.0,
+"durum":"gpu","torch":"2.6.0+cu124","torch_cuda":"12.4","bf16":true}` olmalıdır, değilse süreç kapatılır. `durum`:
+`"gpu"` | `"cpu_torch_cpu"` (NVIDIA kart var, pakette CUDA'sız torch: onarılabilir) | `"cpu_surucu"` (torch CUDA'lı,
+kart/sürücü açılamadı; `cuda_hata` nedeni) | `"cpu"` (NVIDIA yok) | `"mps"` | `"torch_yok"`. İşçi bunu ve her
+seslendirmenin süresini (`Seslendirme: N harf → X sn ses, Y ms (cihaz; koşul …)`) `isci.log`'a yazar. İşçi kendi stdout'unu stderr'e yönlendirir (kütüphanelerin
 `print`'i kanalı bozamaz); stderr `kurulum.log`'a değil, ayrı `isci.log`'a yazılır (anahtar asla yazılmaz).
 
 İstek: `{"no":7,"komut":"seslendir",...}` → yanıt `{"no":7,"tamam":true,"sonuc":{...}}` ya da
@@ -416,12 +419,12 @@ olmalıdır, değilse süreç kapatılır. İşçi kendi stdout'unu stderr'e yö
 |---|---|---|
 | `merhaba` | — | işçi/cihaz bilgisi |
 | `modeller` | `{"liste":["tts","stt","ayirma"],"stt":"large-v3-turbo"}` | indirir (ilerleme olaylı) |
-| `yukle` | `{"tts":"chatterbox","stt":"large-v3-turbo"\|"small","ayirma":true,"hafif":false}` | modelleri belleğe alır |
+| `yukle` | `{"tts":"chatterbox","stt":"large-v3-turbo"\|"small","ayirma":true,"hafif":false,"isit":true}` | modelleri belleğe alır; ardından bir kısa üretimle ısınır ve yerleşik yedek seslerin koşullarını hazırlar (ilk gerçek satır yavaş olmasın) → `{"cihaz","isinma_ms",...}` |
 | `birak` | — | modelleri boşaltır (VRAM serbest) |
 | `ayir` | `{"pcm","sr"}` ya da `{"giris":yol,"ses_cikis":yol,"arka_cikis":yol}` | konuşma sesi / arka plan |
 | `yaziya` | `{"pcm","sr"}` ya da `{"giris":yol,"cikis":yol}` | metin, dil, kelimeler `[{"k":"Hey","b":1.2,"s":1.5}]` |
 | `izler` | `{"giris":yol,"araliklar":[[b,s],...]}` | konuşmacı izleri (256 boyutlu, birim vektör) |
-| `seslendir` | `{"metin","ref_pcm","ref_sr","duygu":{"canlilik":0.5,"cfg":0.5},"motor":"chatterbox"}` ya da `ref_yol`/`cikis` | Türkçe ses |
+| `seslendir` | `{"metin","ref_pcm","ref_sr","duygu":{"canlilik":0.5,"cfg":0.35},"motor":"chatterbox","varsayilan":"k"\|"e"}` ya da `ref_yol`/`cikis` | Türkçe ses + `{"cihaz","uretim_ms","kosul":ms\|"onbellek","ref_sn"}`. `ref_pcm` boşsa `varsayilan` cinsiyetin yerleşik yedek sesi (yoksa motorun kendi sesi) |
 | `karistir` | `{"arka":yol,"satirlar":[{"yol","bas"}],"cikis":yol}` | dublaj ses izi |
 | `video_cikar` / `video_birlestir` | ffmpeg ile ses çıkarma / video+ses birleştirme | dosya yolları |
 | `canli_baslat` | `{"pid":1234\|null,"ayirma":true,"tamamen_turkce":false,"giris":""}` | `parca` olayları (`{"pcm","temiz","sr","sure_sn","kaynak":"surec"\|"giris"\|"sistem"}`), `olcum` (`ayirma_ms`) başlar |
@@ -429,6 +432,7 @@ olmalıdır, değilse süreç kapatılır. İşçi kendi stdout'unu stderr'e yö
 | `girisler` | — | ses girişlerinin adları (açılmaz) |
 | `izler` / `referans_kaydet` / `hizlandir` | video aşamaları (14.4) | dosya yolları |
 | `canli_durdur` | — | yakalama durur, oyun sesi eski hâline döner |
+| `canli_son` | `{"sn":1.5}` | son ≤3 sn konuşma `{"pcm","sr"}` (yoksa `{}`); `iptal` gibi ANINDA işlenir, seslendirme sırasını beklemez |
 | `oynat` | `{"pcm","sr","seviye":1.0,"kis":0.25,"pid":1234\|null}` | çalar (çalarken oyun sesini kısar) |
 | `iptal` | `{"hedef":7}` | süren işi bırakır (`hata:"iptal"`) |
 | `kapat` | — | süreç biter |
@@ -449,7 +453,31 @@ katmandır (altyazı davranışı değişmez). Türkçe ses **TV'den** çalar (`
   hazır olunca TV'ye hemen gönderilir (`cikis:"tv"` ya da İngilizce çıkarılıyorsa). Konuşma parçası
   sonra gelince aynı satır tekrar çalınmaz, yalnız karakterin sesi örneklenir. Altyazısı olmayan
   konuşmada Whisper yedektir.
-- TV uygulaması gelen sesleri **sıraya** koyar (öncekini kesmez), 6 sn'den eski kalanı atar; Web Audio
+- **Örnek seçimi (önden seslendirmede):** 1) adı altyazıda geçen karakterin biriktirilmiş örneği (temiz
+  parçalar 8 sn'ye dek birleşir, sonra yalnız daha temizi yerini alır; ≤10 sn); 2) altyazı anında işçiden alınan
+  son 1,5 sn konuşma (`canli_son`) bankadaki bir örneğe benziyorsa o; 3) cinsiyeti tutan son örnek — cinsiyet
+  oyun bilgisindeki karakterden (§12.3) ya da o anki sesin perdesinden (ortanca F0 < 160 Hz erkek, > 175 Hz
+  kadın, arası belirsiz); 4) o cinsiyetin **yerleşik yedek sesi**; 5) bilgi yoksa son duyulan örnek / motorun
+  kendi sesi. Bankaya yalnız ≥3 sn ve konuşmalı çerçevelerinin ≥%35'i net perdeli (müzik/efekt değil) parçalar
+  girer; örnek düzeyi eşitlenir.
+- **Yerleşik yedek sesler:** kadın `vctk/p228_023_enhanced.wav`, erkek `vctk/p226_023_enhanced.wav`
+  (Kyutai `kyutai/tts-voices`, sürüm `323332d3…`; kaynak VCTK, Edinburgh Üniversitesi, **CC BY 4.0**; anonim
+  gönüllü konuşmacılar). Model indirme aşamasında ya da ilk kullanımda Hugging Face önbelleğine iner.
+- **Chatterbox ayarları:** diller arası klonda (İngilizce örnek → Türkçe) `cfg_weight` düşük (0,2–0,45,
+  varsayılan ~0,35; Chatterbox'ın dil aktarımı önerisi: aksan ve "okuma" havası taşınmaz), `exaggeration`
+  0,25–0,9 (varsayılan 0,5; üstü abartılı/robotik). Ekran kartında yalnız konuşma dil modeli (T3) yarı
+  hassastır (bf16 destekleniyorsa bf16, yoksa fp16); ses üreteci (S3Gen + vokoder) tam hassas kalır.
+  Konuşmacı koşulları (`prepare_conditionals`) ses başına bir kez hesaplanır, son 8 ses bellekte tutulur.
+  Canlı dublaj sürerken model ekran kartından indirilmez.
+- **Sıra, akış ve atlama (önden çalınan kip):** satırlar altyazı sırasıyla seslendirilir. Türkçe metin
+  cümleciklere bölünür; her cümlecik hazır olur olmaz TV'ye ayrı `ses` olayıyla gider (ilk ses erken).
+  Altyazı göründükten 8 sn sonra hâlâ seslendirilmemiş ya da TV'de ≥8 sn ses birikmişse satır atlanır
+  (`atildi:"gecikme"|"tv_sirasi"`, gecikme biriktirmek yerine yetişir). Bu kipte konuşma parçası Whisper'dan
+  hiç geçmez (işçide seslendirmenin önünü tıkamaz): yalnız karakterin örneği olur; altyazısı olmayan
+  konuşmada Whisper yine yedektir.
+- `ses` olayına `bayat_ms` (1000–30000) eklenir: TV bu sesi gelişinden en çok bu kadar sonra başlatabilir
+  (önündeki sıranın süresi + 4 sn). TV uygulaması gelen sesleri **sıraya** koyar (öncekini kesmez), `bayat_ms`
+  (yoksa 6 sn) aşılmışsa atar; Web Audio
   ile çalar (HDMI `<video>` medya hattına ikinci bir medya kaynağı açmaz), yoksa `<audio>` sırası.
   Gerçek LG TV'de HDMI üstünde ses çalma DOĞRULANMADI; çalmazsa yedek: `cikis:"bilgisayar"` +
   Bluetooth hoparlör / LG Sound Share.
@@ -457,11 +485,12 @@ katmandır (altyazı davranışı değişmez). Türkçe ses **TV'den** çalar (`
 - **Yalnız oyunun sesi**: Windows 10 2004+ üzerinde, seçili oyun penceresinin süreci için WASAPI
   *process loopback* (`AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK`, `PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE`)
   kullanılır; olmazsa bugünkü tüm-sistem loopback'e düşülür (`parca.kaynak:"surec"|"sistem"`). Mikrofon ASLA.
-- Her parça işçide ayırıcıdan geçer (`ayirma:true`): **temiz konuşma sesi** hem yazıya çevirmede hem
-  ses örneği (klon) olarak kullanılır. Konuşmacı örnekleri YALNIZ işçinin ve ana programın belleğinde
+- Her konuşma parçası işçide ayırıcıdan **bir kez** geçer (`ayirma:true`): **temiz konuşma sesi** hem yazıya
+  çevirmede hem ses örneği (klon) olarak kullanılır. Akışlı (her 0,25 sn'de) ayırma yalnız "Tamamen Türkçe"de
+  yapılır. Kaynak `ps5:gizli` iken (oyun bu bilgisayarın ekran kartında değil) hafif kipte de ayrılır. Konuşmacı örnekleri YALNIZ işçinin ve ana programın belleğinde
   durur, diske yazılmaz.
 - Duygu: orijinal parçanın ses yüksekliği/enerjisi ve perde değişkenliğinden `canlilik` (Chatterbox
-  `exaggeration`, 0.25–1.2) ve `cfg` (0.3–0.7) hesaplanır: bağırma bağırma, fısıltı fısıltı kalır (motorun izin verdiği ölçüde).
+  `exaggeration`, 0.25–0.9) ve `cfg` (0.2–0.45) hesaplanır: bağırma bağırma, fısıltı fısıltı kalır (motorun izin verdiği ölçüde).
 - `dublaj.orijinal_ses` (yalnız ses BİLGİSAYARDAN duyuluyorsa anlamlı): `"otomatik"` (varsayılan:
   Remote Play penceresi (`cihaz` ps5/xbox) ya da yakalama kartı girişi seçiliyse tamamen, oyun bu
   bilgisayardaysa kıs) | `"kis"` | `"tamamen_turkce"` (**deneysel**): oyunun ses oturumu kapatılır, işçi
@@ -473,12 +502,25 @@ katmandır (altyazı davranışı değişmez). Türkçe ses **TV'den** çalar (`
   seçerse açılır (`GET /api/dublaj/girisler` → `{"girisler":[{"ad","kimlik","kart":true}]}`, hiçbiri açılmaz).
   Varsayılan giriş/mikrofon kendiliğinden ASLA açılmaz.
 - Hafif mod (`dublaj.hafif_mod`: `"kapali"` varsayılan | `"acik"` | `"otomatik"` = ≤ 8,5 GB'ta açık): Whisper
-  `small`, Chatterbox dil modeli yarım hassas. Oyun PS5'te çalıştığından dizüstünün ekran kartı boştur:
-  varsayılan tam kalite (Whisper `large-v3-turbo` int8_float16, fp16 hesap). 180 sn boşta kalınca ses motoru
-  ekran kartından indirilir, ilk istekte geri yüklenir.
+  `small`. Oyun PS5'te çalıştığından dizüstünün ekran kartı boştur: varsayılan tam kalite (Whisper
+  `large-v3-turbo` int8_float16). Her iki kipte Chatterbox'ın dil modeli (T3) yarı hassas (bf16/fp16), ses
+  üreteci tam hassas (`KOPRU_TAM_HASSAS=1`: hepsi fp32). 180 sn boşta kalınca ses motoru ekran kartından
+  indirilir (canlı dublaj sürerken asla), ilk istekte geri yüklenir.
 - Akışlı seslendirme (`seslendir_cal`): metin cümleciklere bölünür, ilk cümlecik hazır olur olmaz çalar
   (bilgisayar çıkışı). Ölçümler `GET /api/dublaj` → `gecikme`: `{"son":{"stt_ms","ceviri_ms","ses_ms",
-  "ilk_ses_ms","bekleme_ms","erken"},"ortalama_bekleme_ms"}` (bekleme = İngilizce parça bitişinden Türkçe sesin başlamasına).
+  "ilk_ses_ms","bekleme_ms","erken"},"ortalama_bekleme_ms","ortalama_ilk_ses_ms","atilan"}` (bekleme = İngilizce
+  parça bitişinden Türkçe sesin başlamasına; önden kipte `ilk_ses_ms` = altyazının görünmesinden ilk Türkçe sesin
+  hazır olmasına; hedef ekran kartında ≤ 1,5 sn).
+- **Dublaj tanı:** `GET /api/dublaj` → `tani`: `{"cihaz":{"cihaz","durum","ekran_karti","vram_gb","torch",
+  "torch_cuda","cuda_hata","bf16"}|null,"uyari":null|"cpu_torch_cpu"|"cpu_surucu"|"cpu","onarilabilir":bool,
+  "isinma_ms","satirlar":[{"yazi_id","ilk_ses_ms","bekleme_ms","uretim_ms","ref_sn","ref_tur":"konusan"|"benzer"|
+  "banka"|"yerlesik_k"|"yerlesik_e"|"notr","cinsiyet","atildi"}] (son 5),"onarim":{"durum":"yok"|"suruyor"|"bitti"|
+  "hata","mesaj"}}`. Panel: "Ekran kartında çalışıyor ✓ (kart)" ya da "İşlemcide çalışıyor — çok yavaş olur" +
+  nedeni; `cpu_torch_cpu`'da **Onar**: `POST /api/dublaj/onar` → torch/torchaudio CUDA yapısıyla yeniden kurulur
+  (`pip --force-reinstall --no-deps … --index-url …/cu124`, ~2,6 GB), işçi yeniden başlar; dublaj çalışırken
+  `409 dublaj_onar_calisirken`, paket yoksa `400 dublaj_paket_yok`. Kurulumun `denetim` aşaması da işçi
+  `cpu_torch_cpu` bildirirse bir kez kendiliğinden onarır. CUDA'lı torch kurulsun mu kararı `nvidia-smi` ile
+  verilir: dizüstünde uyuyan kart için 15 sn beklenir, PATH dışında `System32` ve `NVSMI` klasörlerine de bakılır.
 
 ### 14.4 Video dublaj
 Akış (her aşamanın çıktısı iş klasöründe saklanır; iptal edilen iş kaldığı aşamadan sürer):
@@ -530,7 +572,9 @@ SSE `dublaj-video`: `GET /api/dublaj/video` ile aynı gövde (değişince). `kal
   bellekte; tek istisna izinli "Ses profili" (§14.5). Video modunda ara dosyalar yalnız iş klasöründe,
   iş bitince silinir; çıktı videosu kullanıcının dosyasıdır.
 - API anahtarları işçiye verilmez (çeviri ana programda yapılır); günlükte anahtar yoktur.
-- Gerçek kişilerin seslerini taklit eden hazır ses paketi yoktur; yalnız videodaki/oyundaki karakterin kendi sesi örneklenir.
+- Gerçek kişilerin (ünlülerin, seslendirme sanatçılarının) seslerini taklit eden hazır ses paketi yoktur; yalnız
+  videodaki/oyundaki karakterin kendi sesi örneklenir. Tek istisna, karakterin sesi henüz yokken kullanılan iki
+  anonim, açık lisanslı yedek sestir (VCTK, CC BY 4.0; §14.3).
 - **Yasal not (panelde de yazar):** Dublaj kişisel kullanım içindir. Dublajlı videoyu yayınlamak
   (YouTube vb.) oyunun ve seslendirme sanatçılarının haklarına tabidir; izin almak kullanıcının sorumluluğundadır.
 

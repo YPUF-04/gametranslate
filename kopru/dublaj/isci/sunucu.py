@@ -16,7 +16,7 @@ from typing import Any, BinaryIO, Callable
 from . import SURUM, protokol
 
 log = logging.getLogger("kopru.isci")
-ANINDA = ("iptal", "canli_durdur", "kapat")
+ANINDA = ("iptal", "canli_durdur", "kapat", "canli_son")   # canli_son: sıradaki seslendirmeyi beklemez
 
 
 class IsciHatasi(Exception):
