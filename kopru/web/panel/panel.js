@@ -10,6 +10,7 @@
       var v = attrs[k];
       if (v === false || v == null) return;
       if (k === 'class') e.className = v;
+      else if (k === 'onclick' && tag === 'button') e.addEventListener('click', mesgulSarmala(e, v));
       else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
       else if (k === 'text') e.textContent = v;
       else e.setAttribute(k, v === true ? '' : v);
@@ -19,6 +20,20 @@
       e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
     });
     return e;
+  }
+  // düğme bir söz (Promise) döndürürse iş bitene kadar "meşgul": ikinci tık yok sayılır, kısa bir gecikmeden sonra
+  // küçük bir dönen halka görünür (hızlı işlerde titreme olmasın). disabled KULLANILMAZ: odak kaybolmasın.
+  function mesgulSarmala(el, f) {
+    return function (ev) {
+      if (el.getAttribute('aria-busy') === 'true') { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
+      var r = f.call(this, ev);
+      if (r && typeof r.then === 'function') {
+        el.setAttribute('aria-busy', 'true');
+        var bitir = function () { el.removeAttribute('aria-busy'); };
+        r.then(bitir, bitir);
+      }
+      return r;
+    };
   }
   function ls(k, v) {
     try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; }
@@ -133,7 +148,9 @@
   function banner(tur, metin, alt) {
     if (!metin) { afis.hidden = true; return; }
     afis.className = 'afis ' + tur;
+    afis.setAttribute('role', tur === 'hata' ? 'alert' : 'status');   // bağlantı kopması sakin bir durum bildirimi, alarm değil
     afis.textContent = '';
+    if (tur === 'kopuk') afis.appendChild(h('span', { class: 'afis-halka', 'aria-hidden': 'true' }));
     afis.appendChild(document.createTextNode(metin));
     if (alt) afis.appendChild(h('small', { text: alt }));
     afis.hidden = false;
@@ -151,8 +168,13 @@
   function kapaliBanner(k) {
     S.kapali = k;
     if (k && S.guncelleme && S.guncelleme.asama === 'baslatiliyor') return;   // program bilerek yeniden başlıyor
-    if (k) banner('hata', t('hata.kapali'), t('hata.kapali_alt'));
-    else if (afis.dataset.kapali !== '0' && afis.classList.contains('hata') && afis.textContent.indexOf(t('hata.kapali')) === 0) banner('', '');
+    if (k) banner('kopuk', t('hata.kapali'), t('hata.kapali_alt') + ' ' + t('baglanti.deniyor'));
+    if (k && ekran.hero && document.body.contains(ekran.hero)) {   // eski "Çalışıyor" yazısı yanıltmasın
+      ekran.hero.classList.remove('calisiyor'); ekran.led.className = 'led';
+      ekran.durum.textContent = t('baglanti.bekleniyor');
+      if (ekran.gecikme) ekran.gecikme.hidden = true;
+    }
+    else if (afis.classList.contains('kopuk')) banner('', '');
   }
 
   // ---------- i18n ----------
@@ -1077,6 +1099,10 @@
   function toast(metin, tur) {
     var kutu = $('#bildirim');
     if (!kutu) { kutu = h('div', { id: 'bildirim', class: 'bildirim', 'aria-live': 'polite' }); document.body.appendChild(kutu); }
+    // aynı yazı zaten görünüyorsa yenisini ekleme; en çok 3 bildirim üst üste durur (eskisi gider)
+    var ayni = [].filter.call(kutu.children, function (x) { return x.textContent === metin && !x.classList.contains('cikis'); });
+    if (ayni.length) return;
+    while (kutu.children.length >= 3) kutu.removeChild(kutu.firstChild);
     var b = h('div', { class: 'tost' + (tur ? ' ' + tur : ''), role: 'status', text: metin });
     kutu.appendChild(b);
     setTimeout(function () { b.classList.add('cikis'); setTimeout(function () { b.remove(); }, hareketAz() ? 0 : 300); }, 4500);
@@ -1390,15 +1416,19 @@
     ekran.oyunAd = h('p', { class: 'pano-oyun', id: 'aktif-oyun-ad' });
     ekran.ipucu = h('p', { class: 'pano-kisayol', id: 'kisayol-ipucu', hidden: true });
     ekran.uyari = h('div', { class: 'ipucu uyari-banner', id: 'uyari-banner', role: 'status', hidden: true });
+    // canlı gecikme hapı (yalnız çalışırken ve ölçüm varken) ve son çevrilen satır: ürünün kendisi, logodaki sarı altyazı çubuğu gibi
+    ekran.gecikme = h('span', { class: 'gecikme-hap', id: 'gecikme-hap', hidden: true });
+    ekran.canli = h('p', { class: 'canli-yazi', id: 'canli-yazi', 'aria-live': 'off' });
     var hero = h('div', { class: 'pano-hero', id: 'hero' }, [
       kopruKemer(),
       h('div', { class: 'pano-hero-sol' }, [
-        h('p', { class: 'durum-satir', role: 'status' }, [ekran.led, ekran.durum]),
-        ekran.oyunAd, ekran.ne, ekran.ipucu
+        h('div', { class: 'durum-ust' }, [h('p', { class: 'durum-satir', role: 'status' }, [ekran.led, ekran.durum]), ekran.gecikme]),
+        ekran.oyunAd, ekran.canli, ekran.ne, ekran.ipucu
       ]),
       h('div', { class: 'pano-hero-sag' }, ekran.buyuk)
     ]);
     ekran.hero = hero;
+    ekran.baglantilar = baglantiSeridi();
 
     // --- kartlar
     ekran.oyunAlt = h('p', { class: 'pk-alt', id: 'aktif-oyun-alt' });
@@ -1451,7 +1481,7 @@
 
     ana.appendChild(h('section', { class: 'pano', id: 'pano' }, [
       h('h1', { class: 'gizli', text: t('ana.baslik') }),
-      h('div', { id: 'guncelleme-alani' }), ekran.uyari, hero,
+      h('div', { id: 'guncelleme-alani' }), ekran.uyari, hero, ekran.baglantilar,
       h('div', { class: 'pano-izgara' }, [oyunK, goruntuK, motorK, gosK, bolgeK, kisayolK, sonK, ekran.erisim, dublaj]),
       h('div', { class: 'pano-alt' }, [
         h('button', { type: 'button', class: 'baglanti', id: 'gelismis-ac', text: t('gelismis.link'), onclick: function () { S.gelismisEkrani = true; ciz(); } })
@@ -1462,6 +1492,80 @@
     oyunCiz(); gosterimCiz(); kisayolOzetCiz(); kisayolIpucuCiz(); sonCiz(); oneriCiz(); durumCiz(); erisimCiz(); listeYenile();
     kisayolYukle();
     if (!S.panoKare && !S.panoKareIstendi) panoKareAl();
+  }
+
+  // ---------- BAĞLANTILAR şeridi: Görüntü · Çeviri · Gösterim · Dublaj; her biri renk + yazıyla sağlık, tek dokunuşla düzelt ----------
+  var BAGLANTILAR = ['goruntu', 'motor', 'gosterim', 'dublaj'];
+  function baglantiSeridi() {
+    var ul = h('ul', { class: 'baglantilar', id: 'baglantilar', 'aria-label': t('bg.baslik') });
+    ekran.bg = {};
+    BAGLANTILAR.forEach(function (ad) {
+      var nokta = h('span', { class: 'bg-nokta', 'aria-hidden': 'true' });
+      var etiket = h('span', { class: 'bg-ad' }), deger = h('span', { class: 'bg-deger' }), duzelt = h('span', { class: 'bg-duzelt', 'aria-hidden': 'true' });
+      var dugme = h('button', { type: 'button', class: 'bg', id: 'bg-' + ad, 'data-bg': ad, onclick: function () { baglantiAc(ad); } }, [
+        h('span', { class: 'bg-ik', 'aria-hidden': 'true' }, ikon({ goruntu: 'pc', motor: 'ceviri', gosterim: 'tv', dublaj: 'ses' }[ad])),
+        h('span', { class: 'bg-metin' }, [h('span', { class: 'bg-tur', 'data-i': 'bg.' + ad, text: t('bg.' + ad) }), etiket, h('span', { class: 'bg-durum' }, [nokta, deger])]), duzelt]);
+      ekran.bg[ad] = { dugme: dugme, nokta: nokta, etiket: etiket, deger: deger, duzelt: duzelt };
+      ul.appendChild(h('li', {}, dugme));
+    });
+    return ul;
+  }
+  function baglantiAc(ad) {
+    if (ad === 'goruntu') asamaAc(1, 'ana');
+    else if (ad === 'motor') asamaAc(3, 'ana');
+    else if (ad === 'gosterim') asamaAc(4, 'ana');
+    else {
+      var d = $('#dublaj-kart'); if (!d) return;
+      d.open = true;
+      try { d.scrollIntoView({ block: 'start', behavior: hareketAz() ? 'auto' : 'smooth' }); } catch (e) { d.scrollIntoView(); }
+      var su = d.querySelector('summary'); if (su) { try { su.focus({ preventScroll: true }); } catch (e) { su.focus(); } }
+    }
+  }
+  // her bağlantı için {saglik: iyi|uyari|sorun|kapali, ad, deger}
+  function baglantiDurum(ad) {
+    var a = S.ayarlar || {}, d = S.durum || {};
+    if (ad === 'goruntu') {
+      var cihaz = S.cihaz || a.cihaz, kaynak = S.kaynak || a.kaynak;
+      var kk = S.kaynaklar.filter(function (x) { return x.kod === kaynak; })[0];
+      var isim = kk ? kk.ad : (cihaz ? t('cihaz.' + cihaz) : t('pano.goruntu'));
+      if (!d.calisiyor && d.hata === 'yakalama') return { saglik: 'sorun', ad: isim, deger: t('bg.goruntu.yok') };
+      if (!kaynak) return { saglik: 'sorun', ad: isim, deger: t('pano.secilmedi') };
+      return { saglik: 'iyi', ad: isim, deger: d.calisiyor ? t('bg.okunuyor') : t('bg.hazir') };
+    }
+    if (ad === 'motor') {
+      var m = motorBilgi(a.motor || S.motor);
+      if (!m) return { saglik: 'sorun', ad: t('pano.motor'), deger: t('pano.secilmedi') };
+      if (m.anahtar_gerekli && !m.anahtar_kayitli) return { saglik: 'sorun', ad: m.ad, deger: t('bg.anahtar_yok') };
+      if (d.calisiyor && d.yedekte) return { saglik: 'uyari', ad: m.ad, deger: t('bg.yedekte') };
+      return { saglik: 'iyi', ad: m.ad, deger: m.cevrimdisi ? t('bg.cevrimdisi') : t('bg.hazir') };
+    }
+    if (ad === 'gosterim') {
+      var gos = S.gosterim || a.gosterim || 'bilgisayar';
+      if (gos === 'bilgisayar') return { saglik: 'iyi', ad: t('bg.gosterim.bilgisayar'), deger: t('bg.bu_ekran') };
+      var n = d.tv_sayisi || 0;
+      return n > 0 ? { saglik: 'iyi', ad: t('bg.gosterim.' + gos), deger: t('bg.tv_bagli', { n: n }) }
+        : { saglik: 'uyari', ad: t('bg.gosterim.' + gos), deger: t('bg.tv_bekleniyor') };
+    }
+    var dm = (a.dublaj && a.dublaj.motor) || 'kapali', b = S.dublaj || {}, ind = b.indirme || {};
+    if (dm === 'kapali') return { saglik: 'kapali', ad: t('dublaj.kisa'), deger: t('dublaj.kapali') };
+    if (d.dublaj_sinir) return { saglik: 'uyari', ad: t('dublaj.' + dm), deger: t('bg.sure_doldu') };
+    if (b.hazir) return { saglik: 'iyi', ad: t('dublaj.' + dm), deger: t('bg.hazir') };
+    if (ind.durum === 'indiriliyor' || ind.durum === 'yukleniyor') return { saglik: 'uyari', ad: t('dublaj.' + dm), deger: t('bg.hazirlaniyor') };
+    return { saglik: b.motor === undefined ? 'bekle' : 'uyari', ad: t('dublaj.' + dm), deger: b.motor === undefined ? t('bg.bakiliyor') : t('bg.hazir_degil') };
+  }
+  function baglantiCiz() {
+    if (!ekran.bg || !ekran.baglantilar || !document.body.contains(ekran.baglantilar)) return;
+    BAGLANTILAR.forEach(function (ad) {
+      var e = ekran.bg[ad], v = baglantiDurum(ad);
+      var imza = [v.saglik, v.ad, v.deger, dil].join('|');
+      if (e.dugme.dataset.imza === imza) return;   // değişmediyse dokunma (odak, ekran okuyucu sakin kalsın)
+      e.dugme.dataset.imza = imza;
+      e.dugme.className = 'bg ' + v.saglik;
+      e.etiket.textContent = v.ad; e.deger.textContent = v.deger;
+      var sorunlu = v.saglik === 'sorun' || v.saglik === 'uyari';
+      e.duzelt.textContent = sorunlu ? t('bg.duzelt') : '';
+      e.dugme.setAttribute('aria-label', t('bg.' + ad) + ': ' + v.ad + ', ' + v.deger + '. ' + (sorunlu ? t('bg.duzelt') : t('pano.degistir')));
+    });
   }
 
   // logodaki köprü kemeri: hero'nun üstünde ince bir çizgi; çalışırken yavaşça parlar
@@ -1817,7 +1921,7 @@
     if (notlar.length) {
       var liste = h('ul', { class: 'guncelleme-notlar' });
       notlar.forEach(function (n) { liste.appendChild(h('li', { text: n })); });
-      kutu.appendChild(h('details', { class: 'guncelleme-yenilikler', id: 'guncelleme-yenilikler', open: 'open' },
+      kutu.appendChild(h('details', { class: 'guncelleme-yenilikler', id: 'guncelleme-yenilikler' },
         [h('summary', { text: t('guncelleme.yenilikler') }), liste]));
     }
     return kutu;
@@ -2138,14 +2242,31 @@
     if (d.calisiyor && d.yedekte && d.yedek_neden && d.yedek_neden.mesaj) dm = d.yedek_neden.mesaj;   // neden yedeğe geçtiğini açıkça söyle
     if (ekran.durum.textContent !== dm) ekran.durum.textContent = dm;
     var nm = d.calisiyor ? t('ana.ne.calisiyor') : (sorun ? t('durum.hata.' + sorun + '.k') : t('ana.ne.durdu'));
-    var gk = d.calisiyor && d.gecikme && d.gecikme.olcum ? d.gecikme : null;   // §16.4: aşama aşama gecikme
-    if (gk && gk.toplam_ms != null) {
-      var sn = function (ms) { return ((ms || 0) / 1000).toFixed(1).replace('.', ','); };
-      nm += ' · ' + t('gecikme.ozet', { okuma: gk.okuma_ms || 0, ceviri: sn(gk.ceviri_ms), toplam: sn(gk.toplam_ms) });
-      if (gk.kuyruk > 1) nm += ' · ' + t('gecikme.kuyruk', { n: gk.kuyruk });
-    }
     if (ekran.ne.textContent !== nm) ekran.ne.textContent = nm;
+    // §16.4: canlı gecikme hapı — kısa sayı; aşama aşama ayrıntı ipucunda ve ekran okuyucu etiketinde
+    var gk = d.calisiyor && d.gecikme && d.gecikme.olcum && d.gecikme.toplam_ms != null ? d.gecikme : null;
+    if (ekran.gecikme) {
+      ekran.gecikme.hidden = !gk;
+      if (gk) {
+        var sn = function (ms) { return ((ms || 0) / 1000).toFixed(1).replace('.', ','); };
+        var ayr = t('gecikme.ozet', { okuma: gk.okuma_ms || 0, ceviri: sn(gk.ceviri_ms), toplam: sn(gk.toplam_ms) }) + (gk.kuyruk > 1 ? ' · ' + t('gecikme.kuyruk', { n: gk.kuyruk }) : '');
+        var hapYazi = t('gecikme.hap', { n: sn(gk.toplam_ms) });
+        ekran.gecikme.className = 'gecikme-hap ' + (gk.toplam_ms <= 2000 ? 'iyi' : (gk.toplam_ms <= 4000 ? 'uyari' : 'sorun'));
+        if (ekran.gecikme.textContent !== hapYazi) ekran.gecikme.textContent = hapYazi;
+        ekran.gecikme.title = ayr; ekran.gecikme.setAttribute('aria-label', ayr);
+      }
+    }
+    if (ekran.canli) {   // son çevrilen satır; boşken ne olacağını söyleyen sakin bir yer tutucu
+      var cy = d.calisiyor && d.son_yazi ? String(d.son_yazi) : '';
+      var cm = cy || (d.calisiyor ? t('canli.bekliyor') : t('canli.bos'));
+      if (ekran.canli.textContent !== cm) {
+        ekran.canli.textContent = cm;
+        ekran.canli.classList.toggle('bos', !cy);
+        if (cy) { ekran.canli.classList.remove('yeni'); void ekran.canli.offsetWidth; ekran.canli.classList.add('yeni'); }
+      }
+    }
     gosterimCiz();
+    baglantiCiz();
   }
 
   // durum.bildirim (PROTOKOL 13.1): kısayolla başlat/durdur, gizle/göster → küçük bildirim. İlk okumada eski bildirim gösterilmez.
@@ -2286,18 +2407,28 @@
     }
   }
 
+  var durumSuruyor = null, yavasSayi = 0;
   function durumYukle() {
-    return api('GET', '/api/durum').then(function (d) {
-      var oncekiKapali = S.kapali;
-      S.durum = d; S.kapali = false;
+    if (durumSuruyor) return durumSuruyor;   // yavaş sunucuda istekler üst üste binmesin
+    durumSuruyor = durumIstek().then(function (v) { durumSuruyor = null; return v; }, function (e) { durumSuruyor = null; throw e; });
+    return durumSuruyor;
+  }
+  function durumIstek() {
+    return api('GET', '/api/durum', undefined, 8000).then(function (d) {
+      var oncekiKapali = S.kapali || afis.classList.contains('kopuk');
+      S.durum = d; S.kapali = false; yavasSayi = 0;
       bildirimDenetle(d);
       erisimYukle();
-      if (oncekiKapali) banner('', '');
+      if (oncekiKapali && !afis.hidden) { banner('', ''); toast(t('baglanti.geri'), 'bilgi'); }
       if (!S.ayarlar || !S.motorlar.length) {
         return Promise.all([ayarYukle(), api('GET', '/api/motorlar').then(function (m) { S.motorlar = m; }), kaynakYukle()]).then(ciz).catch(function () {});
       }
       durumCiz();
-    }).catch(function (e) { if (e.kapali) kapaliBanner(true); });
+    }).catch(function (e) {
+      if (e.kapali) { kapaliBanner(true); return; }
+      // zaman aşımı: iki kez üst üste olursa sakin bir "yavaş" bildirimi (program açık ama meşgul)
+      if (e.hata === 'zaman_asimi' && ++yavasSayi >= 2 && afis.hidden) banner('kopuk', t('baglanti.yavas'), t('baglanti.yavas_k'));
+    });
   }
 
 
@@ -3009,6 +3140,7 @@
       a.elevenlabs_onay, a.elevenlabs_klon_onay, a.cikis, dublajMesaj, dil, a.orijinal_ses, a.hafif_mod, a.ses_profili_izni, a.ses_girisi,
       pk.durum, pk.yuzde, pk.kurulu, pk.tamam, pk.mesaj, JSON.stringify(pk.asamalar || []), b.tamamen_turkce, JSON.stringify(b.gecikme || null), JSON.stringify(b.tani || null),
       vd.durum, vd.yuzde, vd.kalan_sn, vd.asama, vd.satir && vd.satir.bitti, vd.cikti, vd.mesaj, S.dublajVideoSecim && S.dublajVideoSecim.yol].join('|');
+    baglantiCiz();
     if (imza === dublajImza) return;   // değişmediyse yeniden çizme (yazı/odak kaybolmasın)
     dublajImza = imza;
     var k = dublajKok; k.dataset.kuruldu = '1'; k.textContent = '';
@@ -3108,6 +3240,7 @@
     return S.oyunDegis ? 'oyun' : (S.kisayolEkrani ? 'kisayol' : (S.gelismisEkrani ? 'gelismis' : 'ana'));
   }
   function ciz() {
+    ana.removeAttribute('aria-busy');
     document.querySelectorAll('[data-i]').forEach(function (e) { e.textContent = t(e.dataset.i); });
     if (S.rehberEkrani) rehberEkrani();
     else if (S.tekAsama) sihirbaz(S.tekAsama);

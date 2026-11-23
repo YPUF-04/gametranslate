@@ -52,8 +52,9 @@
   </div>
 </header>
 <div id="afis" class="afis" hidden role="alert"></div>
-<main id="ana" tabindex="-1">
-  <p class="yukleniyor"><span class="yukleniyor-cizgi" aria-hidden="true"></span></p>
+<main id="ana" tabindex="-1" aria-busy="true">
+  <div class="iskelet" aria-hidden="true"><span class="isk isk-hero"></span><span class="isk isk-serit"></span><span class="isk isk-kart"></span><span class="isk isk-kart"></span></div>
+  <p class="gizli" role="status">Yükleniyor… / Loading…</p>
 </main>
 <footer class="alt"><span data-i="alt.bilgi"></span></footer>
 <script src="/panel/marka.js"></script>
