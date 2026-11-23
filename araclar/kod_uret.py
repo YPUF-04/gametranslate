@@ -4,6 +4,7 @@
 
 Kullanım:
   python araclar/kod_uret.py                       küçük bir sayfa açar (en kolay yol)
+  python araclar/kod_uret.py --cihaz ABCDE-FGHJK   o bilgisayara özel sınırsız dublaj kodu (önerilen)
   python araclar/kod_uret.py --sinirsiz --adet 5   5 sınırsız kod yazdırır
   python araclar/kod_uret.py --gun 30 --adet 10    10 tane 30 günlük kod
   python araclar/kod_uret.py --anahtar-olustur     yalnız anahtar çiftini oluşturur
@@ -76,11 +77,15 @@ def acik_satir() -> str:
     return 'ACIK_ANAHTAR = "%s"' % base64.b64encode(ham).decode()
 
 
-def uret(tur: str, adet: int, gun: int | None = None) -> list[str]:
+def uret(tur: str, adet: int, gun: int | None = None, cihaz: str | None = None) -> list[str]:
     if not 1 <= adet <= 100:
         raise ValueError("Kod sayısı 1 ile 100 arasında olmalı.")
+    if tur == "sinirsiz_dublaj":
+        from kopru import cihaz as cihaz_mod
+        if not cihaz_mod.gecerli_mi(cihaz_mod.temizle(cihaz or "")):
+            raise ValueError("Cihaz numarası 10 harf olmalı (ör. ABCDE-FGHJK). Programdaki Erişim kartından kopyala.")
     k = ozel_oku()
-    return [erisim.kod_uret(k, tur, gun) for _ in range(adet)]
+    return [erisim.kod_uret(k, tur, gun, cihaz=cihaz) for _ in range(adet)]
 
 
 # ---------- küçük yerel sayfa ----------
@@ -101,9 +106,11 @@ ANAHTAR_YOK = """<div class="k"><p>Henüz bir anahtarın yok. Önce bir kez olu�
 <form method="post" action="/anahtar"><button>Anahtar oluştur</button></form></div>"""
 
 FORM = """%ACIK%<div class="k"><form method="post" action="/uret">
-<label>Tür: <select name="tur" id="tur" onchange="g.hidden=this.value!='gun'">
-<option value="sinirsiz">Sınırsız</option><option value="gun">Belirli gün</option></select></label>
+<label>Tür: <select name="tur" id="tur" onchange="g.hidden=this.value!='gun';c.hidden=this.value!='sinirsiz_dublaj'">
+<option value="sinirsiz_dublaj">Bir bilgisayara özel (sınırsız dublaj)</option>
+<option value="sinirsiz">Her bilgisayarda sınırsız (eski)</option><option value="gun">Belirli gün (eski)</option></select></label>
 <label id="g" hidden>Kaç gün: <input type="number" name="gun" value="30" min="1" max="3650"></label><br>
+<label id="c">Cihaz numarası: <input type="text" name="cihaz" placeholder="ABCDE-FGHJK" maxlength="20"></label><br>
 <label>Kaç kod: <input type="number" name="adet" value="1" min="1" max="100"></label>
 <button>Üret</button></form></div>%SONUC%"""
 
@@ -188,11 +195,11 @@ class Isleyici(BaseHTTPRequestHandler):
             return self._sayfa()
         if self.path == "/uret" and anahtar_var():
             try:
-                tur = f.get("tur", "sinirsiz")
+                tur = f.get("tur", "sinirsiz_dublaj")
                 gun = int(f["gun"]) if tur == "gun" else None
-                return self._sayfa(_sonuc(uret(tur, int(f.get("adet", "1")), gun)))
+                return self._sayfa(_sonuc(uret(tur, int(f.get("adet", "1")), gun, f.get("cihaz"))))
             except (ValueError, KeyError) as e:
-                return self._sayfa(hata="Girdiğin sayıları kontrol et (kod sayısı 1-100, gün 1-3650). %s" % e)
+                return self._sayfa(hata="Girdiklerini kontrol et (kod sayısı 1-100, gün 1-3650, cihaz numarası 10 harf). %s" % e)
         self._sayfa()
 
 
@@ -215,11 +222,12 @@ def main(argv: list[str] | None = None) -> int:
     g = p.add_mutually_exclusive_group()
     g.add_argument("--sinirsiz", action="store_true", help="sınırsız kod üret")
     g.add_argument("--gun", type=int, metavar="N", help="N günlük kod üret")
+    g.add_argument("--cihaz", metavar="NUMARA", help="bu cihaz numarasına özel sınırsız dublaj kodu üret")
     p.add_argument("--adet", type=int, default=1, help="kaç kod (1-100)")
     p.add_argument("--anahtar-olustur", action="store_true", help="anahtar çiftini oluştur ve çık")
     p.add_argument("--acik-anahtar", action="store_true", help="yapıştırılacak açık anahtar satırını yazdır")
     a = p.parse_args(argv)
-    if a.anahtar_olustur or a.acik_anahtar or a.sinirsiz or a.gun:
+    if a.anahtar_olustur or a.acik_anahtar or a.sinirsiz or a.gun or a.cihaz:
         yeni = not anahtar_var()
         if yeni and not (a.anahtar_olustur):
             print("Önce anahtar gerekir: python araclar/kod_uret.py --anahtar-olustur", file=sys.stderr)
@@ -233,7 +241,8 @@ def main(argv: list[str] | None = None) -> int:
             print(acik_satir())
             return 0
         try:
-            for k in uret("gun" if a.gun else "sinirsiz", a.adet, a.gun):
+            tur = "sinirsiz_dublaj" if a.cihaz else ("gun" if a.gun else "sinirsiz")
+            for k in uret(tur, a.adet, a.gun, a.cihaz):
                 print(k)
         except ValueError as e:
             print(str(e), file=sys.stderr)

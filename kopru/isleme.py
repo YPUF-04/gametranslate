@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 from . import dugmeler
 from .ayarlar import bolgeleri_temizle
-from .ceviri.temel import AgHatasi, AnahtarHatasi, ErisimSiniri, MotorHatasi
+from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .onbellek import normallestir
 from .okuma import Satir
 from .sira import KARAKTER_MS_VARSAYILAN, GosterimSirasi, SiraSatiri
@@ -624,13 +624,6 @@ class Isleme:
         return f() if callable(f) else {}
 
     def _hata(self, e: Exception) -> None:
-        if isinstance(e, ErisimSiniri):   # hata değil: sakin bir "ücretsiz süre doldu" bilgisi
-            if self.durum_hatasi != "sinir":
-                self.durum_hatasi = "sinir"
-                self.yayin.yayinla("durum", {"calisiyor": True, "motor": self.yonetici.birincil.ad,
-                                             "yedek": bool(self.yonetici.yedekte),
-                                         **self._yedek_ek(), "sinir": True})
-            return
         kod = {AnahtarHatasi: "anahtar", AgHatasi: "ag", MotorHatasi: "motor"}.get(type(e), "genel")
         if kod != self.durum_hatasi:
             self.durum_hatasi = kod

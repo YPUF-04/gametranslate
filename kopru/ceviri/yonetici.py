@@ -36,7 +36,8 @@ class CeviriYoneticisi:
         self.oneriler = oneriler
         self._yayinla = yayinla or (lambda o, v: None)
         self.oyun = oyun
-        self.erisim_izni: Callable[[], bool] = lambda: True   # Durum, erişim sayacına bağlar
+        # PROTOKOL 17: altyazı sınırsız; yalnız dublaj çevirisi süreye bağlı (Durum, erişime bağlar)
+        self.dublaj_izni: Callable[[], bool] = lambda: True
         self.oyun_bilgisi: dict[str, Any] = {}      # ad, aciklama, hitap, karakterler
         self.yedekte = False
         self.yedek_neden: dict[str, str] | None = None   # yedeğe geçilme sebebi {"kod","mesaj"} (panel gösterir)
@@ -220,8 +221,6 @@ class CeviriYoneticisi:
             else:
                 eksik.append(i)
         if eksik:
-            if not self.erisim_izni():   # hafıza/önbellek yukarıda gösterildi; motor çağrılmaz
-                raise ErisimSiniri()
             ayri = list(dict.fromkeys(metinler[i] for i in eksik))
             gelen = await self._ucustaki(ayri, kaynak, hedef, aciklama)
             for i in eksik:
@@ -291,8 +290,6 @@ class CeviriYoneticisi:
         """
         if not metinler:
             return []
-        if not self.erisim_izni():
-            raise ErisimSiniri()
         ipucu = video_dublaj_ipucu(sureler, konusanlar, onceki, kisalt)
         sonuc, _ = await self._motorla(list(metinler), kaynak, hedef, False, ipucu)
         if len(sonuc) != len(metinler):
@@ -306,7 +303,7 @@ class CeviriYoneticisi:
         Altyazı çevirisinden FARKLIDIR; bu yüzden hafıza/önbellek ne okunur ne yazılır.
         `onceki`: önceki denemenin metni (süreye sığmadıysa "daha kısa" istenir).
         """
-        if not self.erisim_izni():
+        if not self.dublaj_izni():
             raise ErisimSiniri()
         ipucu = dublaj_ipucu(max(0.5, sure_sn), onceki)
         sonuc, _ = await self._motorla([metin], kaynak, hedef, False, ipucu)

@@ -64,6 +64,8 @@ class DublajYonetici:
         self._donanim: donanim.Donanim | None = None
         self._calisiyor = False       # çeviri (Başlat) çalışıyor mu
         self.son_hata: str | None = None
+        # PROTOKOL 17.2: dublaj yalnız süre (ya da sınırsız kod) varken çalışır; Durum erişime bağlar
+        self.izin: Callable[[], bool] = lambda: True
 
     # -- dublaj paketi / işçi --
     def isci_kullan(self) -> bool:
@@ -235,12 +237,22 @@ class DublajYonetici:
         """Çeviri çalışıyor + dublaj açık + motor hazır ise boru hattını başlatır, değilse durdurur."""
         if calisiyor is not None:
             self._calisiyor = calisiyor
-        istenen = self._calisiyor and self.motor_kodu() != "kapali"
+        istenen = self.istenen() and self.izin()
         calisan = self._gorev is not None and not self._gorev.done()
         if istenen and not calisan:
             self._gorev = asyncio.get_running_loop().create_task(self._yurut())
         elif not istenen and calisan:
-            self.durdur()
+            self._boru_durdur()   # süre bittiyse sakince duraklar; süre eklenince senkronla() yeniden başlatır
+
+    def istenen(self) -> bool:
+        """Kullanıcı dublajı istiyor mu (çeviri çalışıyor + dublaj açık), süreden bağımsız."""
+        return self._calisiyor and self.motor_kodu() != "kapali"
+
+    def etkin(self) -> bool:
+        """Dublaj şu an gerçekten çalışıyor mu (süre bundan düşer): canlı boru hattı ya da video işi."""
+        canli = self._gorev is not None and not self._gorev.done()
+        video = self.video_isi is not None and self.video_isi.calisiyor()
+        return bool(canli or video)
 
     def _hata(self, kod: str) -> None:
         self.son_hata = kod
@@ -312,6 +324,9 @@ class DublajYonetici:
 
     def durdur(self) -> None:
         self._calisiyor = False
+        self._boru_durdur()
+
+    def _boru_durdur(self) -> None:
         if self._kaynak is not None:
             self._kaynak.durdur()
             self._kaynak = None
@@ -373,6 +388,8 @@ class DublajYonetici:
             raise DublajHatasi("video_suruyor")
         if not self.isci_kullan():
             raise DublajHatasi("dublaj_paket_yok")
+        if not self.izin():
+            raise DublajHatasi("dublaj_suresi_yok")     # PROTOKOL 17.1: başlamak için süre ya da kod gerekir
         if self._gorev is not None and not self._gorev.done():
             raise DublajHatasi("video_canli_acik")     # tek ekran kartı: canlı dublaj açıkken video olmaz
         self.video_isi = VideoIsi(yol, self.isci, cevirmen, self.ayar, is_koku, self.saat,

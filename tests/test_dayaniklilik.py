@@ -62,7 +62,7 @@ def test_yanlis_turdeki_ayar_alanlari_varsayilana_doner(tmp_path):
     assert a["bolgeler"] == [] and a["dublaj"]["motor"] == "kapali" and a["dublaj"]["hiz_siniri"] == 1.25
     assert a["arayuz_dili"] == "tr" and a["hafiza_izni"] is None
     assert a["modeller"] == {"gemini": "m"} and a["bolge_altyazi"] == VARSAYILAN["bolge_altyazi"]
-    assert a["erisim"] == {"ucretsiz_dakika_gun": 30}
+    assert a["erisim"] == {"vast_adresi": ""}
     assert a["yedek_motor"] is None and a["kaynak"] == "ekran:2"     # geçerli seçimler korunur
 
 
@@ -94,31 +94,28 @@ def test_atomik_yazim_surekli_kilitliyse_gecici_dosya_kalmaz(tmp_path, monkeypat
 
 # ---------------------------------------------------------------- erişim sayacı
 
-def test_bozuk_erisim_dosyasi_ve_bozuk_sayaclar_cokmez(tmp_path):
-    """Hata: erisim.json içinde {"kullanilan": {"2026-01-01": "abc"}} gelince her izin denetimi ValueError veriyordu."""
+def test_bozuk_erisim_dosyasi_cokmez(tmp_path):
+    """Hata: bozuk erisim.json (eski düz dosyadaki kod) her izin denetiminde ValueError veriyordu."""
     (tmp_path / "erisim.json").write_text("{bozuk", encoding="utf-8")
-    e = erisim_mod.Erisim(lambda: dict(VARSAYILAN))
-    assert e.kalan_sn() == 30 * 60 and list(tmp_path.glob("erisim.json.bozuk-*"))
-    bugun = date.today().isoformat()
-    (tmp_path / "erisim.json").write_text(json.dumps(
-        {"kullanilan": {bugun: "abc", "yok": 5, "2020-01-01": -4, "2020-01-02": 7}, "kod": 12}), encoding="utf-8")
-    e = erisim_mod.Erisim(lambda: dict(VARSAYILAN))
-    assert e.kullanilan_sn() == 0.0 and e.izin_var() and e.etkin_kod() is None
-    assert e._veri["kullanilan"] == {"2020-01-02": 7.0}
+    e = erisim_mod.Erisim(lambda: dict(VARSAYILAN), cihaz=lambda: "ABCDEFGHJK")
+    assert e.kalan_sn() == 0 and not e.dublaj_izni() and list(tmp_path.glob("erisim.json.bozuk-*"))
+    (tmp_path / "erisim.json").write_text(json.dumps({"kullanilan": {"x": "abc"}, "kod": 12}), encoding="utf-8")
+    e = erisim_mod.Erisim(lambda: dict(VARSAYILAN), cihaz=lambda: "ABCDEFGHJK")
+    assert e.etkin_kod() is None and e.durum()["dublaj"]["kalan_dakika"] == 0
 
 
 def test_etkin_kod_imzayi_her_cagrida_yeniden_dogrulamaz(tmp_path, monkeypatch):
-    """Hata: saf Python Ed25519 doğrulaması her izin_var/sinir çağrısında (saniyede birkaç kez) çalışıyordu."""
-    e = erisim_mod.Erisim(lambda: dict(VARSAYILAN))
-    e._veri["kod"] = "AK1-ABC"
+    """Hata: saf Python Ed25519 doğrulaması her izin denetiminde (saniyede birkaç kez) çalışıyordu."""
+    e = erisim_mod.Erisim(lambda: dict(VARSAYILAN), cihaz=lambda: "ABCDEFGHJK")
+    e._kod, e._kod_okundu = "AK1-ABC", True
     sayac = {"n": 0}
 
-    def sahte(kod, bugun, acik=None):
+    def sahte(kod, bugun, acik=None, cihaz=None):
         sayac["n"] += 1
         return {"tur": "sinirsiz", "bitis": None, "tarih": "2026-01-01"}
     monkeypatch.setattr(erisim_mod, "kod_coz", sahte)
     for _ in range(10):
-        assert e.izin_var() and not e.sinir()
+        assert e.dublaj_izni() and e.sinirsiz()
     assert sayac["n"] == 1
 
 
@@ -1026,12 +1023,14 @@ async def test_bozuk_dosyalarla_sunucu_acilir(aiohttp_client, tmp_path):
     assert r.status == 200 and (await r.json())["ceviri"] == "[TR] Hello"
 
 
-def test_tarih_degeri_onemsiz_ama_saat_geri_giderse_say_cokmez(tmp_path):
-    e = erisim_mod.Erisim(lambda: dict(VARSAYILAN), simdi=lambda: datetime(2026, 1, 1, 12))
+def test_saat_geri_giderse_say_sure_vermez(tmp_path):
+    t = {"v": 100.0}
+    e = erisim_mod.Erisim(lambda: dict(VARSAYILAN), saat=lambda: t["v"], cihaz=lambda: "ABCDEFGHJK")
+    e._kalan_sn = 60.0
     e.say(True)
-    e.simdi = lambda: datetime(2026, 1, 1, 11)    # saat geri alındı
+    t["v"] = 50.0    # saat geri gitti
     e.say(True)
-    assert e.kullanilan_sn() == 0.0
+    assert e.kalan_sn() == 60.0
 
 
 def test_sqlite_dosya_kilitliyken_hafiza_okuma_cokmez(tmp_path):

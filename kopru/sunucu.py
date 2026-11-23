@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import socket
@@ -106,6 +107,8 @@ class Durum:
         # Türkçe dublaj (PROTOKOL 9): varsayılan kapalı; yalnız ayar açıksa ve Başlat basılıysa çalışır
         self.dublaj = DublajYonetici(lambda: self.ayar, self.yayin, lambda: self.yonetici,
                                      **(dublaj_fabrikalari or {}))
+        self.dublaj.izin = self.erisim.dublaj_izni   # PROTOKOL 17.2: yalnız dublaj süreli
+        self.reklam_istemci = 0   # reklam gösterebilen TV istemcisi sayısı (/kopru/akis?reklam=1)
         # bilgisayar ekranı katmanı (PROTOKOL 10.3): ayrı süreç
         self.katman = katman_yonetim.KatmanYonetici(
             lambda: self.ayar, self.yayin, self.calisiyor, lambda: self.calisan_kapi or self.ayar["kapi"],
@@ -229,7 +232,7 @@ class Durum:
         if self.gecmis is not None:
             y.gecmis = self.gecmis
         self.gecmis = y.gecmis
-        y.erisim_izni = self.erisim.izin_var
+        y.dublaj_izni = self.erisim.dublaj_izni   # altyazı çevirisi sınırsız (PROTOKOL 17.1)
         y.oyun_bilgisi = oyunlar.oku(kod) or {}
         y.terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(kod))
         return y
@@ -259,16 +262,27 @@ class Durum:
         motor = self.yonetici.yedek if self.yonetici.yedekte and self.yonetici.yedek else self.yonetici.birincil
         olay = {"calisiyor": self.calisiyor(), "motor": motor.ad, "yedek": bool(self.yonetici.yedekte),
                 **self.yonetici.durum_ek()}
-        if self.erisim.sinir():
-            olay["sinir"] = True   # ücretsiz süre doldu, kod yok (panel sakin bir uyarı gösterir)
+        if self.dublaj_durdu():
+            olay["dublaj_sinir"] = True   # dublaj süresi bitti; altyazı sürer (PROTOKOL 17.2)
         return olay
 
+    def dublaj_durdu(self) -> bool:
+        """Kullanıcı dublaj istiyor ama süre bitti (kod yok)."""
+        return self.dublaj.istenen() and not self.erisim.dublaj_izni()
+
     def erisim_say(self) -> None:
-        """Sayaç adımı: çeviri çalışırken süre ekler; sınır değişirse durumu yayınlar."""
-        once = self.erisim.sinir()
-        self.erisim.say(self.calisiyor())
-        if self.erisim.sinir() != once:
-            self.yayin.yayinla("durum", self.durum_olayi())
+        """Sayaç adımı: yalnız dublaj gerçekten çalışırken süre düşer; izin değişirse dublaj durur/sürer."""
+        once = self.erisim.dublaj_izni()
+        self.erisim.say(self.dublaj.etkin())
+        if self.erisim.dublaj_izni() != once:
+            self.dublaj_izin_degisti()
+
+    def dublaj_izin_degisti(self) -> None:
+        try:
+            self.dublaj.senkronla()
+        except RuntimeError:   # döngü yok (sınama)
+            pass
+        self.yayin.yayinla("durum", self.durum_olayi())
 
     def kare_al(self) -> Any:
         """Seçili kaynaktan şu anki kare (PIL.Image). Diske yazılmaz."""
@@ -461,6 +475,9 @@ async def akis(request: web.Request) -> web.StreamResponse:
         "Access-Control-Allow-Origin": "*"})
     await r.prepare(request)
     q = d.yayin.abone_ol()
+    reklam = request.query.get("reklam") == "1"   # PROTOKOL 17.3: bu istemci reklam oynatabilir (TV uygulaması)
+    if reklam:
+        d.reklam_istemci += 1
     try:
         ilk = [(o, v) for o, v in d.yayin.acilis_olaylari() if o != "durum"]
         ilk.insert(1 if ilk and ilk[0][0] == "gorunum" else 0, ("durum", d.durum_olayi()))
@@ -486,6 +503,8 @@ async def akis(request: web.Request) -> web.StreamResponse:
         pass
     finally:
         d.yayin.ayril(q)
+        if reklam:
+            d.reklam_istemci -= 1
     return r
 
 
@@ -542,7 +561,9 @@ async def api_durum(request: web.Request) -> web.Response:
         "calisiyor": d.calisiyor(), "motor": _motor_adi(d), "yedekte": d.yonetici.yedekte,
         "tv_sayisi": d.yayin.istemci_sayisi, "son_yazi": y["metin"] if y else "",
         "adresler": lan_adresleri(), "kapi": d.calisan_kapi or d.ayar["kapi"],
-        "sinir": d.erisim.sinir(), **d.yonetici.durum_ek()}
+        **d.yonetici.durum_ek()}
+    if d.dublaj_durdu():
+        yanit["dublaj_sinir"] = True
     if d.isleme is not None and d.calisiyor():   # §16.4: aşama aşama gecikme
         yanit["gecikme"] = d.isleme.gecikme_bilgisi()
     uyari = await d.kaynak_uyarisi()
@@ -624,8 +645,7 @@ def _dogrula(k: dict[str, Any]) -> bool:
                 return False
         e = k.get("erisim")
         if e is not None:
-            m = e.get("ucretsiz_dakika_gun", 30) if isinstance(e, dict) else None
-            if not (isinstance(m, int) and not isinstance(m, bool) and 0 <= m <= 1440):
+            if not isinstance(e, dict) or not erisim_mod.vast_gecerli(e.get("vast_adresi", "")):
                 return False
         g = k.get("gorunum")
         if g is not None:
@@ -736,8 +756,6 @@ async def api_dene(request: web.Request) -> web.Response:
     kod = v.get("motor") or d.ayar["motor"]
     if kod not in {b[0] for b in BILGI} | {"sahte"}:
         return hata("gecersiz_istek", 400, request)
-    if not d.erisim.izin_var():
-        return hata("ucretsiz_bitti", 402, request)
     motor = d.motor_fabrika(kod, d.ayar)
     t0 = time.monotonic()
     try:
@@ -762,8 +780,63 @@ async def api_dene(request: web.Request) -> web.Response:
     return web.json_response(yanit)
 
 
+def _erisim_durumu(d: Durum) -> dict[str, Any]:
+    return d.erisim.durum(dublaj_acik=d.dublaj.istenen(), tv_reklam=d.reklam_istemci > 0)
+
+
 async def api_erisim_al(request: web.Request) -> web.Response:
-    return web.json_response(request.app[DURUM].erisim.durum())
+    return web.json_response(_erisim_durumu(request.app[DURUM]))
+
+
+REKLAM_DURUMLARI = {"dublaj_sure_dolu": 409, "dublaj_sinirsiz": 409, "reklam_yok": 404, "reklam_erken": 409}
+
+
+def _reklam_hata(e: erisim_mod.ReklamHatasi, request: web.Request) -> web.Response:
+    y = hata(e.kod, REKLAM_DURUMLARI.get(e.kod, 400), request)
+    if e.kod == "reklam_erken":
+        govde = json.loads(y.body)
+        govde["kalan_sn"] = round(e.kalan_sn, 1)
+        y = web.json_response(govde, status=409)
+    return y
+
+
+async def api_reklam_baslat(request: web.Request) -> web.Response:
+    """PROTOKOL 17.3: "+30 dk ekle" — reklam (ya da destek ekranı) başlar; TV bağlıysa orada oynar."""
+    d: Durum = request.app[DURUM]
+    try:
+        v = await request.json()
+    except ValueError:
+        v = {}
+    yer = v.get("yer") if isinstance(v, dict) else None
+    try:
+        r = d.erisim.reklam_baslat(d.reklam_istemci > 0, yer if yer in ("otomatik", "panel") else "otomatik")
+    except erisim_mod.ReklamHatasi as e:
+        return _reklam_hata(e, request)
+    if r["hedef"] == "tv":
+        d.yayin.yayinla("reklam", {"id": r["id"], "vast": r["vast"], "en_az_sn": r["en_az_sn"],
+                                   "bitti": "/kopru/reklam/bitti"})
+    return web.json_response(r)
+
+
+async def _reklam_bitti(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    try:
+        sonuc = d.erisim.reklam_bitir(v.get("id"), v.get("sure_sn"))
+    except erisim_mod.ReklamHatasi as e:
+        return _reklam_hata(e, request)
+    d.yayin.yayinla("reklam-bitti", {"id": sonuc["id"]})
+    d.dublaj_izin_degisti()   # duraklamış dublaj kendiliğinden sürer
+    return web.json_response(sonuc)
+
+
+async def api_reklam_bitti(request: web.Request) -> web.Response:
+    return await _reklam_bitti(request)
+
+
+async def kopru_reklam_bitti(request: web.Request) -> web.Response:
+    """TV uygulaması reklamı bitirdi (yerel ağ). Süreyi yine sunucu saati belirler."""
+    return await _reklam_bitti(request)
 
 
 async def api_erisim_yaz(request: web.Request) -> web.Response:
@@ -776,7 +849,7 @@ async def api_erisim_yaz(request: web.Request) -> web.Response:
         bilgi = d.erisim.kod_gir(kod)
     except erisim_mod.KodHatasi as e:
         return hata(e.kod, 400, request)
-    d.yayin.yayinla("durum", d.durum_olayi())   # sınır kalktıysa panel/TV hemen öğrensin
+    d.dublaj_izin_degisti()   # dublaj duraklamışsa sürer; panel/TV hemen öğrensin
     return web.json_response({"tamam": True, "tur": bilgi["tur"]})
 
 
@@ -972,8 +1045,6 @@ async def api_oyun_bilgi_hazirla(request: web.Request) -> web.Response:
     istem = getattr(motor, "serbest_istem", None)
     if not callable(istem) or getattr(motor, "cevrimdisi", False):
         return hata("bilgi_cevrimdisi", 400, request)
-    if not d.erisim.izin_var():
-        return hata("ucretsiz_bitti", 402, request)
     bilgi = oyunlar.oku(kod) or {}
     try:
         ham = await asyncio.wait_for(
@@ -1269,6 +1340,8 @@ async def api_video_baslat(request: web.Request) -> web.Response:
     try:
         b = d.dublaj.video_baslat(p, d.yonetici, d.video_is_koku)
     except DublajHatasi as e:
+        if e.kod == "dublaj_suresi_yok":
+            return hata(e.kod, 402, request)
         return hata(e.kod, 409 if e.kod in ("dublaj_paket_yok", "video_suruyor", "video_canli_acik") else 400, request)
     return web.json_response(b)
 
@@ -1687,6 +1760,9 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/dene", api_dene)
     r.add_get("/api/erisim", api_erisim_al)
     r.add_post("/api/erisim", api_erisim_yaz)
+    r.add_post("/api/erisim/reklam", api_reklam_baslat)
+    r.add_post("/api/erisim/reklam/bitti", api_reklam_bitti)
+    r.add_post("/kopru/reklam/bitti", kopru_reklam_bitti)
     r.add_post("/api/baslat", api_baslat)
     r.add_post("/api/durdur", api_durdur)
     r.add_get("/api/kisayollar", api_kisayollar)
@@ -1779,6 +1855,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     async def ac(_: web.Application) -> None:
         durum._dongu = asyncio.get_running_loop()
         await asyncio.to_thread(anahtarlar.isit)
+        await asyncio.to_thread(durum.erisim.isit)   # kasadaki kod + cihaz numarası (döngüyü tutmasın)
         durum.kisayol.baslat(asyncio.get_running_loop(), durum.ayar.get("kisayollar") or {})
         app["katman_gorevi"] = asyncio.create_task(katman_dongusu())   # kasa ilk okuması olay döngüsünü tutmasın
         app["durum_gorevi"] = asyncio.create_task(durum_dongusu())

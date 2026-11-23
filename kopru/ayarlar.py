@@ -39,7 +39,7 @@ VARSAYILAN: dict[str, Any] = {
     "hafiza_izni": None,     # None (sorulmadı) | True | False
     "guncelleme_denetle": True,  # günde en çok bir kez GitHub'a "yeni sürüm var mı" diye sorar
 
-    "erisim": {"ucretsiz_dakika_gun": 30},   # günlük kodsuz çeviri süresi (PROTOKOL 7.3)
+    "erisim": {"vast_adresi": ""},   # boş = kopru/reklam_ayari.py (PROTOKOL 17.4); altyazı sınırsız, dublaj süreli
 
     "kaynak": "ekran:1",
     "bolge_altyazi": {"x": 0.1, "y": 0.72, "g": 0.8, "y2": 0.25},
@@ -281,9 +281,10 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
         s["gorunum"]["karakter_ms"] = v["gorunum"]["karakter_ms"]
     if s["gorunum"].get("konum") not in ("alt", "ust"):
         s["gorunum"]["konum"] = v["gorunum"]["konum"]
-    if s["erisim"].get("ucretsiz_dakika_gun") is not None and not (
-            isinstance(s["erisim"]["ucretsiz_dakika_gun"], int) and 0 <= s["erisim"]["ucretsiz_dakika_gun"] <= 1440):
-        s["erisim"]["ucretsiz_dakika_gun"] = v["erisim"]["ucretsiz_dakika_gun"]
+    s["erisim"].pop("ucretsiz_dakika_gun", None)   # §7.3'ün eski alanı (§17: altyazı sınırsız)
+    va = s["erisim"].get("vast_adresi")
+    if not (isinstance(va, str) and len(va) <= 2000 and (va == "" or va.startswith("https://"))):
+        s["erisim"]["vast_adresi"] = v["erisim"]["vast_adresi"]
     from . import kisayol
     for k, t in list(s["kisayollar"].items()):
         if not (k in kisayol.EYLEMLER and kisayol.kisayol_gecerli(t)):

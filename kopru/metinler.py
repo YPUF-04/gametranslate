@@ -145,11 +145,29 @@ HATALAR: dict[str, dict[str, str]] = {
         "tr": "Bu kod geçerli değil. Harfleri kontrol edip tekrar deneyin.",
         "en": "This code is not valid. Please check the letters and try again."},
     "suresi_dolmus_kod": {
-        "tr": "Bu kodun süresi dolmuş. Yeni bir kod isteyin ya da yarın ücretsiz süreyle devam edin.",
-        "en": "This code has expired. Ask for a new one, or continue tomorrow with the free time."},
-    "ucretsiz_bitti": {
-        "tr": "Bugünkü ücretsiz süre doldu. Erişim kodunu girin ya da yarın devam edin.",
-        "en": "Today's free time is used up. Enter an access code or continue tomorrow."},
+        "tr": "Bu kodun süresi dolmuş. Yeni bir kod isteyin ya da \"+30 dk ekle\" ile devam edin.",
+        "en": "This code has expired. Ask for a new one, or continue with \"+30 min\"."},
+    "baska_cihaz_kodu": {
+        "tr": "Bu kod başka bir bilgisayar için yapılmış. Bu bilgisayarın cihaz numarasını gönderip yeni kod isteyin.",
+        "en": "This code was made for another computer. Send this computer's device number and ask for a new code."},
+    "dublaj_suresi_bitti": {
+        "tr": "Dublaj süresi bitti, dublaj durakladı. Altyazılar devam ediyor. \"+30 dk ekle\"ye basarak devam edebilirsin.",
+        "en": "Dubbing time is up, so dubbing paused. Subtitles keep going. Press \"+30 min\" to continue."},
+    "dublaj_suresi_yok": {
+        "tr": "Dublaj için süre yok. Önce \"+30 dk ekle\"ye bas.",
+        "en": "There is no dubbing time left. Press \"+30 min\" first."},
+    "dublaj_sure_dolu": {
+        "tr": "Dublaj süresi zaten en fazla (4 saat). Biraz kullandıktan sonra yeniden ekleyebilirsin.",
+        "en": "Dubbing time is already at the maximum (4 hours). You can add more after using some."},
+    "dublaj_sinirsiz": {
+        "tr": "Bu bilgisayarda dublaj zaten sınırsız. Süre eklemen gerekmiyor.",
+        "en": "Dubbing is already unlimited on this computer. No need to add time."},
+    "reklam_erken": {
+        "tr": "Reklam daha bitmedi. Birkaç saniye sonra süre eklenecek.",
+        "en": "The ad has not finished yet. Time will be added in a few seconds."},
+    "reklam_yok": {
+        "tr": "Bu reklamın süresi zaten eklendi ya da reklam iptal oldu. \"+30 dk ekle\"ye yeniden bas.",
+        "en": "Time for this ad was already added, or the ad was cancelled. Press \"+30 min\" again."},
     "dublaj_paket_onay": {
         "tr": "Dublaj paketini kurmak (ya da kaldırmak) için önce onay kutusunu işaretleyin.",
         "en": "Please tick the confirmation box first to install (or remove) the dubbing package."},

@@ -425,7 +425,7 @@ class Isleyici:
                 self.son_hata = e.kod
                 log.warning("Dublaj hatası: %s %s", e.kod, getattr(e, "ayrinti", ""))
             except ErisimSiniri:
-                self.son_hata = "ucretsiz_bitti"
+                self.son_hata = "dublaj_suresi_bitti"   # PROTOKOL 17.2: sakin bilgi, hata değil
             except (AgHatasi, AnahtarHatasi, MotorHatasi) as e:
                 self.son_hata = {AgHatasi: "ag_hatasi", AnahtarHatasi: "anahtar_yok"}.get(type(e), "motor_hatasi")
             except Exception:

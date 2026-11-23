@@ -20,7 +20,9 @@ class AnahtarHatasi(Exception):
 
 
 class ErisimSiniri(Exception):
-    """Günlük ücretsiz süre doldu ve geçerli kod yok: yeni motor çağrısı yapılmaz."""
+    """Dublaj süresi bitti ve geçerli kod yok: dublaj için yeni motor çağrısı yapılmaz (PROTOKOL 17).
+
+    Altyazı çevirisi bunu ASLA atmaz (sınırsız)."""
 
 
 class MotorHatasi(Exception):

@@ -228,6 +228,9 @@ async def test_api_video_paket_yokken_409_sonra_calisir_ve_gosterir(istemci, vid
     monkeypatch.setattr(istemci.ortam, "kurulu", lambda: True)
     istemci.durum.yonetici.video_cevir = SahteCevirmen().video_cevir
     r = await istemci.post("/api/dublaj/video", json={"yol": str(video)})
+    assert r.status == 402 and (await r.json())["hata"] == "dublaj_suresi_yok"   # PROTOKOL 17.1
+    istemci.durum.erisim._kalan_sn = 1800.0     # "+30 dk ekle" izlendi
+    r = await istemci.post("/api/dublaj/video", json={"yol": str(video)})
     assert r.status == 200 and (await r.json())["durum"] == "calisiyor"
     assert (await istemci.post("/api/dublaj/video", json={"yol": str(video)})).status in (200, 409)
     for _ in range(200):
