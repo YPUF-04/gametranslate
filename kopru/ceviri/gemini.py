@@ -19,6 +19,8 @@ YEDEK_MODELLER = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash
 ALTYAZI_SN = 8.0
 HIZLI_YEDEK_MODEL = "gemini-3.5-flash-lite"   # zaman aşımı / 429 / 5xx: kendi kotası olan hızlı model bir kez
 HIZLI_YEDEK_SN = 6.0
+DERIN_SN = 15.0          # PROTOKOL 19.2: iyileştirme isteği (ekrandaki ilk çeviriyi bekletmez)
+DERIN_DUZEY = "medium"
 
 
 def dusunme_duzeyi(model: str) -> str | None:
@@ -41,6 +43,7 @@ class GeminiMotoru:
     cevrimdisi = False
     ucretsiz = True
     baglam_destekler = True
+    iyilestirme_destekler = True   # PROTOKOL 19.2
 
     def __init__(self, anahtar: str | None, model: str = VARSAYILAN_MODEL) -> None:
         self._anahtar = anahtar
@@ -109,6 +112,16 @@ class GeminiMotoru:
             except (AgHatasi, ModelBulunamadi):
                 raise e from None
 
+    async def _derin_gonder(self, govde: dict[str, Any]) -> Any:
+        """İyileştirme: aynı model, daha çok düşünme, daha uzun süre; hızlı yedek model denenmez."""
+        duzey = DERIN_DUZEY if self.duzey(self.model) is not None else None
+        try:
+            return await self._gonder(self._dusunmeli(govde, duzey), DERIN_SN)
+        except AgHatasi as e:
+            if duzey is None or not str(e).startswith("HTTP 400"):
+                raise
+            return await self._gonder(govde, DERIN_SN)
+
     async def cevir(self, metinler: list[str], kaynak: str, hedef: str,
                     sozluk: dict[str, str], aciklama: bool = False,
                     baglam: Baglam | None = None) -> list[Ceviri]:
@@ -121,7 +134,8 @@ class GeminiMotoru:
             "contents": [{"role": "user", "parts": [{"text": istem.kullanici_metni(metinler, baglam)}]}],
             "generationConfig": {"responseMimeType": "application/json"},
         }
-        veri = await self._altyazi_gonder(govde)
+        veri = await (self._derin_gonder(govde) if baglam is not None and baglam.derin
+                      else self._altyazi_gonder(govde))
         try:
             ham = "".join(p.get("text", "") for p in veri["candidates"][0]["content"]["parts"])
             sonuc, terimler = istem.yaniti_coz_tam(ham, len(metinler), aciklama)

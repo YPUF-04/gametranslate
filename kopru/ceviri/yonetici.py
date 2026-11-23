@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections import deque
+from collections import OrderedDict, deque
+from difflib import SequenceMatcher
 from typing import Any, Callable
 
 from .. import dugmeler
@@ -13,11 +14,23 @@ from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import normallestir
 from ..onbellek import Onbellek
-from .istem import SON_SATIR_ADEDI, dublaj_ipucu, video_dublaj_ipucu
+from .istem import SON_SATIR_ADEDI, dublaj_ipucu, hitap_sez, iyilestirme_ipucu, video_dublaj_ipucu
 from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri, ModelBulunamadi, MotorHatasi
 
 log = logging.getLogger("kopru.ceviri")
 YENIDEN_DENEME_SN = 60.0
+EN_COK_HITAP = 40          # PROTOKOL 19.1: hitap hafızası (konuşan -> dinleyen) çift sayısı
+EN_COK_OGRENILEN = 60      # oturumda öğrenilen ad sayısı
+OGRENME_ESIGI = 2          # aynı ad aynı biçimle bu kadar kez önerilirse "bilinen ad" olur
+ANLAMLI_FARK = 0.98        # PROTOKOL 19.2: iyileştirme ancak benzerlik bundan küçükse uygulanır
+IYILESTIRME_DAKIKA = 8     # dakikada en çok bu kadar iyileştirme isteği (ücretsiz kota ilk çeviriye kalsın)
+IYILESTIRME_DURAK_SN = 60.0   # iyileştirme 429 alırsa bu kadar ara verilir
+
+
+def anlamli_fark(eski: str, yeni: str) -> bool:
+    """İyileştirilmiş çeviri taslaktan anlamlı biçimde farklı mı (aynı metni yeniden yayınlama, titreme yok)."""
+    a, b = normallestir(eski), normallestir(yeni)
+    return bool(b) and a != b and SequenceMatcher(None, a, b).ratio() < ANLAMLI_FARK
 
 
 class _Iptal(Exception):
@@ -48,6 +61,16 @@ class CeviriYoneticisi:
         self.terimler: dict[str, str] = {}
         self.son_satirlar: deque[tuple[str, str]] = deque(maxlen=SON_SATIR_ADEDI)
         self.gecmis: deque[dict[str, str]] = deque(maxlen=30)   # /api/son-ceviriler (yalnız RAM)
+        # PROTOKOL 19.1/19.2 (yalnız RAM, oyun başına; oyun değişince yönetici yeniden kurulur)
+        self.hitaplar: OrderedDict[tuple[str, str], str] = OrderedDict()
+        self._son_konusan: str | None = None
+        self.ogrenilen: dict[str, str] = {}
+        self._terim_sayac: dict[tuple[str, str], int] = {}
+        self._iyilestirilen: set[str] = set()
+        self.iyilestirme_istek = 0
+        self.iyilestirilen_sayi = 0
+        self._iyi_zamanlar: deque[float] = deque(maxlen=IYILESTIRME_DAKIKA)
+        self._iyi_durak = 0.0
 
     def _durum(self) -> None:
         motor = self.yedek if self.yedekte and self.yedek else self.birincil
@@ -75,7 +98,27 @@ class CeviriYoneticisi:
         b = self.oyun_bilgisi
         return Baglam(oyun_ad=b.get("ad", ""), aciklama=b.get("aciklama", ""),
                       hitap=b.get("hitap", "sen"), karakterler=list(b.get("karakterler", [])),
-                      son_satirlar=list(self.son_satirlar))
+                      son_satirlar=list(self.son_satirlar),
+                      hitaplar=[(a, d, f) for (a, d), f in self.hitaplar.items()],
+                      bilinen_adlar=dict(self.ogrenilen))
+
+    def _hitap_ogren(self, konusan: str | None, ceviri: str) -> None:
+        """PROTOKOL 19.1: konuşan -> önceki farklı konuşan çiftinin hitabı (sen/siz)."""
+        if not konusan:
+            return
+        k = " ".join(konusan.split())[:40]
+        onceki = self._son_konusan
+        self._son_konusan = k
+        if not onceki or onceki.casefold() == k.casefold():
+            return
+        f = hitap_sez(ceviri)
+        if f is None:
+            return
+        anahtar = (k, onceki)
+        self.hitaplar.pop(anahtar, None)
+        self.hitaplar[anahtar] = f
+        while len(self.hitaplar) > EN_COK_HITAP:
+            self.hitaplar.popitem(last=False)
 
     # -- konuşan (altyazıdaki "AD:" ön eki) --
     konusan_destekli = True
@@ -110,6 +153,7 @@ class CeviriYoneticisi:
                      konusan: str | None = None) -> None:
         """Yayınlanan altyazıyı bağlama ve son-çeviriler listesine ekler (bağlamda konuşan adıyla)."""
         self.son_satirlar.append((self._baglam_asil(asil, konusan), ceviri))
+        self._hitap_ogren(konusan, ceviri)
         g = {"id": id_, "asil": asil, "ceviri": ceviri, "kaynak": kaynak}
         if konusan:
             g["konusan"] = konusan
@@ -211,6 +255,11 @@ class CeviriYoneticisi:
             self.yedek_neden = None
             self._durum()
         self._terimleri_isle(baglam.yeni_terimler, metinler)
+        if not self.oneriler:
+            for t in baglam.yeni_terimler[:10]:   # öneri deposu yoksa (hafıza izni yok) yalnız oturumda öğren
+                a, c = str(t.get("asil", "")).strip(), str(t.get("ceviri", "")).strip()
+                if 0 < len(a) <= 60 and 0 < len(c) <= 60 and a.casefold() in " ".join(metinler).casefold():
+                    self._ad_ogren(a, c)
         return sonuc, getattr(self.birincil, "kod", None)
 
     def _terimleri_isle(self, terimler: list[dict], metinler: list[str]) -> None:
@@ -225,6 +274,16 @@ class CeviriYoneticisi:
             if 0 < len(asil) <= 60 and 0 < len(ceviri) <= 60 and \
                     asil.casefold() not in bilinen and asil.casefold() in govde:
                 self.oneriler.ekle(asil, ceviri)
+                self._ad_ogren(asil, ceviri)
+
+    def _ad_ogren(self, asil: str, ceviri: str) -> None:
+        """PROTOKOL 19.1: aynı ad aynı biçimle OGRENME_ESIGI kez önerildiyse oturumun "bilinen ad"ı olur."""
+        if asil in self.ogrenilen or len(self.ogrenilen) >= EN_COK_OGRENILEN:
+            return
+        k = (asil.casefold(), ceviri)
+        self._terim_sayac[k] = self._terim_sayac.get(k, 0) + 1
+        if self._terim_sayac[k] >= OGRENME_ESIGI:
+            self.ogrenilen[asil] = ceviri
 
     # -- arama / çeviri --
     def _cevrilmemis(self, metin: str, ceviri: str) -> bool:
@@ -317,6 +376,53 @@ class CeviriYoneticisi:
             except _Iptal:
                 (sonuc[m],) = (await self._ucustaki([m], kaynak, hedef, aciklama, ipucu)).values()
         return sonuc
+
+    # -- PROTOKOL 19.2: iki aşamalı kalite (iyileştirme) --
+    def iyilestirebilir_mi(self) -> bool:
+        """Motor destekliyor, yedekte değil, 429 arası yok ve dakikalık sınır dolmadı."""
+        if not getattr(self.birincil, "iyilestirme_destekler", False) or self.yedekte:
+            return False
+        simdi = time.monotonic()
+        if simdi < self._iyi_durak:
+            return False
+        return len(self._iyi_zamanlar) < IYILESTIRME_DAKIKA or simdi - self._iyi_zamanlar[0] >= 60.0
+
+    async def iyilestir(self, metin: str, taslak: str, kaynak: str = "otomatik", hedef: str = "tr",
+                        konusan: str | None = None) -> Ceviri | None:
+        """Derin ikinci geçiş. Anlamlı biçimde daha farklı (iyi) bir çeviri dönerse onu, yoksa None.
+        Her satır oturumda en çok bir kez; sonuç hafızaya/önbelleğe yazılır. Hata hiçbir zaman dışarı taşmaz."""
+        n = normallestir(metin)
+        if not n or n in self._iyilestirilen or not self.iyilestirebilir_mi():
+            return None
+        self._iyilestirilen.add(n)
+        self.iyilestirme_istek += 1
+        self._iyi_zamanlar.append(time.monotonic())
+        baglam = self._baglam()
+        baglam.derin = True
+        baglam.ipucu = "\n\n".join(x for x in (self.konusan_ipucu(konusan), iyilestirme_ipucu(taslak)) if x)
+        try:
+            (c,) = await self._cagir(self.birincil, [metin], kaynak, hedef, False, baglam)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:   # noqa: BLE001 — iyileştirme isteğe bağlıdır: ilk çeviri kalır
+            log.info("İyileştirme yapılamadı (%s)", type(e).__name__)
+            if isinstance(e, AgHatasi) and "429" in str(e):
+                self._iyi_durak = time.monotonic() + IYILESTIRME_DURAK_SN
+            return None
+        yeni = dugmeler.dugme_koru(metin, sozluk_mod.son_kontrol(metin, c.metin, self.terimler))
+        if not yeni.strip() or normallestir(yeni) == n or not anlamli_fark(taslak, yeni):
+            return None
+        if self.onbellek:
+            self.onbellek.koy(metin, kaynak, hedef, self.oyun, yeni, None, False)
+        if self.hafiza:
+            self.hafiza.kaydet(metin, yeni, "motor", getattr(self.birincil, "kod", None))
+        for g in self.gecmis:
+            if normallestir(g["asil"]) == n and g.get("kaynak") == "motor":
+                g["ceviri"] = yeni
+        self.son_satirlar = deque(((a, yeni if c2 == taslak and normallestir(a).endswith(n) else c2)
+                                   for a, c2 in self.son_satirlar), maxlen=SON_SATIR_ADEDI)
+        self.iyilestirilen_sayi += 1
+        return Ceviri(yeni, None, "motor")
 
     async def video_cevir(self, metinler: list[str], sureler: list[float], kaynak: str, hedef: str,
                           konusanlar: list[str] | None = None, onceki: list[tuple[str, str]] | None = None,

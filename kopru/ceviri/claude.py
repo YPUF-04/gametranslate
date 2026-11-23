@@ -8,6 +8,8 @@ from . import istem
 from .temel import AgHatasi, AnahtarHatasi, Baglam, Ceviri, ModelBulunamadi, MotorHatasi
 
 MODELLER = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+DERIN_MODEL = "claude-opus-5-5"   # PROTOKOL 19.2: iyileştirme isteği en güçlü modelle
+DERIN_SN = 15.0
 
 
 class ClaudeMotoru:
@@ -17,6 +19,7 @@ class ClaudeMotoru:
     cevrimdisi = False
     ucretsiz = False
     baglam_destekler = True
+    iyilestirme_destekler = True   # PROTOKOL 19.2
 
     def __init__(self, anahtar: str | None, model: str = MODELLER[0], istemci: Any = None) -> None:
         self._anahtar = anahtar
@@ -39,13 +42,16 @@ class ClaudeMotoru:
         if not metinler:
             return []
         istemci = self._al()
+        derin = baglam is not None and baglam.derin
+        ek: dict[str, Any] = {"timeout": DERIN_SN} if derin else {}
         try:
             yanit = await istemci.messages.create(
-                model=self.model,
+                model=DERIN_MODEL if derin else self.model,
                 max_tokens=2000,
-                output_config={"effort": "low"},
+                output_config={"effort": "medium" if derin else "low"},
                 system=istem.sistem_bloklari(kaynak, hedef, sozluk, aciklama, baglam),
                 messages=[{"role": "user", "content": istem.kullanici_metni(metinler, baglam)}],
+                **ek,
             )
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
             raise AnahtarHatasi("claude") from e

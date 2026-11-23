@@ -15,7 +15,7 @@ from .temel import Baglam, Ceviri
 DIL_ADLARI = {"tr": "Turkish", "en": "English", "de": "German", "fr": "French",
               "es": "Spanish", "it": "Italian", "ru": "Russian", "ja": "Japanese",
               "ko": "Korean", "zh": "Chinese", "pt": "Portuguese", "pl": "Polish"}
-SON_SATIR_ADEDI = 6
+SON_SATIR_ADEDI = 8   # PROTOKOL 19.1: sahne bağlamı
 
 
 def dil_adi(kod: str) -> str:
@@ -50,6 +50,19 @@ def _oyun_blogu(b: Baglam) -> str:
         satirlar.append("Characters (keep these names; use the gender for gendered words):\n" +
                         "\n".join(kar))
     return "\n".join(satirlar)
+
+
+# PROTOKOL 19.1: elle yazılmış kısa örnekler (sokak ağzı, küfür, şaka, görev, menü, düğme, para). Kararlı kısımdadır.
+ORNEKLER: tuple[tuple[str, str], ...] = (
+    ("Don't even trip, I got this.", "Hiç kafana takma, ben hallederim."),
+    ("Get the fuck outta my car, man!", "Siktir git arabamdan lan!"),
+    ("That's gonna cost you five grand.", "Bu sana beş bin dolara patlar."),
+    ("He drives like my grandma, and she's been dead ten years.", "Ninem gibi sürüyor, ninem de on yıldır ölü."),
+    ("Sir, I'm gonna need you to step out of the vehicle.", "Beyefendi, araçtan inmeniz gerekiyor."),
+    ("Lose the cops.", "Polisleri atlat."),
+    ("Press ✕ to steal the car.", "Arabayı çalmak için ✕'e bas."),
+    ("Resume Game", "Oyuna Devam Et"),
+)
 
 
 def sabit_istem(kaynak: str, hedef: str, sozluk: dict[str, str], aciklama: bool,
@@ -113,13 +126,32 @@ def sabit_istem(kaynak: str, hedef: str, sozluk: dict[str, str], aciklama: bool,
             "- If the speaker (and gender) of the line is given, use it only where Turkish needs it (gendered "
             "words, how others address them); never add the speaker's name to the translation.\n"
             "- Do not put a space before punctuation; use proper Turkish apostrophes for "
-            "suffixes on names (Ellie'nin, Joel'e).")
+            "suffixes on names (Ellie'nin, Joel'e).\n"
+            "- Street talk: natural Turkish street register, never forced or cringe; use slang only where the "
+            "speaker talks that way (bro/homie/dawg => kanka/birader, cops/5-0 => aynasızlar/polisler, "
+            "grand => bin dolar, my bad => pardon, benim hatam, no cap => yemin ederim, chill => sakin ol). "
+            "Jokes and insults must land in Turkish: translate the intent, not the words.\n"
+            "- Profanity keeps EXACTLY the same intensity: damn => lanet olsun, shit => siktir/kahretsin, "
+            "fuck/fucking => siktir/amına koyayım (only when that strong), asshole => şerefsiz, "
+            "motherfucker => orospu çocuğu. Never soften, never add swearing that is not there.\n"
+            "- Numbers as digits; money in speech: $500 => 500 dolar, five grand => beş bin dolar; keep $ and "
+            "amounts unchanged in HUD/menu text. Keep the game's units (miles, feet, pounds) and times as written.\n"
+            "- Line length: max 42 characters per line, max 2 lines; break at a natural phrase boundary with \\n, "
+            "lines roughly balanced. Prefer a shorter natural paraphrase over a long literal one.\n"
+            "- Avoid calques: \"make sense\" => mantıklı olmak (not anlam yapmak), \"take care\" => kendine iyi bak, "
+            "\"I'm on it\" => hallediyorum, \"we got company\" => misafirimiz var / birileri geliyor.\n"
+            "EXAMPLES (source => translation)\n"
+            + "\n".join(f"- {a} => {b}" for a, b in ORNEKLER))
     oyun = _oyun_blogu(baglam) if baglam else ""
     if oyun:
         p.append("GAME INFO\n" + oyun)
     if sozluk:
         p.append("GLOSSARY (source => required form; always use exactly this):\n" +
                  "\n".join(f"- {a} => {c}" for a, c in sorted(sozluk.items())))
+    bilinen = {a: c for a, c in (baglam.bilinen_adlar.items() if baglam else ()) if a not in (sozluk or {})}
+    if bilinen:
+        p.append("KNOWN NAMES (learned in this session; keep exactly this form):\n" +
+                 "\n".join(f"- {_kes(a, 60)} => {_kes(c, 60)}" for a, c in sorted(bilinen.items())[:60]))
     if aciklama:
         p.append('EXPLANATION MODE: for each line also give a VERY short hint in the target '
                  'language (max 60 characters, e.g. "Görev: üsse geri dön"); use an empty '
@@ -147,9 +179,41 @@ def degisken_baglam(baglam: Baglam | None) -> str:
     if baglam.son_satirlar:
         satirlar = [f"{i}. {_kes(a, 300)}  =>  {_kes(c, 300)}"
                     for i, (a, c) in enumerate(baglam.son_satirlar[-SON_SATIR_ADEDI:], 1)]
-        parcalar.append("Recent subtitle lines, oldest first (source => translation), for context only:\n" +
-                        "\n".join(satirlar))
+        parcalar.append("Recent subtitle lines of this scene, oldest first (SPEAKER: source => translation), "
+                        "for context only:\n" + "\n".join(satirlar))
+    if baglam.hitaplar:
+        parcalar.append("Address memory (speaker -> listener: Turkish address form used so far; keep it unless "
+                        "the relationship clearly changes):\n" +
+                        "\n".join(f"- {_kes(a, 40)} -> {_kes(b, 40)}: {f}" for a, b, f in baglam.hitaplar[-12:]))
     return "\n\n".join(parcalar)
+
+
+def iyilestirme_ipucu(taslak: str) -> str:
+    """PROTOKOL 19.2: ikinci (derin) geçiş; taslak iyiyse AYNEN döndürülür."""
+    return ("REVIEW MODE: a fast draft translation of this line is already on screen: "
+            f'"{_kes(taslak, 400)}". Translate the line again carefully, as a senior game subtitler: exact '
+            "meaning, natural spoken Turkish, same register and swearing intensity, consistent names, gender and "
+            "address form with the scene. If the draft is already correct and natural, return it EXACTLY "
+            "unchanged. Change it only for a real improvement (meaning, naturalness, tone, consistency), never "
+            "just for a synonym or punctuation.")
+
+
+_SIZ = re.compile(r"\b(?:siz|sizi|size|sizin|sizinle|sizden|sizce)\b|\w(?:sınız|siniz|sunuz|sünüz)\b|"
+                  r"\w(?:ınız|iniz|unuz|ünüz)(?:la|le|da|de|a|e|ı|i|u|ü)?\b|\b(?:efendim|beyefendi|hanımefendi)\b",
+                  re.IGNORECASE)
+_SEN = re.compile(r"\b(?:sen|seni|sana|senin|seninle|senden|sence)\b|\w(?:sın|sin|sun|sün)\b|"
+                  r"\b(?:kanka|lan|ulan|birader|dostum|oğlum|kızım)\b", re.IGNORECASE)
+
+
+def hitap_sez(ceviri: str) -> str | None:
+    """Türkçe çevirinin hitabı (sen/siz) — basit ek sayımı; emin değilse None (PROTOKOL 19.1)."""
+    t = ceviri.casefold().replace("i̇", "i")
+    siz, sen = len(_SIZ.findall(t)), len(_SEN.findall(t))
+    if siz > sen:
+        return "siz"
+    if sen > siz:
+        return "sen"
+    return None
 
 
 def sistem_istemi(kaynak: str, hedef: str, sozluk: dict[str, str], aciklama: bool,

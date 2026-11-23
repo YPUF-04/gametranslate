@@ -51,7 +51,68 @@ BOYUT_MIN_PX, BOYUT_MAX_PX = 12.0, 22.0   # §12.4: 1080p'de ekran öğesi yazı
 BOYUT_ORANI = 0.75                        # §12.4: kaynak satır yüksekliğinin 0.75'i
 _KELIME = re.compile(r"\w+", re.UNICODE)
 _KONUSMA_TEKRARI = re.compile(r"\b(\w+), (\1)\b", re.UNICODE | re.IGNORECASE)
-_KONUSAN = re.compile(r"^([A-ZÇĞİÖŞÜ][\w'. -]{0,24}):\s+(\S.*)$", re.UNICODE)
+_KONUSAN = re.compile(r"^([A-ZÇĞİÖŞÜ][\w'. -]{0,24})\s?[:：]\s+(\S.*)$", re.UNICODE)
+_KONUSAN_BITISIK = re.compile(r"^([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ'. -]{1,24})[:：](\S.*)$", re.UNICODE)   # "LUCIA:Hey" (yalnız büyük harf ad)
+_KONUSAN_KOSELI = re.compile(r"^\[([A-ZÇĞİÖŞÜ][\w'.-]*(?: [\w'.-]+){0,2})\]\s*(\S.*)$", re.UNICODE)   # "[Lucia] Hey"
+# §19.2: iyileştirme eşikleri (sn): ekranda bu kadar kalan satır/öğe derin geçişle bir kez daha çevrilir
+IYILESTIRME_ESIK = {"dengeli": (2.5, 2.5), "en_iyi": (1.2, 2.5)}
+# §19.3: okuma karışıklıkları (temkinli)
+_CUMLE_SONU = re.compile(r"[.!?…\"”')\]]\s*$")
+_TEK_L = re.compile(r"(?<![\w'’|])l(?=(?:['’](?:m|ll|ve|d)\b)|(?![\w'’]))")
+_DIKEY = re.compile(r"(?:(?<=^)|(?<=[\s\"“]))\|(?=['’](?:m|ll|ve|d)\b| [a-z])")   # "| know" → "I know"; "A | B" dokunulmaz
+_SIFIR = re.compile(r"(?<=[A-Za-z])0(?=[A-Za-z])")
+_RN_KELIME = re.compile(r"\b[A-Za-z]*[rR][nN][A-Za-z]*\b")
+_M_KELIMELER = frozenset("""me my more most some come came time times name names home from man men make makes made must
+might money mission missions move moved moving moment mom damn them him game games same team member remember small smoke
+mean means meet mind mine minute minutes miss missed mister mother much myself maybe many mark market mate matter may meant
+meeting message middle mile miles military milk million mistake model monster month mouth movie music camera family forms
+emergency woman women warm room rooms seem seems system something sometimes somebody someone somewhere welcome become
+became problem problems number numbers simple sample summer image times anymore anytime crime crimes crimewave homie homies
+homeboy dummy army arm arms farm harm alarm storm term terms firm calm palm drama karma gamer mayor""".split())
+
+
+def _buyukluk(ornek: str, kelime: str) -> str:
+    return kelime.upper() if ornek.isupper() and len(ornek) > 1 else (kelime.capitalize() if ornek[:1].isupper() else kelime)
+
+
+def _rn_duzelt(m: "re.Match[str]") -> str:
+    w = m.group(0)
+    lw = w.lower()
+    if lw in _M_KELIMELER:
+        return w
+    adaylar = [lw.replace("rn", "m")] + [lw[:i] + "m" + lw[i + 2:] for i in range(len(lw) - 1) if lw[i:i + 2] == "rn"]
+    for a in adaylar:
+        if a in _M_KELIMELER:
+            return _buyukluk(w, a)
+    return w
+
+
+def ocr_duzelt(metin: str, kaynak_dil: str = "otomatik") -> str:
+    """§19.3: sık okuma karışıklıklarını temkinle düzeltir (yalnız İngilizce/otomatik kaynakta l/I ve rn/m)."""
+    m = _SIFIR.sub(lambda x: "O" if (x.string[x.start() - 1].isupper() or x.string[x.end()].isupper()) else "o", metin)
+    if kaynak_dil in ("otomatik", "en", "", "auto"):
+        m = _DIKEY.sub("I", _TEK_L.sub("I", m))
+        m = _RN_KELIME.sub(_rn_duzelt, m)
+    return m
+
+
+def satirlari_birlestir(satirlar: list[str]) -> str:
+    """§19.3: altyazı kümesinin OCR satırlarını tek cümle yapar: satır sonu tireyle bölünmüş kelime birleşir,
+    "-" ile başlayan iki konuşmacılı satırlar ayrı satırda (\n) kalır."""
+    out = ""
+    for ham in satirlar:
+        s = " ".join(ham.split())
+        if not s:
+            continue
+        if not out:
+            out = s
+        elif s[:1] in "-–" and len(s) > 1 and s[1:2] == " ":
+            out += "\n" + s
+        elif re.search(r"[A-Za-zÇĞİÖŞÜçğıöşü]-$", out) and s[:1].islower():
+            out = out[:-1] + s
+        else:
+            out += " " + s
+    return out.strip()
 
 
 def en_az_ms_ayari(ayar: dict[str, Any]) -> int:
@@ -158,8 +219,12 @@ def yazinin_ekran_kutusu(metin: str, gorunum: dict[str, Any]) -> tuple[float, fl
 
 
 def konusan_ayir(metin: str) -> tuple[str | None, str]:
-    m = _KONUSAN.match(metin)
-    return (m.group(1), m.group(2)) if m else (None, metin)
+    """"AD: metin" (iki nokta sonrası boşluksuz yalnız BÜYÜK harf adla, tam genişlik ：) ya da "[Ad] metin"."""
+    for r in (_KONUSAN, _KONUSAN_BITISIK, _KONUSAN_KOSELI):
+        m = r.match(metin)
+        if m:
+            return " ".join(m.group(1).split()), m.group(2)
+    return None, metin
 
 
 def devam_mi(eski: str, yeni: str) -> bool:
@@ -451,6 +516,8 @@ class _Oge:
     ozel: bool = False          # kullanıcının çizdiği hedef (kaynağın üstü değil)
     boyut_px: float = 14.0
     ortu: dict[str, Any] | None = None   # §16.1: kaynağın üstüne çizilirken örtü kutusu ve zemin
+    kaynak: str = "motor"       # çevirinin kaynağı (kullanıcı düzeltmesi iyileştirilmez, §19.2)
+    iyi: bool = False           # §19.2: iyileştirme denendi
 
 
 @dataclass
@@ -504,6 +571,11 @@ class Isleme:
         self._gercek_saat = saat is time.monotonic   # gerçek saatte call_later ile uyandırılır; sahte saatte dışarıdan
         self._uyanis: asyncio.TimerHandle | None = None
         self._gorunum: dict[str, Any] = {}
+        self._daktilo = False         # §19.3: son değişim büyüme miydi
+        self._ayni_kare = 0           # aday üst üste kaç karedir aynı
+        self._iyilestirmeler: set[asyncio.Task] = set()   # §19.2
+        self._iyi_ayar = "dengeli"
+        self._kaynak_dil, self._hedef_dil = "otomatik", "tr"
 
     def yeniden_oku(self) -> None:
         """§13.1 yeniden_oku: bekleyen/ekrandaki yazıları siler, hemen yeni kare okutur."""
@@ -523,9 +595,10 @@ class Isleme:
         self.yayin.yayinla("ekran-sil", {})
 
     def _gorevleri_iptal(self) -> None:
-        for g in list(self._gorevler):
+        for g in list(self._gorevler) + list(self._iyilestirmeler):
             g.cancel()
         self._gorevler.clear()
+        self._iyilestirmeler.clear()
         if self._ekran_gorevi is not None and not self._ekran_gorevi.done():
             self._ekran_gorevi.cancel()
         self._ekran_gorevi = None
@@ -688,6 +761,8 @@ class Isleme:
         ayar = self.ayar()
         self._en_az_ms = en_az_ms_ayari(ayar)
         self._gorunum = ayar.get("gorunum") or {}
+        self._iyi_ayar = ayar.get("ceviri_kalitesi", "dengeli")
+        self._kaynak_dil, self._hedef_dil = ayar.get("kaynak_dil", "otomatik"), ayar.get("hedef_dil", "tr")
         self.silmeleri_isle()
         bolgeler = bolgeleri_temizle(ayar.get("bolgeler"))
         maske = self.maske_kutulari(ayar)
@@ -797,7 +872,7 @@ class Isleme:
         self._sira.en_az_s = self._en_az_s()
         self._sira.karakter_ms = karakter_ms_ayari(ayar)
         sirali = sorted(satirlar, key=lambda s: (round(s.y, 2), s.x))
-        metin = " ".join(s.metin for s in sirali).strip()
+        metin = ocr_duzelt(satirlari_birlestir([s.metin for s in sirali]), ayar.get("kaynak_dil", "otomatik"))
         if len(metin) > EN_COK_ALTYAZI_KARAKTER:
             metin = ""     # ekranın yazı dolu bir yerine denk gelindi (menü/harita): altyazı sayılmaz
         aday = normallestir(metin)
@@ -811,6 +886,13 @@ class Isleme:
                 and aday == son.ek.get("norm"):
             son.git, son.git_tur = None, ""   # kaynak silinmeden geri geldi: aynı yazı kalır
         acik = self._acik_satir()
+        if aday and aday == self._aday_onceki:
+            self._ayni_kare += 1
+        else:
+            # §19.3: daktilo — metin bir önceki karenin uzantısı olarak büyüyor
+            self._daktilo = bool(aday and self._aday_onceki and aday != self._aday_onceki
+                                 and aday.startswith(self._aday_onceki))
+            self._ayni_kare = 0
         if aday:
             self._gel_izle(aday, t)
             self._kayip, self._ilk_kayip = 0, None
@@ -819,7 +901,8 @@ class Isleme:
             elif self._hatali is not None and aday == self._hatali[0] and simdi - self._hatali[1] < HATA_TEKRAR_SN:
                 pass   # az önce çevrilemedi: her karede yeniden istek atılmaz
             elif aday == self._aday_onceki:
-                self._kesinlestir(metin, aday, ayar)
+                if not (self._daktilo and self._ayni_kare < 2 and not _CUMLE_SONU.search(metin)):
+                    self._kesinlestir(metin, aday, ayar)   # §19.3: büyüyen, bitmemiş cümle bir kare daha bekler
             else:
                 self._ilk_gorulme(metin, aday, ayar)
         else:
@@ -1008,7 +1091,9 @@ class Isleme:
         return {"kare_ms": int(round(self._olcum_kare["kare_ms"])), "okuma_ms": int(round(self._olcum_kare["okuma_ms"])),
                 "kararlilik_ms": orta("kararlilik_ms"), "ceviri_ms": orta("ceviri_ms"),
                 "bekleme_ms": orta("bekleme_ms"), "toplam_ms": orta("toplam_ms"),
-                "kuyruk": len(self._sira.bekleyenler()), "atlanan": self._basarisiz, "olcum": len(self._olcumler)}
+                "kuyruk": len(self._sira.bekleyenler()), "atlanan": self._basarisiz, "olcum": len(self._olcumler),
+                "iyilestirme_istek": int(getattr(self.yonetici, "iyilestirme_istek", 0) or 0),
+                "iyilestirilen": int(getattr(self.yonetici, "iyilestirilen_sayi", 0) or 0)}
 
     # -- örtü (§16.1/16.2) --
     def _ortu_kaynagi(self) -> dict[str, Any] | None:
@@ -1047,7 +1132,54 @@ class Isleme:
         if kalkan:
             self._ogeler = [e for e in self._ogeler if e not in kalkan]
             self._ekran_yayinla()
+        self._iyilestirme_denetle(simdi)
         self._uyan_kur()
+
+    # -- §19.2: iki aşamalı kalite --
+    def _iyilestirme_denetle(self, simdi: float) -> None:
+        esik = IYILESTIRME_ESIK.get(self._iyi_ayar)
+        y = self.yonetici
+        if esik is None or not hasattr(y, "iyilestir") or not y.iyilestirebilir_mi():
+            return
+        if any(not g.done() for g in self._gorevler) or self._sira.bekleyenler():
+            return   # ilk çeviriler önce: kuyrukta iş varken iyileştirme beklenir (gecikme artmasın)
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        s = self._sira.gosterilen
+        if s is not None and s.metin and s.goster is not None and not s.ek.get("iyi_denendi") \
+                and s.ek.get("kaynak_tur", "motor") == "motor" and simdi - s.goster >= esik[0] - 1e-9:
+            s.ek["iyi_denendi"] = True
+            self._iyilestirme_baslat(self._satir_iyilestir(s, s.ek.get("govde", ""), s.metin, s.ek.get("konusan")))
+        for e in self._ogeler:
+            if not e.iyi and e.sil_an is None and e.kaynak == "motor" and simdi - e.hazir >= esik[1] - 1e-9:
+                e.iyi = True
+                self._iyilestirme_baslat(self._oge_iyilestir(e, e.asil, e.metin))
+
+    def _iyilestirme_baslat(self, coro: Any) -> None:
+        g = asyncio.get_running_loop().create_task(coro)
+        self._iyilestirmeler.add(g)
+        g.add_done_callback(self._iyilestirmeler.discard)
+        g.add_done_callback(_sessiz)
+
+    async def _satir_iyilestir(self, s: SiraSatiri, govde: str, taslak: str, konusan: str | None) -> None:
+        c = await self.yonetici.iyilestir(govde, taslak, self._kaynak_dil, self._hedef_dil, konusan)
+        if c is None or s.ek.get("govde") != govde or s.metin != taslak or s not in self._sira.satirlar:
+            return   # satır bu arada büyüdü/değişti/kalktı (sonuç yine hafızada)
+        s.ek["ceviri"] = c
+        s.metin = c.metin
+        if s is self._sira.gosterilen:
+            s.guncel = True   # aynı id ile yerinde (yazi devam:true); kuyruk ve zamanlama değişmez
+        self._sira_isle()
+
+    async def _oge_iyilestir(self, e: "_Oge", asil: str, taslak: str) -> None:
+        c = await self.yonetici.iyilestir(asil, taslak, self._kaynak_dil, self._hedef_dil)
+        if c is None or e not in self._ogeler or e.asil != asil or e.metin != taslak:
+            return
+        e.metin = c.metin
+        self._ceviri_kaydet(asil, c.metin)
+        self._ekran_yayinla()
 
     def _sonraki_an(self) -> float | None:
         adaylar = [e.sil_an for e in self._ogeler if e.sil_an is not None]
@@ -1142,10 +1274,12 @@ class Isleme:
                 eski.ortu = None if ozel else self._oge_ortusu(o)
                 eski.kayip, eski.ilk_kayip, eski.sil_an = 0, None, None
                 eski.gel, eski.hazir = gel_t, hazir_an
+                eski.kaynak, eski.iyi = getattr(c, "kaynak", "motor"), False
             else:
                 self._ogeler.append(_Oge(self._yeni_id("o"), n, o.metin, o.x, o.y, o.g, o.y2, tur,
                                          c.metin, aciklama, gel=gel_t, hazir=hazir_an, hedef=kutu,
-                                         ozel=ozel, boyut_px=hz[1], ortu=None if ozel else self._oge_ortusu(o)))
+                                         ozel=ozel, boyut_px=hz[1], ortu=None if ozel else self._oge_ortusu(o),
+                                         kaynak=getattr(c, "kaynak", "motor")))
             self._ceviri_kaydet(o.metin, c.metin)
             degisti = True
         kalan = [e for e in self._ogeler if e.sil_an is None or self.saat() < e.sil_an - 1e-9]
@@ -1173,7 +1307,8 @@ class Isleme:
         sonuc: dict[int, Any] = {}
         for idx, ac in ((duz, False), (acikli, True)):
             if idx:
-                gelen = await self.yonetici.cevir([kesin[i][1].metin for i in idx],
+                gelen = await self.yonetici.cevir([ocr_duzelt(kesin[i][1].metin, ayar.get("kaynak_dil", "otomatik"))
+                                                   for i in idx],
                                                   ayar["kaynak_dil"], ayar["hedef_dil"], ac)
                 sonuc.update(zip(idx, gelen))
         self.durum_hatasi = None

@@ -202,7 +202,7 @@ Kullanıcı verisi (ayarlar `%APPDATA%\AltyaziKoprusu`, dublaj paketi `%LOCALAPP
 | GET | `/api/guncelleme` | `{"var":true,"surum":"0.3.0","notlar":"...","boyut_mb":48,"boyut_bayt":50331648,"yalniz_degisenler":false,"ilerleme":0,"asama":"bosta"\|"indiriliyor"\|"dogrulaniyor"\|"baslatiliyor"\|"hata","mesaj":"...","mevcut":"0.2.0","denetim_acik":true,"baglanti":"https://github.com/.../releases/latest"}`. Yeni sürüm yoksa `{"var":false,"neden":"guncel"\|"kapali"\|"bekleniyor"}`. Windows dışında `{"var":false,"neden":"desteklenmiyor","mesaj":"...","baglanti":"..."}`. Gerekirse arka planda (günde en çok 1 kez) GitHub'a bakar. Velopack yolunda `boyut_bayt`/`boyut_mb` yalnız indirilecek delta paketlerinin toplamıdır (delta yoksa tam paket) ve `yalniz_degisenler:true` olur |
 | POST | `/api/guncelleme/denetle` | Kullanıcı elle bastı: ayar kapalı olsa da bir kez bakar; `GET` ile aynı gövdeyi döner |
 | POST | `/api/guncelleme/kur` | İndirmeyi başlatır; `ilerleme` 0-100. Eski yol: `SHA256SUMS.txt` ile doğrulanamazsa kurulmaz (`asama:"hata"`); doğrulanırsa kurucu `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /GUNCELLEME=1` ile başlar ve sunucu kapanır. Velopack yolu: delta indirilir (`indiriliyor`), sonra `baslatiliyor` ve `UpdateManager.apply_updates_and_restart`; sunucu kapanır, program yeni sürümle açılır. İndirme/uygulama hatasında program açık kalır (`asama:"hata"`) |
-| POST | `/api/tv/lg/kur` | `{"ip":"192.168.1.30","parola":"ABC123","paket":"asil"\|"deneme"\|"acgsiz"}` → arka planda kurar. Yalnız yerel ağ IPv4. Parola/anahtar hiçbir yere yazılmaz |
+| POST | `/api/tv/lg/kur` | `{"ip":"192.168.1.30","parola":"ABC123","paket":"asil"\|"deneme"\|"acgsiz"\|"oturum"}` → arka planda kurar (`oturum`: kurmadan yalnız geliştirici modu belirtecini okur, §18.6). Yalnız yerel ağ IPv4. Parola/anahtar hiçbir yere yazılmaz |
 | GET | `/api/tv/lg/durum` | `{"asama":"bosta"\|"anahtar"\|"baglaniyor"\|"yukleniyor"\|"kuruluyor"\|"bitti"\|"hata","mesaj":"...","ayrinti":"ham hata metni"}` |
 
 Eski yolda güncelleme adresleri yalnız `https` ve `github.com`, `api.github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` olabilir (yönlendirmeler dahil her adımda denetlenir). Velopack yolunun kaynağı kodda sabittir (yalnız bu deponun GitHub Sürümleri); Velopack Flow/telemetri kullanılmaz.
@@ -711,7 +711,8 @@ yanına/altına çıkıyordu, düğme simgeleri kayboluyordu, HUD simgeleri çev
   (en çok kutu yüksekliği / satır × 0,8) küçültür; en çok 2 satır (kaynak daha çok satırlıysa o kadar), yalnız
   boşlukta bölünür. En az okunur boy 1080p'de 16 px (ekran öğesinde 12 px); o boyda da sığmazsa kutu aşağı
   ve sağa doğru büyür (ekran dışına taşmaz; kenarda ise içeri kayar), İngilizce yine örtülü kalır.
-- LG TV uygulaması `ortak.js`'i paketin içinde taşır: örtü için TV uygulaması bir kez yeniden kurulur (panelden tek tuş);
+- LG TV uygulaması (0.1.x) `ortak.js`'i paketin içinde taşır: örtü için TV uygulaması bir kez yeniden kurulur (panelden tek tuş;
+  §18'den sonra bu son kurulumdur, uygulama artık bilgisayardan güncellenir);
   eski uygulama `ortu` alanını tanımaz ve eski çubuğu çizer (geriye uyumlu).
   `ortu` yoksa eski çizim (§7.2/§12.4) aynen kullanılır.
 - Örtme modunda "önceki satır" (§7.2/7) gösterilmez (eski yazının yerinde zaten yenisi vardır).
@@ -1001,13 +1002,15 @@ Sahibin isteği: "aşırı iyi, profesyonel çevirsin" — gecikmeyi artırmadan
     için bir kez; `en_iyi`: altyazıda **1,2 sn**, öğede 2,5 sn; `hizli`: hiç.
   - Yalnız motor desteklerse (Claude, Gemini, DeepSeek; yerel/DeepL/sahte hayır), yedekteyken değil, kaynak `motor` iken
     (kullanıcı düzeltmesi/paket iyileştirilmez) ve satır bu oturumda henüz iyileştirilmediyse.
+  - Gecikme ve kota önce ilk çeviriye: kuyrukta bekleyen ya da süren bir ilk çeviri varken iyileştirme başlamaz (sonraki
+    karede yeniden bakılır); dakikada en çok **8** iyileştirme isteği; iyileştirme `429` alırsa 60 sn ara verilir.
   - İyileştirme isteği "derin" kiptedir: Gemini aynı modelde daha çok düşünme (`thinkingLevel:"medium"`, 15 sn),
     Claude `claude-opus-5-5` + `effort:"medium"` (15 sn), DeepSeek aynı model. İstemde ilk taslak verilir; model taslak
     iyiyse **aynen** döndürür.
   - Sonuç yalnız **anlamlı biçimde farklıysa** (normalize metin farklı ve benzerlik < 0,98) uygulanır: satır hâlâ
     gösteriliyorsa aynı `id` ile `yazi {"devam":true}` (yerinde, titreme yok); kuyrukta bekliyorsa metni değişir; çoktan
-    kalktıysa yalnız hafızaya/önbelleğe yazılır. Aynı metin asla yeniden yayınlanmaz. Kuyruk sırası ve zamanlama (§16.4)
-    değişmez; iyileştirme süreyi uzatmaz.
+    kalktıysa yalnız hafızaya/önbelleğe yazılır. Aynı metin asla yeniden yayınlanmaz. Kuyruk sırası ve zamanlama kuralları (§16.4)
+    aynen uygulanır (okuma tabanı yeni metnin uzunluğuyla hesaplanır); iyileştirme hiçbir satırı bekletmez.
   - İyileştirilmiş çeviri hafızaya (`motor`) ve önbelleğe yazılır; aynı satır bir daha geldiğinde hemen iyi hâli çıkar.
 - `GET /api/durum` `gecikme` içine `iyilestirilen` (değişen satır sayısı) ve `iyilestirme_istek` eklenir.
 

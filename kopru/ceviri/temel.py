@@ -46,6 +46,10 @@ class Baglam:
     son_satirlar: list[tuple[str, str]] = field(default_factory=list)  # (asil, ceviri)
     yeni_terimler: list[dict] = field(default_factory=list)  # motor doldurur: [{"asil","ceviri"}]
     ipucu: str = ""   # dublaj: "söylenebilir, süreye sığan kısa Türkçe" isteği (her istekte değişir)
+    # PROTOKOL 19.1: hitap hafızası [(konuşan, dinleyen, "sen"|"siz")] ve oturumda öğrenilen adlar
+    hitaplar: list[tuple[str, str, str]] = field(default_factory=list)
+    bilinen_adlar: dict[str, str] = field(default_factory=dict)
+    derin: bool = False   # PROTOKOL 19.2: iyileştirme isteği (daha çok düşünme / daha güçlü model)
 
 
 class CeviriMotoru(Protocol):

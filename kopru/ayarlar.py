@@ -36,6 +36,7 @@ VARSAYILAN: dict[str, Any] = {
     "yedek_motor": "yerel",
     "modeller": {},          # boş = `kalite` modeli seçer; yazılan model kaliteyi ezer
     "kalite": "en_iyi",      # en_iyi | dengeli | hizli
+    "ceviri_kalitesi": "dengeli",   # PROTOKOL 19.2: hizli | dengeli (iki aşamalı, önerilen) | en_iyi
     "hafiza_izni": None,     # None (sorulmadı) | True | False
     "guncelleme_denetle": True,  # günde en çok bir kez GitHub'a "yeni sürüm var mı" diye sorar
 
@@ -259,6 +260,8 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
         s["katman_ekran"] = v["katman_ekran"]
     if s["kalite"] not in ("en_iyi", "dengeli", "hizli"):
         s["kalite"] = v["kalite"]
+    if s["ceviri_kalitesi"] not in ("en_iyi", "dengeli", "hizli"):
+        s["ceviri_kalitesi"] = v["ceviri_kalitesi"]
     for alan in ("motor",):
         if not s[alan].strip():
             s[alan] = v[alan]

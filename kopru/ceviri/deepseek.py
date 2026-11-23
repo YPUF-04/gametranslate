@@ -17,6 +17,7 @@ class DeepSeekMotoru:
     cevrimdisi = False
     ucretsiz = False
     baglam_destekler = True
+    iyilestirme_destekler = True   # PROTOKOL 19.2 (aynı model, daha uzun süre)
 
     def __init__(self, anahtar: str | None, model: str = "deepseek-chat") -> None:
         self._anahtar = anahtar
@@ -38,7 +39,9 @@ class DeepSeekMotoru:
             "stream": False,
             "response_format": {"type": "json_object"},
         }
-        veri = await _http.post_json(URL, govde, {"Authorization": f"Bearer {self._anahtar}"})
+        derin = baglam is not None and baglam.derin
+        veri = await _http.post_json(URL, govde, {"Authorization": f"Bearer {self._anahtar}"},
+                                     **({"zaman_asimi": 15.0} if derin else {}))
         try:
             sonuc, terimler = istem.yaniti_coz_tam(veri["choices"][0]["message"]["content"],
                                                    len(metinler), aciklama)

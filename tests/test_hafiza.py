@@ -299,7 +299,7 @@ def test_istem_baglam_sozluk_hitap():
     ac = istem.sistem_istemi("en", "tr", {}, True, b)
     assert "60 characters" in ac
     b.son_satirlar = [(f"a{i}", f"c{i}") for i in range(10)]
-    assert "a3" not in istem.kullanici_metni(["x"], b) and "a9" in istem.kullanici_metni(["x"], b)
+    assert "a1" not in istem.kullanici_metni(["x"], b) and "a2" in istem.kullanici_metni(["x"], b) and "a9" in istem.kullanici_metni(["x"], b)
 
 
 def test_yanit_cozme_esnek():
