@@ -1,21 +1,18 @@
 # Sürüm notları
 
-## Sonraki sürüm — altyazı sınırsız, dublaj "+30 dk" ile (henüz yayınlanmadı)
+## 0.1.3 — Altyazı sınırsız, dublaj "+30 dk", çeviri İngilizcenin üstünü kaplar (2026-11-23)
 - **Altyazı çevirisi artık herkese sınırsız ve ücretsiz.** Günlük 30 dakika sınırı kalktı.
 - **Türkçe dublaj süreyle çalışır:** panelde **"+30 dk ekle"**ye bas, kısa bir reklam (ya da 15 saniyelik teşekkür ekranı) izle, 30 dakika dublaj kazan. Üst üste ekleyebilirsin (en fazla 4 saat). Süre yalnız dublaj çalışırken azalır; program kapanınca silinir.
 - **Reklam TV'de de oynar:** LG TV uygulaması açıksa reklam oyunun üstünde kısa süre tam ekran oynar. **LG TV uygulamasını bir kez yeniden kur** (panelde **TV'ye kur**).
 - **Süre bitince** dublaj sakince durur, altyazılar devam eder.
 - **Reklam izni:** reklam şirketinin reklamı yalnız izin verirsen açılır; vermezsen hiçbir yere bilgi göndermeyen teşekkür ekranı çıkar. Ayarlardan her an değiştirilebilir.
 - **Sınırsız dublaj kodu:** Erişim kartındaki **cihaz numaranı** gönder, sana özel kodu yaz; o bilgisayarda dublaj kalıcı olarak sınırsız olur. Eski kodlar da çalışır.
-
-## 0.1.3 — Çeviri İngilizcenin üstünü kaplar, cümle atlamaz (2026-11-22)
 - **Çeviri İngilizce yazının tam üstüne gelir** ve onu kaplar; yazı kutuya sığacak boyutta olur. (Eski görünüm için: Ayarlar → Yazı nerede? → Altta.)
 - **Kol tuşları kapanmaz:** ✕ ○ △ □, R2, OPTIONS gibi tuş işaretleri olduğu gibi kalır.
 - **Simgeler ve emojiler çevrilmez:** yalnız gerçek kelimeler çevrilir; can barı, sayaç, koordinat gibi şeyler atlanır.
 - **Hızlı konuşmada cümle atlamaz:** çeviriler sırayla ve daha hızlı gelir; her cümle okunacak kadar ekranda kalır.
 - **Güncelleme bildirimi:** yeni sürüm çıkınca en üstte "Yeni sürüm var, indirmek ister misin?" ve "Neler yeni?" listesi çıkar.
 - **Küçük güncellemeler:** bundan sonraki güncellemeler yalnız değişen parçaları indirir.
-- **LG TV uygulamasını bir kez yeniden kur:** yeni görünüm için panelde **TV'ye kur**'a bir kez daha bas.
 
 ## 0.1.2 — LG TV kurulum düzeltmesi (2026-11-22)
 (0.1.1'in kurulum dosyaları üretilemedi; aynı düzeltme bu sürümle geliyor.)
