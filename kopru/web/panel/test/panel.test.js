@@ -61,7 +61,9 @@ function sahteSunucu() {
     ceviriler: [{ id: 'a1', asil: 'Where were you last night?', ceviri: 'Dün gece neredeydin?', kaynak: 'motor' }, { id: 'a2', asil: 'Head back to the safehouse.', ceviri: 'Güvenli eve dön.', kaynak: 'motor' }],
     oneriler: [{ asil: 'Vice City', ceviri: 'Vice City' }],
     guncelleme: { ilerleme: 0, asama: 'bosta' }, tvIstekleri: [], tvKuyruk: [], tvSon: { asama: 'bosta', mesaj: '', ayrinti: '' },
-    erisim: { kalan_dakika: 12, kod: null, bitis: null, ucretsiz_dakika: 30 }, sinir: false, kodlar: [],
+    erisim: { altyazi: 'sinirsiz', dublaj: { sinirsiz: false, kalan_sn: 0, kalan_dakika: 0, aktif: false, durdu: false, ekle_dakika: 30, en_cok_dakika: 240, ekleyebilir: true },
+      kod: null, bitis: null, cihaz: 'ABCDE-FGHJK', tv_reklam: false, vast_var: true, reklam_izni: null, reklam: null }, sinir: false, kodlar: [],
+    reklamBaslat: [], reklamBitti: [], tvReklam: false, reklamBas: 0,
     dublajHazir: false, dublajIndirme: { durum: 'bosta', yuzde: 0, hata: null }, dublajDene: [],
     paket: { durum: 'yok', kurulu: false, tamam: false, gelistirici: false, indirme_mb: 8800, disk_mb: 12760, asama: null, yuzde: 0, mesaj: null, hata: null,
       konum: 'C:\\Users\\Oyuncu\\AppData\\Local\\AltYaziKoprusu\\dublaj-ortami', destek: true,
@@ -138,11 +140,30 @@ function sahteSunucu() {
         case 'POST /api/motor/yerel/hazirla': st.yerelHazirla++; st.yerel.indirme = { durum: 'iniyor', yuzde: 0, mesaj: null }; return j(st.yerel);
         case 'GET /api/ekran-katmani': return j(Object.assign({}, st.katman, { ekran: st.ayarlar.katman_ekran || 1 }));
         case 'POST /api/ekran-katmani/dene': st.katmanDene.push(b); return j({ tamam: true, sure_ms: 4000 });
-        case 'GET /api/erisim': return j(st.erisim);
+        case 'GET /api/erisim': return j(Object.assign({}, st.erisim, { reklam_izni: (st.ayarlar.erisim || {}).reklam_izni == null ? null : st.ayarlar.erisim.reklam_izni }));
         case 'POST /api/erisim':
           st.kodlar.push(b.kod);
-          if (b.kod === 'AK1-IYI') { st.erisim = { kalan_dakika: 0, kod: 'sinirsiz', bitis: null, ucretsiz_dakika: 30 }; st.sinir = false; return j({ tamam: true, tur: 'sinirsiz' }); }
+          if (b.kod === 'AK1-IYI') { st.erisim.kod = 'sinirsiz_dublaj'; st.erisim.dublaj = Object.assign({}, st.erisim.dublaj, { sinirsiz: true, ekleyebilir: false }); return j({ tamam: true, tur: 'sinirsiz_dublaj' }); }
+          if (b.kod === 'AK1-BASKA') return j({ hata: 'baska_cihaz_kodu', mesaj: 'Bu kod başka bir bilgisayar için yapılmış. Bu bilgisayarın cihaz numarasını gönderip yeni kod isteyin.' }, 400);
           return j({ hata: 'gecersiz_kod', mesaj: 'Bu kod geçerli değil. Harfleri kontrol edip tekrar deneyin.' }, 400);
+        case 'POST /api/erisim/reklam': {   // PROTOKOL 17.3 (sahte: en az 2 sn)
+          st.reklamBaslat.push(b);
+          if (!st.erisim.reklam) {
+            const izin = (st.ayarlar.erisim || {}).reklam_izni === true;
+            st.erisim.reklam = { id: 'r' + st.reklamBaslat.length, hedef: st.tvReklam ? 'tv' : 'panel', en_az_sn: 2, gecen_sn: 0, vast: izin ? 'https://reklam.invalid/vast' : null };
+            st.reklamBas = Date.now();
+          }
+          const rk = st.erisim.reklam;
+          return j({ id: rk.id, vast: rk.vast, en_az_sn: 2, hedef: rk.hedef, zaman_asimi_sn: 120 });
+        }
+        case 'POST /api/erisim/reklam/bitti': {
+          st.reklamBitti.push(b);
+          if (!st.erisim.reklam || b.id !== st.erisim.reklam.id) return j({ hata: 'reklam_yok', mesaj: 'Bu reklamın süresi zaten eklendi.' }, 404);
+          const gecen = (Date.now() - st.reklamBas) / 1000;
+          if (gecen < 1.9) return j({ hata: 'reklam_erken', mesaj: 'Reklam daha bitmedi.', kalan_sn: 2 - gecen }, 409);
+          st.erisim.reklam = null; st.erisim.dublaj.kalan_dakika += 30; st.erisim.dublaj.kalan_sn += 1800;
+          return j({ tamam: true, id: b.id, kalan_dakika: st.erisim.dublaj.kalan_dakika });
+        }
         case 'GET /api/motorlar': return j(motorlar());
         case 'POST /api/anahtar': st.anahtarlar[b.motor] = b.anahtar; return j({ tamam: true });
         case 'POST /api/dene':
@@ -1000,29 +1021,67 @@ function dilKontrol() {
     await sayfa.waitForSelector('#pano');
     adim('oyun: yeni oyun (hitap: siz), paket içe alındı, seçildi; karttaki "Oyun bilgisini hazırla" hazırlığı başlattı');
 
-    // erişim satırı: kalan süre, kötü kod, iyi kod, sınır uyarısı
-    await sayfa.waitForSelector('#erisim-metin');
-    assert.match(await sayfa.textContent('#erisim-metin'), /Bugün kalan ücretsiz süre: 12 dk/);
-    assert.ok(!(await sayfa.locator('#erisim-sinir').count()), 'sınır yokken uyarı görünmez');
+    // erişim (§17): altyazı sınırsız; "+30 dk ekle" → izin ekranı → destek ekranı → süre; TV'de reklam; kod + cihaz numarası
+    await sayfa.waitForSelector('#erisim-dublaj');
+    assert.match(await metin('#erisim-altyazi'), /Sınırsız ✓/);
+    assert.match(await metin('#erisim-dublaj'), /Dublaj süresi yok/);
+    assert.match(await metin('#erisim-ekle'), /^\+30 dk ekle$/);
+    assert.match(await metin('#erisim-kart'), /Kısa bir reklam izle, 30 dakika dublaj kazan/);
+    await sayfa.click('#erisim-ekle');
+    await sayfa.waitForSelector('#reklam-izin-kabul');
+    assert.match(await metin('.pencere, [role=dialog]'), /reklam şirketi/);
+    assert.match(await metin('.pencere, [role=dialog]'), /hiçbir yere bilgi göndermez/);
+    await gor('v4-reklam-izin.png');
+    await sayfa.click('#reklam-izin-reklamsiz');
+    await sayfa.waitForSelector('.akr-kok .akr-destek', { timeout: 4000 });
+    assert.strictEqual(st.ayarlar.erisim.reklam_izni, false, 'izin reddi kaydedildi');
+    assert.strictEqual(st.erisim.reklam.vast, null, 'izin yokken reklam şirketine bağlanılmaz');
+    assert.match(await metin('.akr-kok'), /AltYazıKöprüsü'nü desteklediğin için teşekkürler/);
+    assert.match(await metin('.akr-etiket'), /Reklam · \d+ sn/);
+    await gor('v4-reklam-destek.png');
+    await sayfa.waitForSelector('.akr-kok', { state: 'detached', timeout: 6000 });
+    await sayfa.waitForFunction(() => /Dublaj süresi: 30 dk kaldı/.test(document.querySelector('#erisim-dublaj').textContent), null, { timeout: 6000 });
+    assert.strictEqual(st.reklamBitti.length >= 1 && st.reklamBitti[st.reklamBitti.length - 1].id, 'r1');
+    assert.match(await metin('#dublaj-sure-ozet'), /30 dk/);
+    // geri sayım panelde görünür; kod formu açıkken yazı silinmez
     await sayfa.click('#kodum-var');
     await sayfa.fill('#erisim-kod', 'AK1-KOTU');
+    st.erisim.dublaj.kalan_dakika = 80;
+    await sayfa.waitForFunction(() => /Dublaj süresi: 1 sa 20 dk kaldı/.test(document.querySelector('#erisim-dublaj').textContent), null, { timeout: 6000 });
+    assert.strictEqual(await sayfa.inputValue('#erisim-kod'), 'AK1-KOTU', 'geri sayım yazıyı bozmaz');
+    assert.strictEqual(await metin('#erisim-cihaz'), 'ABCDE-FGHJK');
+    assert.match(await metin('#erisim-cihaz-not'), /bu numarayı gönder/);
     await sayfa.click('#erisim-kaydet');
     await sayfa.waitForFunction(() => /Bu kod geçerli değil/.test((document.querySelector('#erisim-hata') || {}).textContent || ''));
-    assert.strictEqual(await sayfa.inputValue('#erisim-kod'), 'AK1-KOTU', 'hatada yazı silinmez');
-    await sayfa.waitForTimeout(2300);   // yoklama yazıyı bozmaz
-    assert.strictEqual(await sayfa.inputValue('#erisim-kod'), 'AK1-KOTU');
-    await gor('v4-erisim-hata.png');
-    st.erisim = { kalan_dakika: 0, kod: null, bitis: null, ucretsiz_dakika: 30 }; st.sinir = true;
-    await sayfa.waitForSelector('#erisim-sinir', { timeout: 6000 });
-    assert.match(await sayfa.textContent('#erisim-sinir'), /Bugünkü ücretsiz süre doldu\. Erişim kodunu gir ya da yarın devam et\. Daha önce çevrilmiş cümleler gösterilmeye devam eder\./);
-    assert.match(await sayfa.textContent('#erisim-metin'), /0 dk/);
+    await sayfa.fill('#erisim-kod', 'AK1-BASKA');
+    await sayfa.click('#erisim-kaydet');
+    await sayfa.waitForFunction(() => /başka bir bilgisayar için/.test((document.querySelector('#erisim-hata') || {}).textContent || ''));
+    adim('erişim: altyazı "Sınırsız ✓"; +30 dk → izin ekranı → "Reklamsız devam et" → destek ekranı (bağlantısız) → "30 dk kaldı"; "1 sa 20 dk"; cihaz numarası; yanlış/başka cihaz kodu');
+    // TV bağlıyken reklam TV'de oynar; TV bitirince süre gelir ve bildirilir
+    st.tvReklam = true;
+    await sayfa.click('#erisim-vazgec');
+    await sayfa.click('#erisim-ekle');
+    await sayfa.waitForSelector('#erisim-tv');
+    assert.match(await metin('#erisim-tv'), /Reklam TV'de oynuyor\. Bitince 30 dk eklenecek\./);
+    assert.ok(!(await sayfa.locator('#reklam-izin-kabul').count()), 'izin bir kez sorulur');
+    assert.ok(await sayfa.isDisabled('#erisim-ekle'), 'reklam sürerken yeniden basılamaz');
+    await sayfa.waitForTimeout(500);
+    st.erisim.reklam = null; st.erisim.dublaj.kalan_dakika = 110;   // TV /kopru/reklam/bitti dedi
+    await sayfa.waitForFunction(() => /30 dakika dublaj süresi eklendi/.test(document.body.textContent) && /1 sa 50 dk/.test(document.querySelector('#erisim-dublaj').textContent), null, { timeout: 6000 });
+    assert.ok(!(await sayfa.locator('#erisim-tv').count()));
+    st.tvReklam = false;
+    st.erisim.dublaj = Object.assign({}, st.erisim.dublaj, { kalan_dakika: 0, kalan_sn: 0, durdu: true });
+    await sayfa.waitForSelector('#erisim-durdu', { timeout: 6000 });
+    assert.match(await metin('#erisim-durdu'), /Dublaj süresi bitti, dublaj durakladı\. Altyazılar devam ediyor\./);
+    st.erisim.dublaj.durdu = false;
+    await sayfa.click('#kodum-var');
     await sayfa.fill('#erisim-kod', 'AK1-IYI');
     await sayfa.click('#erisim-kaydet');
-    await sayfa.waitForFunction(() => /Sınırsız erişim açık ✓/.test(document.querySelector('#erisim-metin').textContent));
-    assert.ok(!(await sayfa.locator('#erisim-sinir').count()), 'kod girilince uyarı kalkar');
+    await sayfa.waitForFunction(() => /Sınırsız ✓/.test(document.querySelector('#erisim-dublaj').textContent));
+    assert.ok(!(await sayfa.locator('#erisim-ekle').count()), 'sınırsızken +30 düğmesi yok');
     assert.ok(!(await sayfa.locator('#kodum-var').count()), 'kod açıkken "Kodum var" gizlenir');
-    assert.deepStrictEqual(st.kodlar, ['AK1-KOTU', 'AK1-IYI']);
-    adim('erişim: kalan dakika, yanlış kod dostça hata, süre dolunca sakin uyarı, doğru kod → "Sınırsız erişim açık ✓"');
+    assert.deepStrictEqual(st.kodlar, ['AK1-KOTU', 'AK1-BASKA', 'AK1-IYI']);
+    adim('erişim: TV\'de reklam ("TV\'de oynuyor", düğme kilitli, bitince bildirim), süre bitince sakin uyarı, cihaz kodu → dublaj "Sınırsız ✓"');
 
     // son çeviriler: kompakt — en çok 5 satır, kendi içinde kayan odaklanabilir bölge
     await sayfa.waitForSelector('.ceviri-satir[data-id=a1]', { timeout: 6000 });
@@ -1221,6 +1280,19 @@ function dilKontrol() {
     // gelişmiş ayarlar: tek bağlantının arkasında, ayrı ekran; ana ekrandaki şeyler burada tekrar edilmez
     await sayfa.click('#gelismis-ac');
     await sayfa.waitForSelector('#gelismis');
+    // §17.7: reklam izni ayardan verilir/geri alınır; VAST adresi yalnız https
+    assert.strictEqual(await sayfa.isChecked('#reklam-izni'), false);
+    await sayfa.click('#reklam-izni', { force: true });
+    await sayfa.waitForFunction(() => document.querySelector('#reklam-izni').checked);
+    await sayfa.waitForTimeout(150);
+    assert.strictEqual(st.ayarlar.erisim.reklam_izni, true);
+    await sayfa.click('#reklam-izni', { force: true });
+    await sayfa.waitForTimeout(150);
+    assert.strictEqual(st.ayarlar.erisim.reklam_izni, false, 'izin geri alındı');
+    await sayfa.fill('#vast-adresi', 'http://guvensiz.test/v');
+    await sayfa.click('#vast-kaydet');
+    assert.match(await metin('#vast-not'), /https:\/\/ ile başlamalı/);
+    adim('gelişmiş: reklam izni açılıp geri alındı; http VAST adresi reddedildi');
     assert.match(await metin('h1'), /Gelişmiş ayarlar/);
     assert.strictEqual(await sayfa.locator('#gelismis #tv-kart, #kalite-ayar, #ekran-olcek-ayar, #aktif-motor').count(), 0, 'tekrar eden denetim yok');
     assert.match(await sayfa.getAttribute('#paket-paylas', 'href'), /\/api\/paket\/rdr3$/);
@@ -1262,7 +1334,8 @@ function dilKontrol() {
     assert.match(await metin('h1'), /Advanced settings/);
     await sayfa.click('#gelismis-don');
     await sayfa.waitForFunction(() => /Stop/.test(document.querySelector('#baslat-durdur').textContent));
-    assert.match(await sayfa.textContent('#erisim-metin'), /Unlimited access is on ✓/);
+    assert.match(await sayfa.textContent('#erisim-dublaj'), /Unlimited ✓/);
+    assert.match(await sayfa.textContent('#erisim-altyazi'), /Unlimited ✓/);
     assert.match(await sayfa.textContent('#guncelleme-metin'), /The program will restart by itself\./);
     assert.match(await sayfa.textContent('#dublaj-kart h2'), /Turkish dubbing \(experimental\)/);
     assert.match(await sayfa.textContent('#dublaj-ne'), /Characters speak Turkish in their own voices\. Only the game's sound is listened to, the microphone is never turned on, and no audio is recorded\./);

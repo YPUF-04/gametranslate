@@ -31,10 +31,12 @@ AltYazıKöprüsü AGPL-3.0-only lisanslıdır. Aşağıdaki kütüphaneler kend
 
 | Model | Lisans |
 |---|---|
-| Chatterbox Multilingual ağırlıkları (`ResembleAI/chatterbox`) | Paket MIT'dir; model kartındaki lisans metni yayından önce model sayfasından doğrulanacak |
-| Pocket TTS Türkçe topluluk modeli (`kaanhgunay/pocket-tts-tr`, sürüm `v0.1-base`) | Lisansı model sayfasından doğrulanacak (bu ortamdan model kartına ulaşılamadı, bu yüzden tahmin yazılmadı) |
-| Kyutai Pocket TTS ana model ağırlıkları | Lisansı model sayfasından doğrulanacak. Kyutai'nin belgesindeki "Prohibited use" bölümü, açık ve yasal onay olmadan ses taklidi/klonlamayı yasaklar; bu yüzden dublaj yalnız kişisel kullanım içindir (bkz. docs/kullanim/turkce-dublaj.md) |
-| faster-whisper için Whisper modelleri | MIT (OpenAI Whisper) |
+| Chatterbox Multilingual ağırlıkları (`ResembleAI/chatterbox`) | MIT (Hugging Face model kartı etiketi, 2026-11-23 doğrulandı) |
+| Pocket TTS Türkçe topluluk modeli (`kaanhgunay/pocket-tts-tr`, sürüm `v0.1-base`) | CC BY 4.0 (model kartı, 2026-11-23 doğrulandı). Atıf: Kaan Günay, Kyutai Pocket TTS'ten türetilmiştir; eğitim verisi: Serdar I. Çağlar, *Turkish TTS Audiobooks* (Hugging Face, 2026) |
+| Kyutai Pocket TTS ana model ağırlıkları (`kyutai/pocket-tts`) | CC BY 4.0 (model kartı etiketi, 2026-11-23 doğrulandı; erişim koşul onaylı). Kyutai'nin belgesindeki "Prohibited use" bölümü, açık ve yasal onay olmadan ses taklidi/klonlamayı yasaklar; bu yüzden dublaj yalnız kişisel kullanım içindir (bkz. docs/kullanim/turkce-dublaj.md) |
+| faster-whisper için Whisper modelleri (`large-v3-turbo`, `small`) | MIT (OpenAI Whisper; `Systran/faster-whisper-small` MIT etiketli; `mobiuslabsgmbh/faster-whisper-large-v3-turbo` dönüşümünde etiket yok, kaynak model MIT) |
+| HT-Demucs-ft (`demucs` 4.1.0 ağırlıkları) | MIT |
+| Argos Translate en↔tr dil paketi 1.5 (`argos-net.com`) | Dizin lisans BELİRTMİYOR; Argos yazılımı MIT/CC0. Eğitim verisi OPUS derlemleri: bazıları ticari olmayan kullanım şartı taşıyabilir → bkz. docs/KARARLAR.md |
 
 ElevenLabs bir bulut hizmetidir (kullanıcının kendi hesabı ve anahtarı); kullanım koşulları ElevenLabs'e aittir.
 

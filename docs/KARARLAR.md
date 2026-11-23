@@ -9,7 +9,7 @@
 | Çeviri paketi paylaşımı | `.akpaket` dosyası, sadece cümleler | Sürüyor |
 | Arayüz (premium, animasyonlu) | EN SONDA, Opus 5.5 ile | Bekliyor |
 | İsim | "Gearly" ve "Subbly" dolu; arayüz aşamasında boş 3 isim önerilecek | Bekliyor |
-| Reklam | İPTAL: proje kişisel/hobi amaçlı. Reklam ve hak sistemi yok; en fazla isteğe bağlı bağış bağlantısı. (Eski fikir: Model: ilk 30 dk ücretsiz çeviri, sonra reklam izle → süre kazan. Oyunun üstünde asla reklam yok. Takip/yorum karşılığı ödül YOK) | Karar |
+| Reklam | DEĞİŞTİ (2026-11, sahibin kararı): program ücretsiz ve açık kaynak, **dublaj süresi reklamla desteklenir**. Altyazı herkese sınırsız; yalnız Türkçe dublaj süreli ("+30 dk ekle" = bir reklam ya da 15 sn destek ekranı). Oyunun üstünde reklam yalnız kullanıcı düğmeye basınca, kısa ve tam ekran oynar; kendiliğinden asla. Reklam şirketi reklamı yalnız açık izinle (KVKK). Ayrıntı aşağıda ve PROTOKOL §17 | Karar |
 | Maliyet | Geliştiriciye sıfır maliyet: çeviri kullanıcının bilgisayarında (yerel motor) ya da kullanıcının kendi anahtarıyla | Kural |
 | Kurulum | Tek tuşla: Windows kurucu (.exe), panelden "TV'ye kur", tek tuşla güncelleme | Yazıldı, gerçek PC/TV'de denenmedi |
 | Kod açık mı | AÇIK kalacak (AGPL). Güven + GitHub görünürlüğü | Karar |
@@ -99,3 +99,34 @@ açıkken bile) kontrolü laptopun klavyesine aldı, TV'deki DualSense oyunu kon
 - **Kalan risk:** gerçek PS5'te hiç denenmedi. Kol yine bırakırsa: panel bağlantı testinde sorar ("Kolun TV'de çalışıyor mu?"),
   "Hayır"da PS tuşu → ana hesap seçimini önerir. Sonraki deneme adımı: libchiaki'ye küçük bir yama ile geri bildirim
   paketlerini tamamen kapatmak (oturumun bunsuz açık kalıp kalmadığı da bilinmiyor; o yüzden şimdilik yapılmadı).
+
+
+## Erişim 2: altyazı sınırsız, dublaj reklamla (2026-11) — PROTOKOL §17
+| Konu | Karar | Neden |
+|---|---|---|
+| Ne sınırlı | Altyazı/ekran çevirisi herkese sınırsız. Yalnız Türkçe dublaj süreli | Sahibin kararı. Altyazı ana iş; dublaj ağır ve "ekstra" |
+| Süre | "+30 dk ekle": her basış +30 dk, üst üste, en çok 4 sa. **Yalnız bellekte**: program kapanınca gider, açılışta 0 | Basit; kapatıp açarak süre kazanılmaz; diske yazılan sayaç kurcalanamaz |
+| Ne zaman azalır | Yalnız dublaj gerçekten çalışırken (Başlat + dublaj açık / video işi). 0'da dublaj sakince duraklar, altyazı sürer | Kullanıcı boşa süre kaybetmesin |
+| Süreyi kim verir | PC (sunucu saati). İstemci "bitti" der; reklam süresi (en az 15 sn) geçmeden kabul edilmez | İstemci kandırılamasın (aşağıdaki not geçerli) |
+| Reklam oynatıcı | **Kendi küçük VAST 3/4 ayrıştırıcımız + `<video>`** (`kopru/web/tv/reklam.js`), Google IMA SDK DEĞİL | IMA'nın LG webOS desteği "seçili modeller, hesap yöneticinize sorun" düzeyinde (developers.google.com/interactive-media-ads/docs/sdks/other); IMA her açılışta Google'dan uzak betik yükler (paketli TV uygulaması file://'dan çalışır, panel dış betik yüklemez); IMA Google'a bağlıdır, bizimki her VAST ağıyla çalışır. Bedeli: VPAID/SIMID/OMID yok → bunları isteyen reklamlar "reklam gelmedi" sayılır, yerine destek ekranı |
+| Reklam gelmezse | 15 sn kendi "destek" ekranımız, sonra yine +30 dk | Kullanıcı asla takılı kalmaz |
+| Reklam nerede | TV uygulaması bağlıysa TV'de, oyunun üstünde tam ekran; değilse panelde. `/obs` asla | Kullanıcı TV'ye bakıyor; yayına reklam girmesin |
+| Reklam izni (KVKK) | Reklam şirketinin reklamı ilk kez açılmadan önce izin ekranı; izin yoksa yalnız destek ekranı (hiçbir yere bağlanmaz). Ayarlardan geri alınır | Reklam ağı IP/cihaz bilgisi alabilir; açık rıza gerekir |
+| Sınırsız kod | Cihaza bağlı (`sinirsiz_dublaj`, 10 harflik cihaz numarası, Ed25519 imzalı, sunucusuz). Eski `sinirsiz`/`gun` kodları geçerli | Sunucu yok, maliyet yok; kod başka bilgisayarda işe yaramaz |
+| Dürüst not | Açık kaynak (AGPL): sınırlar kullanıcının bilgisayarında çalışır, kaldıran kopya yapılabilir; bu yasaldır | Sistem dürüst kullanıcılar içindir, kilit değildir |
+
+## Model lisansları ve reklamlı (ticari sayılabilecek) dağıtım (2026-11-23 denetimi)
+Reklam geliri olduğu için "ticari olmayan" şartı taşıyan bir model kullanılamaz. Durum:
+
+| Model | Nereden | Lisans | Reklamlı dağıtım |
+|---|---|---|---|
+| Chatterbox Multilingual | `ResembleAI/chatterbox` | MIT | Uygun |
+| Kyutai Pocket TTS | `kyutai/pocket-tts` | CC BY 4.0 (+ "yasak kullanım" koşulu: rızasız ses klonlama) | Uygun, **atıf gerekir**. Ses klonlama koşulu ayrıca dikkat ister (aşağı) |
+| Pocket TTS Türkçe | `kaanhgunay/pocket-tts-tr` v0.1-base | CC BY 4.0 | Uygun, **atıf gerekir** (THIRD-PARTY-NOTICES.md'de yazılı) |
+| Whisper (faster-whisper `large-v3-turbo`, `small`) | OpenAI / Systran / mobiuslabsgmbh | MIT (turbo dönüşümünde etiket yok, kaynak MIT) | Uygun |
+| HT-Demucs-ft | `demucs` 4.1.0 | MIT | Uygun |
+| RapidOCR modelleri | `rapidocr_onnxruntime` (PaddleOCR) | Apache-2.0 | Uygun |
+| **Argos en↔tr 1.5** | `argos-net.com` | **Belirtilmemiş** (dizinde lisans alanı boş) | **İŞARETLİ: belirsiz.** Yazılım MIT/CC0 ama dil paketinin lisansı ve eğitim verisinin (OPUS) ticari kullanım şartı doğrulanamadı. Sahip, Argos geliştiricisine sormalı ya da yerel motoru reklamlı sürümde "kullanıcı kendisi indirir" diye açıkça belirtmeli |
+
+- **Ses klonlama:** Kyutai'nin koşulu "açık ve yasal rıza olmadan ses taklidi/klonlama" yasaklar. Oyun karakterinin sesinden örnek almak bu açıdan gri alandır (seslendirme sanatçısının rızası yok). Reklam geliri bunu değiştirmez ama riski artırır; dublaj "kişisel kullanım" olarak sunulmaya devam etmeli (docs/kullanim/turkce-dublaj.md).
+- ElevenLabs (bulut) kullanıcının kendi hesabı ve şartlarıyla çalışır; bizim dağıtımımız değildir.

@@ -2,6 +2,8 @@
 
 Bu özellik **deneyseldir** ve **başta kapalıdır**.
 
+> **Dublaj süresi:** altyazı çevirisi sınırsızdır; dublaj ise süre ister. Panelde **"+30 dk ekle"**ye bas, kısa bir reklamdan (ya da 15 sn teşekkür ekranından) sonra 30 dakika eklenir. Süre yalnız dublaj çalışırken azalır, program kapanınca silinir. Ayrıntı: [reklam-ve-kodlar.md](reklam-ve-kodlar.md).
+
 ## Ne yapar?
 
 Oyundaki karakter İngilizce konuşurken, aynı karakterin sesine benzeyen bir sesle **Türkçe** duyarsın. Altyazı her zaman önce ekrana gelir. Türkçe ses biraz sonra gelir.

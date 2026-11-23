@@ -853,3 +853,12 @@ html.buyuk-yazi .pano-izgara{grid-template-columns:1fr}
 .dublaj-video{margin-top:22px;padding-top:6px;border-top:1px solid var(--cizgi)}
 .kucuk-ac summary{cursor:pointer;color:var(--sessiz);font-size:.9rem;margin-top:6px}
 #dublaj-giris{width:100%;max-width:420px}
+
+/* §17: erişim kartı — altyazı sınırsız, dublaj süresi, "+30 dk ekle" */
+.erisim-kart .erisim-deger{font-weight:600}
+.erisim-kart.pk .erisim-satir{flex-basis:100%}
+.erisim-kart.pk .erisim-ekle-satir,.erisim-kart.pk .erisim-tv,.erisim-kart.pk .erisim-cihaz,.erisim-kart.pk #erisim-cihaz-not,.erisim-kart.pk #erisim-durdu{flex-basis:100%}
+.erisim-ekle-satir{gap:8px 14px;align-items:center;margin-top:4px}
+.erisim-ekle{font-size:1.05rem;padding:10px 22px}
+.erisim-ekle-satir .sessiz{flex:1 1 240px}
+.erisim-cihaz code{font-size:1.05rem;letter-spacing:.06em}

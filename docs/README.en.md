@@ -16,7 +16,7 @@
 - **One-click updates:** when a new version is out, update from inside the program with a single button.
 - **One-click LG TV install:** the program installs the TV app onto your TV by itself; no extra tools needed.
 - **Live translation:** subtitles, menus and quest text; a per-game memory keeps names and repeated lines consistent.
-- **Free and private:** no tracking, no ads, no servers. The local engine works fully offline.
+- **Free and private:** subtitle translation is unlimited and free; no tracking, no servers. The local engine works fully offline. Free, open-source software; **dubbing time is supported by ads** ("+30 min"; third-party ads only with your consent, see GIZLILIK.md).
 - **On top of the game:** the LG webOS TV app draws the text over your game (TV browser and OBS are fallbacks).
 
 > **Honest status note:** the project is under development. It has not yet been tried on real devices (TV, PS5, Xbox); the table below lists the test status of every flow. The Windows installer, one-click update and one-click LG TV install have not been tried on a real PC/TV yet either.

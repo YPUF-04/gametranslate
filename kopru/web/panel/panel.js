@@ -124,7 +124,7 @@
     asama: {}, tekAsama: null, donus: null, okunan: null, kareUrl: null, yerel: null,
     kurulumBitti: ls('kurulum') === '1', kapali: false,
     oyunlar: [], sonCeviriler: [], oneriler: [], duzeltAcik: false, oyunDegis: false,
-    guncelleme: null, erisim: null, erisimAcik: false,
+    guncelleme: null, erisim: null, erisimAcik: false, reklamOynuyor: null, reklamId: null, reklamBekle: false,
     dublaj: null, dublajSecim: null
   };
   var ana = $('#ana');
@@ -1444,7 +1444,7 @@
     ekran.erisim = h('div', { class: 'pk pk-genis erisim-kart', id: 'erisim-kart' });
     var dublaj = h('details', { class: 'pk pk-genis dublaj-ac', id: 'dublaj-kart' }, [
       h('summary', {}, [h('span', { class: 'pk-ik', 'aria-hidden': 'true' }, ikon('ses')),
-        h('h2', { text: t('dublaj.baslik') }), h('span', { class: 'pk-not', id: 'dublaj-ozet', text: t('dublaj.' + ((a.dublaj && a.dublaj.motor) || 'kapali')) })]),
+        h('h2', { text: t('dublaj.baslik') }), h('span', { class: 'pk-not' }, [h('span', { id: 'dublaj-ozet', text: t('dublaj.' + ((a.dublaj && a.dublaj.motor) || 'kapali')) }), h('span', { id: 'dublaj-sure-ozet' })])]),
       dublajKarti()
     ]);
 
@@ -2018,10 +2018,29 @@
       anaDonusLink(don),
       h('h1', { text: t('gelismis.link') }),
       h('p', { class: 'alt-baslik', text: t('gelismis.uyari') }),
-      hafizaBolumu(), ne1, dilB, gorB, sozlukBolumu(), guncellemeBolumu(), motorBolumu(), kur,
+      hafizaBolumu(), ne1, dilB, gorB, sozlukBolumu(), guncellemeBolumu(), motorBolumu(), reklamBolumu(), kur,
       h('div', { class: 'alt-gezinme' }, [h('span'), h('button', { type: 'button', class: 'dugme', id: 'gelismis-don', text: t('asama.ana_don'), onclick: don })])
     ]));
     durumCiz();
+  }
+
+  // §17.7: reklam izni (geri alınabilir) + VAST adresi (program sahibi için)
+  function reklamBolumu() {
+    var a = S.ayarlar || {}, e = a.erisim || {};
+    var adres = h('input', { type: 'url', id: 'vast-adresi', autocomplete: 'off', spellcheck: 'false', value: e.vast_adresi || '', placeholder: 'https://…', 'aria-label': t('reklam.vast') });
+    var not = h('p', { class: 'sessiz', id: 'vast-not', role: 'status' });
+    return bolum(t('reklam.bolum'), null, [
+      anahtar(t('reklam.izin_ayar'), t('reklam.izin_ayar.k'), e.reklam_izni === true, function (v) {
+        ayarKaydet({ erisim: Object.assign({}, (S.ayarlar || {}).erisim, { reklam_izni: v }) }).then(erisimYukle);
+      }, 'reklam-izni'),
+      h('label', { class: 'etiket', for: 'vast-adresi', text: t('reklam.vast') }),
+      h('div', { class: 'satir' }, [adres, h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'vast-kaydet', text: t('erisim.kaydet'), onclick: function () {
+        var v = adres.value.trim();
+        if (v && v.indexOf('https://') !== 0) { not.textContent = t('reklam.vast_hata'); return; }
+        ayarKaydet({ erisim: Object.assign({}, (S.ayarlar || {}).erisim, { vast_adresi: v }) }).then(function () { not.textContent = t('reklam.vast_tamam'); });
+      } })]),
+      h('p', { class: 'sessiz', text: t('reklam.vast.k') }), not
+    ]);
   }
 
   function sozlukBolumu() {
@@ -2139,30 +2158,55 @@
     toast(metin, 'bilgi');
   }
 
-  // ---------- erişim (günlük ücretsiz süre / erişim kodu, PROTOKOL 7.3) ----------
+  // ---------- erişim (PROTOKOL §17): altyazı sınırsız, dublaj süresi, "+30 dk ekle", cihaza bağlı kod ----------
   function erisimYukle() {
-    return api('GET', '/api/erisim').then(function (e) { S.erisim = e; erisimCiz(); }).catch(function () {});
+    return api('GET', '/api/erisim').then(function (e) { S.erisim = e; erisimCiz(); reklamIzle(); }).catch(function () {});
+  }
+  function sureMetni(dk) {   // 80 → "1 sa 20 dk"
+    var sa = Math.floor(dk / 60), d = dk % 60;
+    if (sa && d) return t('erisim.sa_dk', { sa: sa, dk: d });
+    return sa ? t('erisim.sa', { sa: sa }) : t('erisim.dk', { dk: d });
+  }
+  function dublajSureMetni(e) {
+    var d = (e && e.dublaj) || {};
+    if (d.sinirsiz) return t('erisim.dublaj_sinirsiz');
+    return d.kalan_dakika > 0 ? t('erisim.dublaj_kalan', { sure: sureMetni(d.kalan_dakika) }) : t('erisim.dublaj_yok');
   }
   function erisimCiz() {
+    var e = S.erisim;
+    var oz = $('#dublaj-sure-ozet'); if (oz && e && e.dublaj) oz.textContent = e.dublaj.sinirsiz ? '' : ' · ' + (e.dublaj.kalan_dakika > 0 ? sureMetni(e.dublaj.kalan_dakika) : t('erisim.ozet_yok'));
     if (!ekran.erisim || !document.body.contains(ekran.erisim)) return;
-    var e = S.erisim; if (!e) return;
-    var kutu = ekran.erisim;
-    var sinir = !!(S.durum && S.durum.sinir) && !e.kod;
-    var imza = [sinir, e.kod, e.kalan_dakika, e.bitis, S.erisimAcik, dil].join('|');
-    if (kutu.dataset.imza === imza) return;   // değişmediyse yeniden çizme (yazı/hata silinmesin)
+    if (!e || !e.dublaj) return;
+    var kutu = ekran.erisim, d = e.dublaj, r = e.reklam, yerel = !!S.reklamOynuyor;
+    var tvde = !!(r && r.hedef === 'tv' && !yerel);
+    var imza = [e.kod, d.sinirsiz, d.durdu, d.ekleyebilir, !!r, tvde, yerel, S.erisimAcik, S.reklamBekle, e.cihaz, dil].join('|');
+    var metin = $('#erisim-dublaj');
+    if (kutu.dataset.imza === imza) { if (metin) metin.textContent = dublajSureMetni(e); return; }   // yalnız süreyi güncelle (yazı/odak kaybolmasın)
     kutu.dataset.imza = imza;
     kutu.textContent = '';
-    var metin = e.kod === 'sinirsiz' ? t('erisim.sinirsiz')
-      : (e.kod === 'gun' ? t('erisim.gun', { tarih: e.bitis || '' }) : t('erisim.kalan', { n: e.kalan_dakika }));
-    var satir = h('div', { class: 'satir erisim-satir' }, [
-      h('span', { class: 'etiket-kucuk', text: t('erisim.baslik') }),
-      h('span', { id: 'erisim-metin', text: metin, 'aria-live': 'polite' }),
-      e.kod ? null : h('button', { type: 'button', class: 'baglanti', id: 'kodum-var', text: t('erisim.kodum_var'), onclick: function () {
+    kutu.appendChild(h('div', { class: 'satir erisim-satir' }, [
+      h('span', { class: 'etiket-kucuk', text: t('erisim.altyazi') }),
+      h('span', { id: 'erisim-altyazi', class: 'erisim-deger', text: t('erisim.altyazi_sinirsiz') })]));
+    kutu.appendChild(h('div', { class: 'satir erisim-satir' }, [
+      h('span', { class: 'etiket-kucuk', text: t('erisim.dublaj') }),
+      h('span', { id: 'erisim-dublaj', class: 'erisim-deger', 'aria-live': 'polite', text: dublajSureMetni(e) })]));
+    if (!d.sinirsiz) {
+      var ekle = h('button', { type: 'button', class: 'dugme erisim-ekle', id: 'erisim-ekle', disabled: !d.ekleyebilir || !!r || !!S.reklamBekle,
+        text: t('erisim.ekle'), onclick: function () { otuzEkle(); } });
+      kutu.appendChild(h('div', { class: 'satir erisim-ekle-satir' }, [ekle,
+        h('span', { class: 'sessiz', id: 'erisim-ekle-not', text: d.ekleyebilir ? t('erisim.ekle_not') : t('erisim.en_cok') })]));
+      if (d.durdu) kutu.appendChild(h('p', { class: 'not', id: 'erisim-durdu', role: 'status', text: t('erisim.durdu') }));
+      if (tvde) {
+        kutu.appendChild(h('div', { class: 'satir erisim-tv', id: 'erisim-tv' }, [
+          h('span', { role: 'status', text: t('erisim.tvde') }),
+          h('button', { type: 'button', class: 'baglanti', id: 'erisim-burada', text: t('erisim.burada'), onclick: function () { reklamOynat(r.id, null, r.en_az_sn); } })]));
+      }
+    }
+    if (!e.kod) {
+      kutu.appendChild(h('button', { type: 'button', class: 'baglanti', id: 'kodum-var', text: t('erisim.kodum_var'), onclick: function () {
         S.erisimAcik = !S.erisimAcik; erisimCiz(); var g = $('#erisim-kod'); if (g) g.focus();
-      } })
-    ]);
-    kutu.appendChild(satir);
-    if (sinir) kutu.appendChild(h('p', { class: 'not', id: 'erisim-sinir', role: 'status', text: t('erisim.sinir') }));
+      } }));
+    }
     if (S.erisimAcik && !e.kod) {
       var hata = h('p', { class: 'sessiz erisim-hata', id: 'erisim-hata', role: 'alert' });
       var girdi = h('input', { type: 'text', id: 'erisim-kod', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('erisim.kod_etiket'), placeholder: 'AK1-XXXXX-XXXXX-…', onkeydown: function (ev) { if (ev.key === 'Enter') kaydet(); } });
@@ -2178,6 +2222,66 @@
         h('button', { type: 'button', class: 'dugme kucuk', id: 'erisim-kaydet', text: t('erisim.kaydet'), onclick: kaydet }),
         h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'erisim-vazgec', text: t('erisim.vazgec'), onclick: function () { S.erisimAcik = false; erisimCiz(); } })]));
       kutu.appendChild(hata);
+      kutu.appendChild(h('div', { class: 'satir erisim-cihaz' }, [
+        h('span', { class: 'etiket-kucuk', text: t('erisim.cihaz') }),
+        h('code', { id: 'erisim-cihaz', text: e.cihaz || '-' }),
+        h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'erisim-cihaz-kopyala', text: t('erisim.kopyala'), onclick: function () {
+          var bitti = function () { toast(t('erisim.kopyalandi')); };
+          try { navigator.clipboard.writeText(e.cihaz).then(bitti, function () {}); } catch (x) { /* yok say */ }
+        } })]));
+      kutu.appendChild(h('p', { class: 'sessiz', id: 'erisim-cihaz-not', text: t('erisim.cihaz_not') }));
+    }
+  }
+
+  // "+30 dk ekle": ilk reklam şirketi reklamından önce izin (§17.7), sonra reklam ya da destek ekranı
+  function otuzEkle() {
+    var e = S.erisim || {};
+    if (e.vast_var && e.reklam_izni == null) {
+      return pencere(t('reklam.izin_baslik'), t('reklam.izin_govde'), [
+        { ad: t('reklam.izin_kabul'), deger: 'kabul', id: 'reklam-izin-kabul' },
+        { ad: t('reklam.izin_reklamsiz'), deger: 'red', sinif: 'ikincil', id: 'reklam-izin-reklamsiz' },
+        { ad: t('reklam.izin_vazgec'), deger: null, sinif: 'ikincil', id: 'reklam-izin-vazgec' }
+      ]).then(function (v) {
+        if (!v) return;
+        return ayarKaydet({ erisim: Object.assign({}, (S.ayarlar || {}).erisim, { reklam_izni: v === 'kabul' }) }).then(function () { e.reklam_izni = v === 'kabul'; return reklamBaslat(); });
+      });
+    }
+    return reklamBaslat();
+  }
+  function reklamBaslat() {
+    S.reklamBekle = true; erisimCiz();
+    return api('POST', '/api/erisim/reklam', { yer: 'otomatik' }).then(function (r) {
+      S.reklamBekle = false; S.reklamId = r.id; S.reklamBas = Date.now(); S.reklamZaman = (r.zaman_asimi_sn || 120) * 1000;
+      if (r.hedef === 'panel') reklamOynat(r.id, r.vast, r.en_az_sn);
+      return erisimYukle();
+    }).catch(function (er) { S.reklamBekle = false; erisimCiz(); hataGoster(er); });
+  }
+  function reklamOynat(id, vast, enAz) {
+    if (!window.AKReklam || S.reklamOynuyor) return;
+    S.reklamOynuyor = window.AKReklam.oynat(document.body, { id: id, vast: vast, en_az_sn: enAz,
+      metin: { reklam: t('reklam.etiket'), sn: t('reklam.sn'), destek: t('reklam.destek'), destek_alt: t('reklam.destek_alt') },
+      bitti: function (s) { S.reklamOynuyor = null; reklamBitir(s.id, s.sure_sn, 0); } });
+    erisimCiz();
+  }
+  function reklamBitir(id, sure, deneme) {
+    return api('POST', '/api/erisim/reklam/bitti', { id: id, sure_sn: sure || 0 }).then(function () {
+      S.reklamId = null; toast(t('erisim.eklendi')); return Promise.all([erisimYukle(), durumYukle()]);
+    }).catch(function (er) {
+      if (er && er.hata === 'reklam_erken' && deneme < 10) {   // sunucu saatiyle birkaç saniye eksikse bekle
+        var bekle = Math.min(20, ((er.govde && er.govde.kalan_sn) || 1) + 0.5) * 1000;
+        return new Promise(function (ok) { setTimeout(ok, bekle); }).then(function () { return reklamBitir(id, sure, deneme + 1); });
+      }
+      if (er && er.hata === 'reklam_yok') { S.reklamId = null; return erisimYukle(); }   // TV bitirdi: süre zaten eklendi
+      hataGoster(er);
+    });
+  }
+  // TV'deki reklam bitince (reklam alanı boşalınca) haber ver; TV hiç bitirmezse yedek zamanlayıcı panelden bitirir
+  function reklamIzle() {
+    var e = S.erisim; if (!e || !S.reklamId) return;
+    if (!e.reklam) { S.reklamId = null; if (!S.reklamOynuyor) toast(t('erisim.eklendi')); return; }
+    if (!S.reklamOynuyor && !S.reklamYedek && Date.now() - S.reklamBas > S.reklamZaman) {
+      S.reklamYedek = true;
+      reklamBitir(e.reklam.id, 0, 0).then(function () { S.reklamYedek = false; });
     }
   }
 

@@ -15,9 +15,9 @@
 - **Tek tuşla kurulum:** Windows kurucusunu indir, çift tıkla; yönetici izni gerekmez.
 - **Tek tuşla güncelleme:** Yeni sürüm çıkınca programın içinden tek düğmeyle güncellenir.
 - **Tek tuşla LG TV kurulumu:** TV'ye uygulamayı bilgisayardan kendisi yükler; ek program gerekmez.
-- **Türkçe dublaj (deneysel, isteğe bağlı):** Karakterler kendi sesine benzer bir sesle Türkçe konuşur; yalnız oyun sesi dinlenir, mikrofon açılmaz, hiçbir şey kaydedilmez. Bkz. [docs/kullanim/turkce-dublaj.md](docs/kullanim/turkce-dublaj.md).
+- **Türkçe dublaj (deneysel, isteğe bağlı):** Karakterler kendi sesine benzer bir sesle Türkçe konuşur; yalnız oyun sesi dinlenir, mikrofon açılmaz, hiçbir şey kaydedilmez. Bkz. [docs/kullanim/turkce-dublaj.md](docs/kullanim/turkce-dublaj.md). Dublaj süreyle çalışır: "+30 dk ekle" ile kısa bir reklamdan sonra 30 dk eklenir ([nasıl çalışır, sınırsız kod](docs/kullanim/reklam-ve-kodlar.md)).
 - **Canlı çeviri:** Altyazı, menü ve görev yazıları; oyun hafızası aynı cümleyi hep aynı çevirir, isimlerini bozmaz.
-- **Ücretsiz ve gizli:** Takip yok, reklam yok, sunucu yok. Yerel motorla internetsiz bile çalışır.
+- **Ücretsiz ve gizli:** Altyazı çevirisi sınırsız ve ücretsiz. Takip yok, sunucu yok. Yerel motorla internetsiz bile çalışır. Ücretsiz, açık kaynaklı bir programdır; **dublaj süresi reklamla desteklenir** ("+30 dk ekle"; reklam şirketi yalnız izninle, bkz. [GIZLILIK.md](GIZLILIK.md)).
 - **Oyunun üstünde:** LG webOS TV uygulaması yazıyı oyunun üstüne basar (TV tarayıcısı ve OBS yedek yollardır).
 
 > ⚠️ **Dürüst durum notu:** Proje geliştirme aşamasındadır. Henüz gerçek cihazlarda (TV, PS5, Xbox) denenmemiştir; aşağıdaki tabloda her akışın test durumu açıkça yazılıdır. Windows kurucusu, tek tuşla güncelleme ve tek tuşla LG TV kurulumu da gerçek bir bilgisayar/TV üzerinde henüz denenmemiştir.
