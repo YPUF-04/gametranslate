@@ -64,6 +64,7 @@ jobs:
           --paths .
           --osx-bundle-identifier com.altyazikoprusu.mac
           --add-data "kopru/web:kopru/web"
+          --add-data "oyun-paketleri:oyun-paketleri"
           --add-data "tv/paketler:tv/paketler"
           --collect-submodules kopru
           --hidden-import tkinter

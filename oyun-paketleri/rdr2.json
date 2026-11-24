@@ -1,0 +1,505 @@
+{
+ "bicim": 1,
+ "kod": "rdr2",
+ "ad": "Red Dead Redemption 2",
+ "surum": "2026.11.24",
+ "adlar": [
+  "RDR2",
+  "RDR 2",
+  "Red Dead Redemption 2",
+  "Red Dead 2",
+  "Red Dead Online"
+ ],
+ "hitap": "sen",
+ "notlar": "American frontier, 1899. The Van der Linde gang speaks informally among themselves ('sen'); strangers, shopkeepers and lawmen are often addressed politely ('siz', 'bayım', 'hanımefendi'). Old-fashioned Western speech: prefer slightly old-fashioned, rural Turkish over modern slang (no 'kanka'). Dutch talks in grand speeches about 'a plan', 'faith' and 'loyalty'. Place names like Valentine, Strawberry, Rhodes and Colter are town names, not words: keep them.",
+ "karakterler": [
+  {
+   "ad": "Arthur Morgan",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Dutch van der Linde",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Hosea Matthews",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "John Marston",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Abigail Roberts",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Jack Marston",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Sadie Adler",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Charles Smith",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Javier Escuella",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Bill Williamson",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Micah Bell",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Lenny Summers",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Sean MacGuire",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Kieran Duffy",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Karen Jones",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Mary-Beth Gaskill",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Tilly Jackson",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Susan Grimshaw",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Simon Pearson",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Uncle",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Reverend Swanson",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Molly O'Shea",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Leopold Strauss",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Josiah Trelawny",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Edgar Ross",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Andrew Milton",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Colm O'Driscoll",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Leviticus Cornwall",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Angelo Bronte",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Eagle Flies",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Rains Fall",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Hamish Sinclair",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Mary Linton",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Sister Calderón",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Mr. Pearson",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Miss Grimshaw",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Mrs. Adler",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Cleet",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Joe",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Hercule Fontaine",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Algernon Wasp",
+   "cinsiyet": "e"
+  }
+ ],
+ "yerler": [
+  "Valentine",
+  "Saint Denis",
+  "Rhodes",
+  "Strawberry",
+  "Blackwater",
+  "Annesburg",
+  "Van Horn",
+  "Emerald Ranch",
+  "Horseshoe Overlook",
+  "Clemens Point",
+  "Shady Belle",
+  "Beaver Hollow",
+  "Colter",
+  "Lemoyne",
+  "New Hanover",
+  "West Elizabeth",
+  "Ambarino",
+  "New Austin",
+  "Guarma",
+  "Big Valley",
+  "Tumbleweed",
+  "Armadillo",
+  "Braithwaite Manor",
+  "Caliga Hall",
+  "Lakay",
+  "Wapiti",
+  "Bayou Nwa",
+  "Heartland",
+  "Flat Iron Lake",
+  "Lannahechee River",
+  "Dakota River",
+  "Mount Hagen",
+  "Grizzlies",
+  "Tahiti",
+  "Van der Linde gang",
+  "O'Driscolls",
+  "O'Driscoll Boys",
+  "Lemoyne Raiders",
+  "Murfree Brood",
+  "Skinner Brothers",
+  "Del Lobo",
+  "Laramie Gang",
+  "Night Folk",
+  "Pinkertons",
+  "Pinkerton",
+  "Cornwall Kerosene & Tar"
+ ],
+ "terimler": [
+  {
+   "asil": "Dead Eye",
+   "ceviri": "Ölü Göz"
+  },
+  {
+   "asil": "Eagle Eye",
+   "ceviri": "Kartal Gözü"
+  },
+  {
+   "asil": "Honor",
+   "ceviri": "Onur"
+  },
+  {
+   "asil": "Bounty",
+   "ceviri": "Ödül"
+  },
+  {
+   "asil": "Bounty Hunter",
+   "ceviri": "Ödül Avcısı"
+  },
+  {
+   "asil": "Wanted",
+   "ceviri": "Aranıyor"
+  },
+  {
+   "asil": "Satchel",
+   "ceviri": "Heybe"
+  },
+  {
+   "asil": "Camp",
+   "ceviri": "Kamp"
+  },
+  {
+   "asil": "Ledger",
+   "ceviri": "Kamp Defteri"
+  },
+  {
+   "asil": "Fence",
+   "ceviri": "Kaçak Mal Alıcısı"
+  },
+  {
+   "asil": "Trapper",
+   "ceviri": "Kürk Tüccarı"
+  },
+  {
+   "asil": "Gunsmith",
+   "ceviri": "Silahçı"
+  },
+  {
+   "asil": "General Store",
+   "ceviri": "Genel Mağaza"
+  },
+  {
+   "asil": "Saloon",
+   "ceviri": "Meyhane"
+  },
+  {
+   "asil": "Butcher",
+   "ceviri": "Kasap"
+  },
+  {
+   "asil": "Stable",
+   "ceviri": "Ahır"
+  },
+  {
+   "asil": "Post Office",
+   "ceviri": "Postane"
+  },
+  {
+   "asil": "Sheriff's Office",
+   "ceviri": "Şerif Ofisi"
+  },
+  {
+   "asil": "Legendary Animal",
+   "ceviri": "Efsanevi Hayvan"
+  },
+  {
+   "asil": "Perfect Pelt",
+   "ceviri": "Kusursuz Post"
+  },
+  {
+   "asil": "Pelt",
+   "ceviri": "Post"
+  },
+  {
+   "asil": "Tonic",
+   "ceviri": "Tonik"
+  },
+  {
+   "asil": "Cores",
+   "ceviri": "Çekirdekler"
+  },
+  {
+   "asil": "Health Core",
+   "ceviri": "Sağlık Çekirdeği"
+  },
+  {
+   "asil": "Stamina Core",
+   "ceviri": "Dayanıklılık Çekirdeği"
+  },
+  {
+   "asil": "Horse Bonding",
+   "ceviri": "At Bağı"
+  },
+  {
+   "asil": "Hogtie",
+   "ceviri": "Ellerini ayaklarını bağla"
+  },
+  {
+   "asil": "Lasso",
+   "ceviri": "Kement"
+  },
+  {
+   "asil": "Revolver",
+   "ceviri": "Toplu tabanca"
+  },
+  {
+   "asil": "Repeater",
+   "ceviri": "Tekrarlı tüfek"
+  },
+  {
+   "asil": "Varmint Rifle",
+   "ceviri": "Haşere Tüfeği"
+  },
+  {
+   "asil": "Shotgun",
+   "ceviri": "Pompalı"
+  },
+  {
+   "asil": "Bow",
+   "ceviri": "Yay"
+  },
+  {
+   "asil": "Treasure Map",
+   "ceviri": "Hazine Haritası"
+  },
+  {
+   "asil": "Stranger",
+   "ceviri": "Yabancı"
+  },
+  {
+   "asil": "Herbalist",
+   "ceviri": "Şifalı Bitkici"
+  },
+  {
+   "asil": "Compendium",
+   "ceviri": "Ansiklopedi"
+  },
+  {
+   "asil": "Dead or Alive",
+   "ceviri": "Ölü ya da Diri"
+  },
+  {
+   "asil": "Greet",
+   "ceviri": "Selam ver"
+  },
+  {
+   "asil": "Antagonize",
+   "ceviri": "Kışkırt"
+  },
+  {
+   "asil": "Defuse",
+   "ceviri": "Yatıştır"
+  },
+  {
+   "asil": "Rob",
+   "ceviri": "Soy"
+  },
+  {
+   "asil": "Loot",
+   "ceviri": "Yağmala"
+  },
+  {
+   "asil": "Skin",
+   "ceviri": "Derisini yüz"
+  },
+  {
+   "asil": "Hitch",
+   "ceviri": "Bağla"
+  },
+  {
+   "asil": "Whistle",
+   "ceviri": "Islık çal"
+  },
+  {
+   "asil": "Brush",
+   "ceviri": "Tımar et"
+  },
+  {
+   "asil": "Feed",
+   "ceviri": "Besle"
+  }
+ ],
+ "argo": [
+  {
+   "asil": "partner",
+   "ceviri": "ortak"
+  },
+  {
+   "asil": "pardner",
+   "ceviri": "ortak"
+  },
+  {
+   "asil": "mister",
+   "ceviri": "bayım"
+  },
+  {
+   "asil": "ma'am",
+   "ceviri": "hanımefendi"
+  },
+  {
+   "asil": "miss",
+   "ceviri": "hanımefendi"
+  },
+  {
+   "asil": "boy",
+   "ceviri": "evlat"
+  },
+  {
+   "asil": "son",
+   "ceviri": "evlat"
+  },
+  {
+   "asil": "fella",
+   "ceviri": "adamım"
+  },
+  {
+   "asil": "folks",
+   "ceviri": "ahali"
+  },
+  {
+   "asil": "varmint",
+   "ceviri": "haşere"
+  },
+  {
+   "asil": "vermin",
+   "ceviri": "haşere"
+  },
+  {
+   "asil": "lawmen",
+   "ceviri": "kanun adamları"
+  },
+  {
+   "asil": "the law",
+   "ceviri": "kanun"
+  },
+  {
+   "asil": "greenhorn",
+   "ceviri": "toy"
+  },
+  {
+   "asil": "yokel",
+   "ceviri": "hödük"
+  },
+  {
+   "asil": "dandy",
+   "ceviri": "züppe"
+  },
+  {
+   "asil": "whiskey",
+   "ceviri": "viski"
+  },
+  {
+   "asil": "old girl",
+   "ceviri": "kızım"
+  },
+  {
+   "asil": "easy, girl",
+   "ceviri": "sakin ol kızım"
+  },
+  {
+   "asil": "easy, boy",
+   "ceviri": "sakin ol oğlum"
+  }
+ ]
+}

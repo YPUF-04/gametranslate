@@ -1,0 +1,441 @@
+{
+ "bicim": 1,
+ "kod": "gta6",
+ "ad": "Grand Theft Auto VI",
+ "surum": "2026.11.24",
+ "adlar": [
+  "GTA 6",
+  "GTA VI",
+  "GTA6",
+  "Grand Theft Auto 6",
+  "Grand Theft Auto VI"
+ ],
+ "hitap": "sen",
+ "notlar": "Modern-day Leonida (a fictional Florida). Jason and Lucia are partners in crime and in love: they talk informally and warmly, with teasing. Street talk is common; use natural Turkish street register without overdoing it. Social media/influencer slang appears in radio and phone texts. Keep in-world brand, place and gang names in English with Turkish suffixes after an apostrophe.",
+ "karakterler": [
+  {
+   "ad": "Jason Duval",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Lucia Caminos",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Cal Hampton",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Boobie Ike",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Dre'Quan Priest",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Raul Bautista",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Brian Heder",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Bae-Luxe",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Roxy",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Real Dimez",
+   "cinsiyet": ""
+  }
+ ],
+ "yerler": [
+  "Vice City",
+  "Leonida",
+  "Leonida Keys",
+  "Grassrivers",
+  "Port Gellhorn",
+  "Ambrosia",
+  "Mount Kalaga",
+  "Mount Kalaga National Park",
+  "Vice Beach",
+  "Little Havana",
+  "Ocean Beach",
+  "Vice City PD",
+  "Leonida State Police",
+  "Only Raw Records"
+ ],
+ "terimler": [
+  {
+   "asil": "Wanted Level",
+   "ceviri": "Aranma Seviyesi"
+  },
+  {
+   "asil": "Wanted",
+   "ceviri": "Aranıyor"
+  },
+  {
+   "asil": "Lose the cops",
+   "ceviri": "Polisleri atlat"
+  },
+  {
+   "asil": "Lose your wanted level",
+   "ceviri": "Aranma seviyeni düşür"
+  },
+  {
+   "asil": "Mission Passed",
+   "ceviri": "Görev Tamamlandı"
+  },
+  {
+   "asil": "Mission Failed",
+   "ceviri": "Görev Başarısız"
+  },
+  {
+   "asil": "Wasted",
+   "ceviri": "Öldün"
+  },
+  {
+   "asil": "Busted",
+   "ceviri": "Yakalandın"
+  },
+  {
+   "asil": "Safehouse",
+   "ceviri": "Güvenli Ev"
+  },
+  {
+   "asil": "Heist",
+   "ceviri": "Soygun"
+  },
+  {
+   "asil": "Getaway vehicle",
+   "ceviri": "Kaçış aracı"
+  },
+  {
+   "asil": "Getaway car",
+   "ceviri": "Kaçış arabası"
+  },
+  {
+   "asil": "Weapon Wheel",
+   "ceviri": "Silah Çarkı"
+  },
+  {
+   "asil": "Waypoint",
+   "ceviri": "Yol noktası"
+  },
+  {
+   "asil": "Objective",
+   "ceviri": "Hedef"
+  },
+  {
+   "asil": "Stash",
+   "ceviri": "Zula"
+  },
+  {
+   "asil": "Crew",
+   "ceviri": "Ekip"
+  },
+  {
+   "asil": "Score",
+   "ceviri": "Vurgun"
+  },
+  {
+   "asil": "Cutscene",
+   "ceviri": "Ara sahne"
+  },
+  {
+   "asil": "Checkpoint",
+   "ceviri": "Kontrol noktası"
+  },
+  {
+   "asil": "Stars",
+   "ceviri": "Yıldızlar"
+  },
+  {
+   "asil": "Body Armor",
+   "ceviri": "Çelik Yelek"
+  },
+  {
+   "asil": "Health",
+   "ceviri": "Sağlık"
+  },
+  {
+   "asil": "Armor",
+   "ceviri": "Zırh"
+  },
+  {
+   "asil": "Ammo",
+   "ceviri": "Cephane"
+  },
+  {
+   "asil": "Pause Menu",
+   "ceviri": "Duraklatma Menüsü"
+  },
+  {
+   "asil": "Map",
+   "ceviri": "Harita"
+  },
+  {
+   "asil": "Brief",
+   "ceviri": "Özet"
+  },
+  {
+   "asil": "Stats",
+   "ceviri": "İstatistikler"
+  },
+  {
+   "asil": "Settings",
+   "ceviri": "Ayarlar"
+  },
+  {
+   "asil": "Gallery",
+   "ceviri": "Galeri"
+  },
+  {
+   "asil": "Online",
+   "ceviri": "Çevrim İçi"
+  },
+  {
+   "asil": "Story Mode",
+   "ceviri": "Hikâye Modu"
+  },
+  {
+   "asil": "Load Game",
+   "ceviri": "Oyun Yükle"
+  },
+  {
+   "asil": "Save Game",
+   "ceviri": "Oyunu Kaydet"
+  },
+  {
+   "asil": "Quick Save",
+   "ceviri": "Hızlı Kayıt"
+  },
+  {
+   "asil": "Replay Mission",
+   "ceviri": "Görevi Tekrar Oyna"
+  },
+  {
+   "asil": "Skip",
+   "ceviri": "Atla"
+  },
+  {
+   "asil": "Retry",
+   "ceviri": "Tekrar Dene"
+  },
+  {
+   "asil": "Strangers and Freaks",
+   "ceviri": "Yabancılar ve Tuhaflar"
+  },
+  {
+   "asil": "Random Event",
+   "ceviri": "Rastgele Olay"
+  },
+  {
+   "asil": "Hood",
+   "ceviri": "Mahalle"
+  },
+  {
+   "asil": "Drive-by",
+   "ceviri": "Arabadan taramak"
+  },
+  {
+   "asil": "Vice City PD",
+   "ceviri": "Vice City PD"
+  },
+  {
+   "asil": "Leonida State Police",
+   "ceviri": "Leonida Eyalet Polisi"
+  },
+  {
+   "asil": "Bonnie and Clyde",
+   "ceviri": "Bonnie ve Clyde"
+  },
+  {
+   "asil": "Stick-up",
+   "ceviri": "Soygun"
+  },
+  {
+   "asil": "Lay low",
+   "ceviri": "Ortalıktan kaybol"
+  },
+  {
+   "asil": "Hideout",
+   "ceviri": "Saklanma yeri"
+  },
+  {
+   "asil": "Gator",
+   "ceviri": "Timsah"
+  },
+  {
+   "asil": "Swamp",
+   "ceviri": "Bataklık"
+  },
+  {
+   "asil": "Airboat",
+   "ceviri": "Hava pervaneli tekne"
+  },
+  {
+   "asil": "Convenience store",
+   "ceviri": "Market"
+  },
+  {
+   "asil": "Pawn shop",
+   "ceviri": "Rehinci"
+  },
+  {
+   "asil": "Bail",
+   "ceviri": "Kefalet"
+  },
+  {
+   "asil": "Parole",
+   "ceviri": "Şartlı tahliye"
+  },
+  {
+   "asil": "Probation",
+   "ceviri": "Denetimli serbestlik"
+  },
+  {
+   "asil": "Jason",
+   "ceviri": "Jason"
+  },
+  {
+   "asil": "Lucia",
+   "ceviri": "Lucia"
+  }
+ ],
+ "argo": [
+  {
+   "asil": "homie",
+   "ceviri": "kanka"
+  },
+  {
+   "asil": "bro",
+   "ceviri": "kanka"
+  },
+  {
+   "asil": "dawg",
+   "ceviri": "birader"
+  },
+  {
+   "asil": "G",
+   "ceviri": "kanka"
+  },
+  {
+   "asil": "cops",
+   "ceviri": "aynasızlar"
+  },
+  {
+   "asil": "five-o",
+   "ceviri": "aynasızlar"
+  },
+  {
+   "asil": "pigs",
+   "ceviri": "aynasızlar"
+  },
+  {
+   "asil": "feds",
+   "ceviri": "federaller"
+  },
+  {
+   "asil": "opps",
+   "ceviri": "düşmanlar"
+  },
+  {
+   "asil": "whip",
+   "ceviri": "araba"
+  },
+  {
+   "asil": "ride",
+   "ceviri": "araba"
+  },
+  {
+   "asil": "strap",
+   "ceviri": "silah"
+  },
+  {
+   "asil": "piece",
+   "ceviri": "tabanca"
+  },
+  {
+   "asil": "grand",
+   "ceviri": "bin dolar"
+  },
+  {
+   "asil": "racks",
+   "ceviri": "binlikler"
+  },
+  {
+   "asil": "bread",
+   "ceviri": "para"
+  },
+  {
+   "asil": "dough",
+   "ceviri": "para"
+  },
+  {
+   "asil": "my bad",
+   "ceviri": "pardon, benim hatam"
+  },
+  {
+   "asil": "no cap",
+   "ceviri": "yemin ederim"
+  },
+  {
+   "asil": "for real",
+   "ceviri": "cidden"
+  },
+  {
+   "asil": "chill",
+   "ceviri": "sakin ol"
+  },
+  {
+   "asil": "snitch",
+   "ceviri": "ispiyoncu"
+  },
+  {
+   "asil": "shawty",
+   "ceviri": "güzelim"
+  },
+  {
+   "asil": "lit",
+   "ceviri": "efsane"
+  },
+  {
+   "asil": "dope",
+   "ceviri": "efsane"
+  },
+  {
+   "asil": "hustle",
+   "ceviri": "iş çevirmek"
+  },
+  {
+   "asil": "baby",
+   "ceviri": "bebeğim"
+  },
+  {
+   "asil": "babe",
+   "ceviri": "aşkım"
+  },
+  {
+   "asil": "ride or die",
+   "ceviri": "ölümüne beraber"
+  },
+  {
+   "asil": "Florida man",
+   "ceviri": "Floridalı adam"
+  },
+  {
+   "asil": "clout",
+   "ceviri": "şöhret"
+  },
+  {
+   "asil": "content",
+   "ceviri": "içerik"
+  }
+ ]
+}

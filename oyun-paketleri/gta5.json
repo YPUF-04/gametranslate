@@ -1,0 +1,502 @@
+{
+ "bicim": 1,
+ "kod": "gta5",
+ "ad": "Grand Theft Auto V",
+ "surum": "2026.11.24",
+ "adlar": [
+  "GTA 5",
+  "GTA V",
+  "GTA5",
+  "Grand Theft Auto 5",
+  "Grand Theft Auto V",
+  "GTA Online"
+ ],
+ "hitap": "sen",
+ "notlar": "Satirical modern Los Santos (a fictional LA) and Blaine County. Three protagonists: Michael (retired bank robber, sarcastic, family troubles), Franklin (young, from Strawberry/Forum Drive, street talk with Lamar), Trevor (unhinged, extremely profane). Keep profanity at the same intensity. Lester is the planner of the heists. FIB and IAA are in-world agencies: keep the acronyms.",
+ "karakterler": [
+  {
+   "ad": "Michael De Santa",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Franklin Clinton",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Trevor Philips",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Lamar Davis",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Lester Crest",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Amanda De Santa",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Jimmy De Santa",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Tracey De Santa",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Dave Norton",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Steve Haines",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Devin Weston",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Martin Madrazo",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Wade Hebert",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Ron Jakowski",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Stretch",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Chop",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Simeon Yetarian",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Tanisha Jackson",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Denise Clinton",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Floyd Hebert",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Patricia Madrazo",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Solomon Richards",
+   "cinsiyet": "e"
+  },
+  {
+   "ad": "Molly Schultz",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Paige Harris",
+   "cinsiyet": "k"
+  },
+  {
+   "ad": "Packie McReary",
+   "cinsiyet": "e"
+  }
+ ],
+ "yerler": [
+  "Los Santos",
+  "Blaine County",
+  "San Andreas",
+  "Sandy Shores",
+  "Paleto Bay",
+  "Vinewood",
+  "Vinewood Hills",
+  "Grove Street",
+  "Forum Drive",
+  "Strawberry",
+  "Mount Chiliad",
+  "Vespucci Beach",
+  "Del Perro",
+  "Chumash",
+  "Rockford Hills",
+  "Davis",
+  "Alamo Sea",
+  "Fort Zancudo",
+  "Grapeseed",
+  "Harmony",
+  "Paleto Forest",
+  "Los Santos International Airport",
+  "La Puerta",
+  "Little Seoul",
+  "Mirror Park",
+  "Ammu-Nation",
+  "Los Santos Customs",
+  "Vanilla Unicorn",
+  "Lifeinvader",
+  "Merryweather",
+  "Union Depository",
+  "Ballas",
+  "Families",
+  "Vagos",
+  "Lost MC",
+  "Aztecas",
+  "O'Neil Brothers",
+  "FIB",
+  "IAA",
+  "LSPD",
+  "Bawsaq",
+  "LCN"
+ ],
+ "terimler": [
+  {
+   "asil": "Wanted Level",
+   "ceviri": "Aranma Seviyesi"
+  },
+  {
+   "asil": "Wanted",
+   "ceviri": "Aranıyor"
+  },
+  {
+   "asil": "Lose the cops",
+   "ceviri": "Polisleri atlat"
+  },
+  {
+   "asil": "Lose your wanted level",
+   "ceviri": "Aranma seviyeni düşür"
+  },
+  {
+   "asil": "Mission Passed",
+   "ceviri": "Görev Tamamlandı"
+  },
+  {
+   "asil": "Mission Failed",
+   "ceviri": "Görev Başarısız"
+  },
+  {
+   "asil": "Wasted",
+   "ceviri": "Öldün"
+  },
+  {
+   "asil": "Busted",
+   "ceviri": "Yakalandın"
+  },
+  {
+   "asil": "Safehouse",
+   "ceviri": "Güvenli Ev"
+  },
+  {
+   "asil": "Heist",
+   "ceviri": "Soygun"
+  },
+  {
+   "asil": "Getaway vehicle",
+   "ceviri": "Kaçış aracı"
+  },
+  {
+   "asil": "Getaway car",
+   "ceviri": "Kaçış arabası"
+  },
+  {
+   "asil": "Weapon Wheel",
+   "ceviri": "Silah Çarkı"
+  },
+  {
+   "asil": "Waypoint",
+   "ceviri": "Yol noktası"
+  },
+  {
+   "asil": "Objective",
+   "ceviri": "Hedef"
+  },
+  {
+   "asil": "Stash",
+   "ceviri": "Zula"
+  },
+  {
+   "asil": "Crew",
+   "ceviri": "Ekip"
+  },
+  {
+   "asil": "Score",
+   "ceviri": "Vurgun"
+  },
+  {
+   "asil": "Cutscene",
+   "ceviri": "Ara sahne"
+  },
+  {
+   "asil": "Checkpoint",
+   "ceviri": "Kontrol noktası"
+  },
+  {
+   "asil": "Stars",
+   "ceviri": "Yıldızlar"
+  },
+  {
+   "asil": "Body Armor",
+   "ceviri": "Çelik Yelek"
+  },
+  {
+   "asil": "Health",
+   "ceviri": "Sağlık"
+  },
+  {
+   "asil": "Armor",
+   "ceviri": "Zırh"
+  },
+  {
+   "asil": "Ammo",
+   "ceviri": "Cephane"
+  },
+  {
+   "asil": "Pause Menu",
+   "ceviri": "Duraklatma Menüsü"
+  },
+  {
+   "asil": "Map",
+   "ceviri": "Harita"
+  },
+  {
+   "asil": "Brief",
+   "ceviri": "Özet"
+  },
+  {
+   "asil": "Stats",
+   "ceviri": "İstatistikler"
+  },
+  {
+   "asil": "Settings",
+   "ceviri": "Ayarlar"
+  },
+  {
+   "asil": "Gallery",
+   "ceviri": "Galeri"
+  },
+  {
+   "asil": "Online",
+   "ceviri": "Çevrim İçi"
+  },
+  {
+   "asil": "Story Mode",
+   "ceviri": "Hikâye Modu"
+  },
+  {
+   "asil": "Load Game",
+   "ceviri": "Oyun Yükle"
+  },
+  {
+   "asil": "Save Game",
+   "ceviri": "Oyunu Kaydet"
+  },
+  {
+   "asil": "Quick Save",
+   "ceviri": "Hızlı Kayıt"
+  },
+  {
+   "asil": "Replay Mission",
+   "ceviri": "Görevi Tekrar Oyna"
+  },
+  {
+   "asil": "Skip",
+   "ceviri": "Atla"
+  },
+  {
+   "asil": "Retry",
+   "ceviri": "Tekrar Dene"
+  },
+  {
+   "asil": "Strangers and Freaks",
+   "ceviri": "Yabancılar ve Tuhaflar"
+  },
+  {
+   "asil": "Random Event",
+   "ceviri": "Rastgele Olay"
+  },
+  {
+   "asil": "Hood",
+   "ceviri": "Mahalle"
+  },
+  {
+   "asil": "Drive-by",
+   "ceviri": "Arabadan taramak"
+  },
+  {
+   "asil": "Special Ability",
+   "ceviri": "Özel Yetenek"
+  },
+  {
+   "asil": "Stock Market",
+   "ceviri": "Borsa"
+  },
+  {
+   "asil": "Character Switch",
+   "ceviri": "Karakter Değiştir"
+  },
+  {
+   "asil": "Strangers",
+   "ceviri": "Yabancılar"
+  },
+  {
+   "asil": "Lester's Assassinations",
+   "ceviri": "Lester'ın Suikastleri"
+  },
+  {
+   "asil": "The Big Score",
+   "ceviri": "Büyük Vurgun"
+  },
+  {
+   "asil": "The Jewel Store Job",
+   "ceviri": "Kuyumcu İşi"
+  },
+  {
+   "asil": "Hit list",
+   "ceviri": "Ölüm listesi"
+  },
+  {
+   "asil": "Tow truck",
+   "ceviri": "Çekici"
+  },
+  {
+   "asil": "Repo",
+   "ceviri": "Haciz işi"
+  },
+  {
+   "asil": "Rampage",
+   "ceviri": "Katliam"
+  }
+ ],
+ "argo": [
+  {
+   "asil": "homie",
+   "ceviri": "kanka"
+  },
+  {
+   "asil": "bro",
+   "ceviri": "kanka"
+  },
+  {
+   "asil": "dawg",
+   "ceviri": "birader"
+  },
+  {
+   "asil": "G",
+   "ceviri": "kanka"
+  },
+  {
+   "asil": "cops",
+   "ceviri": "aynasızlar"
+  },
+  {
+   "asil": "five-o",
+   "ceviri": "aynasızlar"
+  },
+  {
+   "asil": "pigs",
+   "ceviri": "aynasızlar"
+  },
+  {
+   "asil": "feds",
+   "ceviri": "federaller"
+  },
+  {
+   "asil": "opps",
+   "ceviri": "düşmanlar"
+  },
+  {
+   "asil": "whip",
+   "ceviri": "araba"
+  },
+  {
+   "asil": "ride",
+   "ceviri": "araba"
+  },
+  {
+   "asil": "strap",
+   "ceviri": "silah"
+  },
+  {
+   "asil": "piece",
+   "ceviri": "tabanca"
+  },
+  {
+   "asil": "grand",
+   "ceviri": "bin dolar"
+  },
+  {
+   "asil": "racks",
+   "ceviri": "binlikler"
+  },
+  {
+   "asil": "bread",
+   "ceviri": "para"
+  },
+  {
+   "asil": "dough",
+   "ceviri": "para"
+  },
+  {
+   "asil": "my bad",
+   "ceviri": "pardon, benim hatam"
+  },
+  {
+   "asil": "no cap",
+   "ceviri": "yemin ederim"
+  },
+  {
+   "asil": "for real",
+   "ceviri": "cidden"
+  },
+  {
+   "asil": "chill",
+   "ceviri": "sakin ol"
+  },
+  {
+   "asil": "snitch",
+   "ceviri": "ispiyoncu"
+  },
+  {
+   "asil": "shawty",
+   "ceviri": "güzelim"
+  },
+  {
+   "asil": "lit",
+   "ceviri": "efsane"
+  },
+  {
+   "asil": "dope",
+   "ceviri": "efsane"
+  },
+  {
+   "asil": "hustle",
+   "ceviri": "iş çevirmek"
+  },
+  {
+   "asil": "fool",
+   "ceviri": "salak"
+  },
+  {
+   "asil": "homeboy",
+   "ceviri": "kanka"
+  },
+  {
+   "asil": "ese",
+   "ceviri": "kanka"
+  },
+  {
+   "asil": "cuz",
+   "ceviri": "kuzen"
+  }
+ ]
+}

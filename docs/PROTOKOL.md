@@ -1124,13 +1124,13 @@ sözlük denetimi → Türkçe ek uyumu → düğme belirteçleri (§16.2). Tekr
 
 ### 20.5 Oyun paketleri (uygulama güncellemesi beklemeden güncellenen oyun sözlükleri)
 - Kaynak: depodaki `oyun-paketleri/` klasörü. Dizin `oyun-paketleri/index.json`:
-  `{"bicim":1,"paketler":[{"kod":"gta-6","ad":"Grand Theft Auto VI","surum":"2026.11.24","sha256":"<64 hex>",
+  `{"bicim":1,"paketler":[{"kod":"gta6","ad":"Grand Theft Auto VI","surum":"2026.11.24","sha256":"<64 hex>",
   "boyut":12345}]}`. Paket `oyun-paketleri/<kod>.json`:
-  `{"bicim":1,"kod":"gta-6","ad":"…","adlar":["gta 6","gta vi",…],"surum":"…","hitap":"sen"|"siz",
+  `{"bicim":1,"kod":"gta6","ad":"…","adlar":["gta 6","gta vi",…],"surum":"…","hitap":"sen"|"siz",
   "notlar":"…","karakterler":[{"ad":"…","cinsiyet":"k"|"e"|""}],"yerler":["…"],
   "terimler":[{"asil":"…","ceviri":"…"}],"argo":[{"asil":"…","ceviri":"…"}]}`.
   Sınırlar: paket ≤ 256 KB, ≤ 2000 terim, ≤ 300 karakter, ≤ 500 yer, ≤ 200 argo; metinler kısaltılır; `kod` §6 oyun kodu
-  biçiminde.
+  biçiminde (`kod_uret`: "GTA 6" → `gta6`). Dizin `python -m kopru.oyun_paketleri` ile yeniden üretilir.
 - Program pakete gömülü bir kopyayla gelir (`oyun-paketleri/`, PyInstaller `--add-data`). Arka planda (açılıştan 30 sn
   sonra, sonra 24 sa'de bir; ayar `oyun_paketleri_guncelle`, varsayılan `true`) yalnız
   `https://raw.githubusercontent.com/YPUF-04/gametranslate/main/oyun-paketleri/…` adresinden dizin, sonra yalnız
@@ -1144,7 +1144,7 @@ sözlük denetimi → Türkçe ek uyumu → düğme belirteçleri (§16.2). Tekr
   `yerler`, `argo`, `notlar` istemin oyun bloğuna (§20.4) girer ve yerler korunan adlardır; `hitap` yalnız oyun bilgisinde
   açık hitap yoksa kullanılır.
 - API (yalnız yerel): `GET /api/oyun-paketleri` → `{"paketler":[{"kod","ad","surum","kaynak":"gomulu"|"indirilen",
-  "terim":n}],"etkin":"gta-6"|null,"son_denetim":<epoch|null>,"hata":null|"ag"|"gecersiz"}`;
+  "terim":n}],"etkin":"gta6"|null,"son_denetim":<epoch|null>,"hata":null|"ag"|"gecersiz"}`;
   `POST /api/oyun-paketleri/denetle` → hemen denetler, aynı biçimde döner.
 
 ### 20.6 Altyazı görünümü 2 ve canlı önizleme

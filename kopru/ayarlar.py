@@ -25,8 +25,13 @@ VARSAYILAN_GORUNUM: dict[str, Any] = {
     "en_az_ms": 800,      # çevirinin en az ekranda kalma süresi, 0-3000 ms (PROTOKOL 13.4)
     "yerlesim": "ustune",  # ustune: orijinal yazının üstünü örter | cubuk: alttaki/üstteki çubuk (PROTOKOL 16.1)
     "karakter_ms": 60,    # geride kalınca okuma tabanı, karakter başına 40-120 ms (PROTOKOL 16.4)
+    # PROTOKOL 20.6: görünüm 2
+    "konusan_goster": True, "boyut": "otomatik", "zemin": "kutu", "kalinlik": "kalin",
 }
 YERLESIMLER = ("ustune", "cubuk")
+BOYUTLAR = {"otomatik": None, "kucuk": 32, "orta": 40, "buyuk": 52, "cok_buyuk": 64}
+ZEMINLER = ("kutu", "serit", "golge", "yok")
+KALINLIKLAR = ("normal", "kalin")
 
 VARSAYILAN: dict[str, Any] = {
     "arayuz_dili": "tr",
@@ -62,6 +67,9 @@ VARSAYILAN: dict[str, Any] = {
     "gorunum": VARSAYILAN_GORUNUM,
     # genel kısayol tuşları, yalnız Windows (PROTOKOL §13.1); boş dize = kapalı
     "kisayollar": {"baslat_durdur": "ctrl+shift+t", "gizle_goster": "ctrl+shift+h", "yeniden_oku": "ctrl+shift+r"},
+    "kisa_adres": True,              # PROTOKOL 20.2: kapı 80'de yalnız yönlendiren kısa adres
+    "lg_uyanik": {"acik": False, "adres": ""},   # PROTOKOL 20.3: LG ekranı kararmasın (SSAP)
+    "oyun_paketleri_guncelle": True,  # PROTOKOL 20.5: oyun paketlerini GitHub'dan günde bir denetle
 }
 
 
@@ -149,6 +157,16 @@ def bolgeleri_temizle(v: Any) -> list[dict[str, Any]]:
                         "tur": b["tur"], "ad": b.get("ad") or _BOLGE_AD[b["tur"]], "hedef": h,
                         "olcek": float(olcek) if olcek is not None else 1.0})
     return out
+
+
+def lg_adres_gecerli(a: Any) -> bool:
+    """Yerel ağdaki bir IPv4 adresi (PROTOKOL 20.3)."""
+    import ipaddress
+    try:
+        ip = ipaddress.IPv4Address(str(a))
+    except ValueError:
+        return False
+    return ip.is_private and not ip.is_loopback
 
 
 def ayar_dizini() -> Path:
@@ -285,6 +303,12 @@ def duzelt(ayar: dict[str, Any]) -> dict[str, Any]:
         s["gorunum"]["karakter_ms"] = v["gorunum"]["karakter_ms"]
     if s["gorunum"].get("konum") not in ("alt", "ust"):
         s["gorunum"]["konum"] = v["gorunum"]["konum"]
+    for alan, izinli in (("boyut", BOYUTLAR), ("zemin", ZEMINLER), ("kalinlik", KALINLIKLAR)):
+        if s["gorunum"].get(alan) not in izinli:
+            s["gorunum"][alan] = v["gorunum"][alan]
+    lu = s["lg_uyanik"]
+    if not (isinstance(lu.get("adres"), str) and (lu["adres"] == "" or lg_adres_gecerli(lu["adres"]))):
+        lu["adres"] = ""
     s["erisim"].pop("ucretsiz_dakika_gun", None)   # §7.3'ün eski alanı (§17: altyazı sınırsız)
     if s["erisim"].get("reklam_izni") not in (None, True, False):
         s["erisim"]["reklam_izni"] = None

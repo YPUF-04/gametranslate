@@ -91,3 +91,13 @@ def _ortak_http_kapat():
                 pass
     _http._ORTAK.clear()
     del asyncio
+
+
+@pytest.fixture(autouse=True)
+def oyun_paketi_agi_yok(monkeypatch):
+    """PROTOKOL 20.5: testler GitHub'a oyun paketi sormasın."""
+    from kopru import oyun_paketleri
+
+    def yok(url, en_cok):
+        raise OSError("testte ağ yok")
+    monkeypatch.setattr(oyun_paketleri, "_getir", yok)

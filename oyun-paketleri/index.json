@@ -1,0 +1,26 @@
+{
+  "bicim": 1,
+  "paketler": [
+    {
+      "kod": "gta5",
+      "ad": "Grand Theft Auto V",
+      "surum": "2026.11.24",
+      "sha256": "2bc6bb41f23a4bbb005f39e8ce3f263104950dad7ebcf59877d19d476343b7d3",
+      "boyut": 7579
+    },
+    {
+      "kod": "gta6",
+      "ad": "Grand Theft Auto VI",
+      "surum": "2026.11.24",
+      "sha256": "8bba40b9b64934dca3510848e4d459fa3aa6fc6c2f77d36bf0c13c6088b530c0",
+      "boyut": 6714
+    },
+    {
+      "kod": "rdr2",
+      "ad": "Red Dead Redemption 2",
+      "surum": "2026.11.24",
+      "sha256": "957df5d6b449063bb2de597c10c7e8fe9c0915f8415df75850c352768f54c0d9",
+      "boyut": 7630
+    }
+  ]
+}

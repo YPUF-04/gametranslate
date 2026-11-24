@@ -17,6 +17,7 @@ from aiohttp import web
 from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, erisim as erisim_mod, guncelleme as guncelleme_mod, hafiza as hafiza_mod,
                metinler, oyunlar, paket as paket_mod, sozluk as sozluk_mod)
 from . import oyun_bilgisi
+from . import oyun_paketleri
 from .ceviri import BILGI, _http, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .ceviri.yonetici import CeviriYoneticisi
@@ -50,6 +51,7 @@ GUNCELLEME = web.AppKey("guncelleme", object)
 LG_KURULUM = web.AppKey("lg_kurulum", object)
 TV_KAYDI = web.AppKey("tv_kaydi", object)          # PROTOKOL 18.5
 LG_GELISTIRICI = web.AppKey("lg_gelistirici", object)   # PROTOKOL 18.6
+PAKET_GUNCELLEYICI = web.AppKey("paket_guncelleyici", object)   # PROTOKOL 20.5
 PSN_ISTEK = web.AppKey("psn_istek", object)   # testlerde sahte Sony istemcisi
 
 
@@ -214,10 +216,20 @@ class Durum:
         self._onbellek_kalici = kalici
         self.onbellek = Onbellek(ayarlar.ayar_dizini() / "onbellek.sqlite3" if kalici else ":memory:")
 
+    def oyun_verisi(self, kod: str) -> tuple[dict[str, Any], dict[str, str]]:
+        """Oyun bilgisi + sözlük; oyuna uyan oyun paketi (PROTOKOL 20.5) yalnız bellekte katılır."""
+        bilgi = oyunlar.oku(kod) or {}
+        terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(kod))
+        try:
+            bulunan = oyun_paketleri.bul(kod, str(bilgi.get("ad") or ""))
+            if bulunan:
+                bilgi, terimler = oyun_paketleri.uygula(bilgi, terimler, bulunan[0], hitap_acik=bool(bilgi.get("hitap")))
+        except Exception:   # noqa: BLE001 — bozuk paket çeviriyi durdurmasın
+            log.exception("Oyun paketi uygulanamadı")
+        return bilgi, terimler
+
     def bilgi_yenile(self) -> None:
-        kod = self.oyun_kodu
-        self.yonetici.oyun_bilgisi = oyunlar.oku(kod) or {}
-        self.yonetici.terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(kod))
+        self.yonetici.oyun_bilgisi, self.yonetici.terimler = self.oyun_verisi(self.oyun_kodu)
 
     def _yonetici_kur(self) -> CeviriYoneticisi:
         a = self.ayar
@@ -237,8 +249,7 @@ class Durum:
             y.gecmis = self.gecmis
         self.gecmis = y.gecmis
         y.dublaj_izni = self.erisim.dublaj_izni   # altyazı çevirisi sınırsız (PROTOKOL 17.1)
-        y.oyun_bilgisi = oyunlar.oku(kod) or {}
-        y.terimler = sozluk_mod.sozluk_dict(sozluk_mod.yukle(kod))
+        y.oyun_bilgisi, y.terimler = self.oyun_verisi(kod)
         return y
 
     def yeniden_kur(self) -> None:
@@ -660,6 +671,11 @@ def _gorunum_gecerli(g: dict[str, Any]) -> bool:
             return False
     if "yerlesim" in g and g["yerlesim"] not in ayarlar.YERLESIMLER:
         return False
+    for alan, izinli in (("boyut", ayarlar.BOYUTLAR), ("zemin", ayarlar.ZEMINLER), ("kalinlik", ayarlar.KALINLIKLAR)):
+        if alan in g and g[alan] not in izinli:
+            return False
+    if "konusan_goster" in g and not isinstance(g["konusan_goster"], bool):
+        return False
     for alan in ("asil_goster", "ekran_cevir", "onceki_goster"):
         if alan in g and not isinstance(g[alan], bool):
             return False
@@ -702,7 +718,8 @@ def _dogrula(k: dict[str, Any]) -> bool:
         if "aktif_oyun" in k and not (isinstance(k["aktif_oyun"], str) and
                                       0 < len(k["aktif_oyun"].strip()) <= 100):
             return False
-        for alan in ("ekrani_cevir", "kisa_aciklama", "ses_cevir", "kurulum_tamam", "guncelleme_denetle"):
+        for alan in ("ekrani_cevir", "kisa_aciklama", "ses_cevir", "kurulum_tamam", "guncelleme_denetle",
+                     "kisa_adres", "oyun_paketleri_guncelle"):
             if alan in k and not isinstance(k[alan], bool):
                 return False
         e = k.get("erisim")
@@ -1818,8 +1835,25 @@ async def api_ps5_unut(request: web.Request) -> web.Response:
     return web.json_response({"tamam": True})
 
 
+# ---------- PROTOKOL 20.5: oyun paketleri ----------
+async def api_oyun_paketleri_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    b = d.yonetici.oyun_bilgisi.get("paket") or {}
+    return web.json_response(await asyncio.to_thread(request.app[PAKET_GUNCELLEYICI].bilgi, b.get("kod")))
+
+
+async def api_oyun_paketleri_denetle(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    g = request.app[PAKET_GUNCELLEYICI]
+    await asyncio.to_thread(g.denetle)
+    d.bilgi_yenile()
+    b = d.yonetici.oyun_bilgisi.get("paket") or {}
+    return web.json_response(await asyncio.to_thread(g.bilgi, b.get("kod")))
+
+
 def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None, lg_kurulum: Any = None,
-                     psn_istek: Any = None, lg_gelistirici: Any = None, **fabrikalar: Any) -> web.Application:
+                     psn_istek: Any = None, lg_gelistirici: Any = None, paket_guncelleyici: Any = None,
+                     **fabrikalar: Any) -> web.Application:
     app = web.Application(middlewares=[kopru_katman, yerel_katman])
     app[PSN_ISTEK] = psn_istek
     durum = Durum(ayar if ayar is not None else ayarlar.yukle(), **fabrikalar)
@@ -1828,6 +1862,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     app[LG_GELISTIRICI] = lg_gelistirici or GelistiriciModu(lambda: durum.ayar)
     app[LG_KURULUM] = lg_kurulum or LgKurulum(lambda: durum.ayar, belirtec_al=app[LG_GELISTIRICI].kurulumdan)
     app[TV_KAYDI] = tv_uygulama.TvKaydi()
+    app[PAKET_GUNCELLEYICI] = paket_guncelleyici or oyun_paketleri.Guncelleyici(lambda: durum.ayar)
     r = app.router
     r.add_get("/kopru/merhaba", merhaba)
     r.add_get("/kopru/akis", akis)
@@ -1878,6 +1913,8 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_post("/api/tv/lg/gelistirici", api_tv_lg_gelistirici_yaz)
     r.add_get("/api/tv/uygulama", api_tv_uygulama)
     r.add_get("/api/oneriler", api_oneriler_al)
+    r.add_get("/api/oyun-paketleri", api_oyun_paketleri_al)
+    r.add_post("/api/oyun-paketleri/denetle", api_oyun_paketleri_denetle)
     r.add_post("/api/oneriler", api_oneriler_yaz)
     r.add_get("/api/ekran-katmani", api_katman_al)
     r.add_post("/api/ekran-katmani/dene", api_katman_dene)
@@ -1952,6 +1989,17 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
                 log.exception("LG geliştirici modu uzatma adımı başarısız")
             await asyncio.sleep(g.DENETIM_SN)
 
+    async def paket_dongusu() -> None:   # PROTOKOL 20.5: oyun paketleri (günde bir, ağ yoksa sessiz)
+        g = app[PAKET_GUNCELLEYICI]
+        await asyncio.sleep(g.ILK_BEKLEME_SN)
+        while True:
+            try:
+                if await asyncio.to_thread(g.gerekirse_denetle):
+                    durum.bilgi_yenile()
+            except Exception:   # noqa: BLE001
+                log.exception("Oyun paketi denetimi başarısız")
+            await asyncio.sleep(g.DENETIM_SN)
+
     async def ac(_: web.Application) -> None:
         durum._dongu = asyncio.get_running_loop()
         await asyncio.to_thread(anahtarlar.isit)
@@ -1968,9 +2016,11 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
                 pass
         app["nvidia_gorevi"] = asyncio.create_task(nvidia_isit())
         app["gelistirici_gorevi"] = asyncio.create_task(gelistirici_dongusu())
+        app["paket_gorevi"] = asyncio.create_task(paket_dongusu())
 
     async def kapat(_: web.Application) -> None:
-        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi", "katman_gorevi", "gelistirici_gorevi") if k in app]
+        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi", "katman_gorevi", "gelistirici_gorevi", "paket_gorevi")
+                if k in app]
         for t in arka:
             t.cancel()
         await asyncio.gather(*arka, return_exceptions=True)

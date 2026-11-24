@@ -115,6 +115,7 @@ jobs:
           --add-data "uzaktan-cikti/LICENSE-FFmpeg-LGPL.txt;uzaktan"
           --paths .
           --add-data "kopru/web;kopru/web"
+          --add-data "oyun-paketleri;oyun-paketleri"
           --add-data "kopru/__init__.py;kopru"
           --add-data "kopru/ses/__init__.py;kopru/ses"
           --add-data "kopru/dublaj;kopru/dublaj"
