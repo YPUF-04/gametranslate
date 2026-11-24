@@ -1,6 +1,6 @@
 # Sürüm notları
 
-## Sonraki sürüm (henüz yayınlanmadı)
+## 0.1.6 — LG'de kurulumsuz kullanım, daha iyi çeviri, görünüm ayarları (2026-11-24)
 - **LG'de kurulum yok:** TV'nin kendi internet tarayıcısına bilgisayarın adresini yaz (çoğu zaman yalnızca `http://192.168.1.20`), konsolun HDMI girişini seç; oyun sayfanın içinde açılır, Türkçe üstüne gelir. Geliştirici modu ve LG hesabı gerekmez. Açılmazsa sayfa açıkça söyler ve yazıyı siyah ekranda göstermeye devam eder.
 - **Ana ekranda "TV'de göster":** büyük, kolay yazılan adres ve telefon için QR kodu.
 - **TV ekranı kararmasın (LG):** bir kez TV'de "Kabul et" de; çeviri sürerken ekran koruyucu açılmaz.
@@ -8,8 +8,6 @@
 - **Altyazı görünümü:** yer (üstünü ört / alt / üst), boy (otomatik … çok büyük), arka plan (kutu / şerit / gölge / yok), renk (beyaz / sarı / açık mavi), kalınlık, konuşan adı göster/gizle — canlı önizlemeyle, TV'de anında.
 - **Daha iyi çeviri:** iki karta bölünmüş cümleler tek cümle çevrilir; BAĞIRAN büyük harfli satırlar düzgün çevrilir; "Hope", "Dutch", "Valentine" gibi hem ad hem sözcük olan adlar korunur; oyun terimleri doğru Türkçe ekle yazılır ("Ölü Göz'ü"); pusula, para, cephane, süre gibi ekran sayıları çevrilmez.
 - **Oyun sözlükleri kendiliğinden güncellenir:** GTA 6, GTA 5 ve RDR2 için adlar, yerler, çeteler ve oyun terimleri; program güncellemesi beklemeden GitHub'dan yenilenir.
-
-## 0.1.6 — Kısa yazılar artık çevrilmeden kalmıyor (2026-11-24)
 - **"Hang up" gibi kısa yazılar** bazen çevrilmeden aynen gösteriliyordu. Program artık çeviri İngilizcenin aynısı gelirse ve içinde sıradan İngilizce kelimeler varsa (isim değilse) "bu bir isim değil, mutlaka çevir" diyerek bir kez daha soruyor. "Vice City" gibi gerçek isimlere dokunulmuyor.
 
 ## 0.1.5 — Yeni arayüz, TV kendiliğinden güncellenir, daha iyi çeviri (2026-11-24)
