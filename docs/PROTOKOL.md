@@ -8,7 +8,8 @@ Alan adları Türkçe ve ASCII'dir (ç→c, ğ→g, ı→i, ö→o, ş→s, ü�
 
 - Varsayılan kapı (port): **8642** (ayarlardan değişebilir).
 - Bilgisayar programı `0.0.0.0:8642` dinler.
-- **Yerel ağdan herkes** erişebilir: `/kopru/*`, `/tv`, `/obs`, `/statik/*`.
+- **Yerel ağdan herkes** erişebilir: `/kopru/*`, `/tv`, `/obs`, `/statik/*`. Yerel olmayan istemciden `GET /` → `302 /tv`
+  (§20.2). Ek olarak kapı **80**'de yalnız `/tv`'ye yönlendiren kısa adres (§20.2).
 - **Yalnızca bu bilgisayardan** (127.0.0.1 / ::1) erişilebilir: `/`, `/panel/*`, `/api/*`.
   Başka adresten gelirse `403` ve `{"hata":"yalniz_yerel"}`.
 - CORS: `/kopru/*` için `Access-Control-Allow-Origin: *` (TV uygulaması `file://` kökenlidir).
@@ -52,7 +53,8 @@ eskisini hemen değiştirir. Okuma süresi hesabı (7.2/1): `max(1800, min(9000,
 `konum`: `"alt"` | `"ust"`. `arka_plan`: 0–1 opaklık. `kenar_bosluk`: alttan/üstten oran.
 
 ### `GET /tv`   ve   `GET /obs`
-Tarayıcıdan açılan bindirme sayfaları (yedek plan ve OBS için). Aynı akışı (`/kopru/akis`) dinler.
+Tarayıcıdan açılan bindirme sayfaları (yedek plan ve OBS için). Aynı akışı (`/kopru/akis`) dinler. LG'nin kendi
+tarayıcısında `/tv` konsolun HDMI görüntüsünü sayfanın içinde oynatır (§20.1).
 `/obs` arka planı tamamen saydamdır. `/tv` siyah arka planlıdır (TV tarayıcısı için).
 
 ## 3. Bilgisayar paneli API'si (yalnızca yerel)

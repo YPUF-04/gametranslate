@@ -979,5 +979,7 @@
   "rg.lgweb.s4": "Pick the HDMI input and play",
   "rg.lgweb.s4.k": "Choose the input your console is on; the game opens in the page. If the picture does not open, the page shows text on black; then try the \"LG app\" option.",
   "rg.lgweb.sorun": "If there is no picture, turn off 120 Hz and HDR on the console and set 4K 60 or 1080p.\nHome/Input closes the page: reopen the browser, the address is remembered.\nIf the screen dims, turn on \"Keep the TV screen on\" and accept the prompt on the TV.",
-  "rehber.adres_not_lg": "On LG the console picture opens inside this page; the translation is on top of the game."
+  "rehber.adres_not_lg": "On LG the console picture opens inside this page; the translation is on top of the game.",
+  "ayar.paketler": "Keep game dictionaries up to date",
+  "ayar.paketler.k": "Names and terms for games like GTA 6, GTA 5 and RDR2 are refreshed from GitHub once a day, without waiting for an app update. Nothing is sent."
 }

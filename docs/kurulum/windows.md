@@ -41,6 +41,7 @@ Panelde adımları izle: **oyunu seç**, **çeviri motorunu seç**, **TV'ni bağ
 | Panel açılmıyor | Programı kapatıp yeniden aç. Adres: `http://127.0.0.1:8642` |
 | TV bilgisayarı bulamıyor | Güvenlik duvarında izin ver; TV ve bilgisayar aynı ağda olsun |
 | Kapı (8642) başka programda | Panelde **Gelişmiş** bölümünden kapı numarasını değiştir |
+| Kısa adres (`http://<bilgisayar>` ) açılmıyor | Kapı 80'i başka bir program (IIS, Skype eski sürüm, başka web sunucusu) kullanıyor olabilir; panel o zaman uzun adresi (`…:8642/tv`) gösterir. Güvenlik duvarı izni program için verildiyse 80'i de kapsar. |
 
 ## Kaynaktan (ileri düzey)
 

@@ -320,7 +320,7 @@ class Katman:
         self.tuval.delete("all")
         W, H = self.G, self.Y
         kutular: list[tuple[int, int, int, int]] = []
-        boyut = max(14, int(g.get("yazi_boyutu", 44) * (H / 1080) * 1.0) or 14)
+        boyut = max(14, int(({"kucuk": 32, "orta": 40, "buyuk": 52, "cok_buyuk": 64}.get(g.get("boyut")) or g.get("yazi_boyutu", 44)) * (H / 1080) * 1.0) or 14)
         yasak = self._yasak_kutular()
         ortu_acik = g.get("yerlesim", "ustune") != "cubuk"
         for o in z.ogeler:
@@ -355,7 +355,7 @@ class Katman:
             y = z.yazi
             o = y["ortu"]
             metin = str(o.get("metin") or y["metin"])
-            if y.get("konusan"):
+            if y.get("konusan") and g.get("konusan_goster", True) is not False:   # §20.6
                 metin = f"{y['konusan']}: {metin}"
             k = self._ortu_ciz(o, metin, W, H, mantik.ORTU_EN_AZ_PX, yasak, sola=False)
             if k:
@@ -375,7 +375,7 @@ class Katman:
                 olc = f.measure
             satir_y = f.metrics("linespace")
             ek: list[tuple[str, Any, str]] = []   # (metin, font, renk)
-            if y.get("konusan"):
+            if y.get("konusan") and g.get("konusan_goster", True) is not False:   # §20.6
                 ek.append((str(y["konusan"]), kucuk, g.get("konusan_rengi", "#FFD166")))
             if z.onceki:
                 ek.insert(0, (z.onceki, kucuk, SOLUK_RENK))

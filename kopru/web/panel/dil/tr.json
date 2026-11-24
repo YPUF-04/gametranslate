@@ -979,5 +979,7 @@
   "rg.lgweb.s4": "HDMI girişini seç ve oyna",
   "rg.lgweb.s4.k": "Konsol hangi girişteyse onu seç; oyun sayfada açılır. Görüntü açılmazsa sayfa yazıları siyah ekranda gösterir; o zaman \"LG uygulaması\" yolunu dene.",
   "rg.lgweb.sorun": "Görüntü açılmıyorsa konsolda 120 Hz ve HDR'yi kapat, çözünürlüğü 4K 60 ya da 1080p yap.\nEv/Giriş tuşu sayfayı kapatır: tarayıcıyı yeniden aç, adres hatırlanır.\nEkran kararıyorsa \"TV ekranı kararmasın\"ı aç ve TV'deki soruya Kabul et de.",
-  "rehber.adres_not_lg": "LG'de konsolun görüntüsü bu sayfanın içinde açılır; Türkçe yazı oyunun üstündedir."
+  "rehber.adres_not_lg": "LG'de konsolun görüntüsü bu sayfanın içinde açılır; Türkçe yazı oyunun üstündedir.",
+  "ayar.paketler": "Oyun sözlüklerini güncel tut",
+  "ayar.paketler.k": "GTA 6, GTA 5, RDR2 gibi oyunların adları ve terimleri günde bir kez GitHub'dan yenilenir (program güncellemesi beklemeden). Hiçbir bilgi gönderilmez."
 }

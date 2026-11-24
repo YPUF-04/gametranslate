@@ -2306,6 +2306,7 @@
     var ne1 = bolum(t('ayar.bolum'), 'ayar.ne', [
       anahtar(t('ayar.ekran'), t('ayar.ekran.k'), a.ekrani_cevir, function (v) { ayarKaydet({ ekrani_cevir: v }); }, 'ekrani-cevir'),
       anahtar(t('ayar.aciklama'), t('ayar.aciklama.k'), a.kisa_aciklama, function (v) { ayarKaydet({ kisa_aciklama: v }); }, 'kisa-aciklama'),
+      anahtar(t('ayar.paketler'), t('ayar.paketler.k'), a.oyun_paketleri_guncelle !== false, function (v) { ayarKaydet({ oyun_paketleri_guncelle: v }); }, 'oyun-paketleri-guncelle'),
       anahtar(t('ayar.ses'), t('ayar.ses.k'), a.ses_cevir, function (v) { sesAcik.hidden = !v; ayarKaydet({ ses_cevir: v }); }, 'ses-cevir'),
       sesAcik
     ]);

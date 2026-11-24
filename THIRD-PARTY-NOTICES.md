@@ -26,6 +26,8 @@ AltYazıKöprüsü AGPL-3.0-only lisanslıdır. Aşağıdaki kütüphaneler kend
 | librosa (isteğe bağlı) | ISC (paketin METADATA'sından doğrulandı) |
 | psutil (yalnız Windows, pycaw için) | BSD-3-Clause |
 | @webos-tools/cli | Apache-2.0 |
+| LG Connect SDK — SSAP kayıt bildirimi (yalnız veri: `kopru/tv_kurulum/lg_ssap_manifest.py`; LG Electronics, aynı veri pywebostv'de MIT ile de dağıtılır) | Apache-2.0 |
+| sacrebleu (yalnız geliştirici aracı `araclar/kalite_olc.py`, programla dağıtılmaz) | Apache-2.0 |
 
 ### Türkçe dublaj modelleri (isteğe bağlı, kullanıcı onayıyla indirilir)
 

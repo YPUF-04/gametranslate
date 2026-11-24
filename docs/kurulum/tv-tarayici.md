@@ -2,11 +2,14 @@
 
 Uygulama kurmadan da çeviriyi görebilirsin.
 
-> ⚠️ **Önemli fark:** TV'nin tarayıcısı yazıyı **ayrı bir ekranda** gösterir; oyunun **üstünde** değil. En iyisi telefonu/tableti yanına koyup bakmak ya da OBS kullanmaktır. Oyunun üstünde gösterim için [LG kurulumu](lg-webos.md).
+> ✅ **LG TV'de** tarayıcı sayfası konsolun HDMI görüntüsünü kendi içinde açar ve yazıyı **oyunun üstünde** gösterir
+> (kurulum gerekmez): bkz. [LG kurulumu, bölüm 0](lg-webos.md). Diğer TV'lerin tarayıcıları yazıyı **ayrı bir ekranda**
+> gösterir; o zaman telefonu/tableti yanına koyup bakmak ya da OBS kullanmak en iyisidir.
 
 ## TV tarayıcısı ile
 
-1. Panelin **Test et** adımında TV adresini gör. Şuna benzer: `http://192.168.1.20:8642/tv`
+1. Panelin ana ekranındaki **TV'de göster** kartında adresi gör. Kısa adres açıksa `http://192.168.1.20`, değilse
+   `http://192.168.1.20:8642/tv`. Telefonda açmak için kartın yanındaki QR kodu okut.
 2. TV'nin **web tarayıcısını** aç.
 3. Adres çubuğuna bu adresi yaz.
 4. Siyah bir sayfa açılır. Panelde **Örnek altyazıyı gönder**'e bas; yazıyı görmelisin.

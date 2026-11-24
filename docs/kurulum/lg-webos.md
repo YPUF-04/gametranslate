@@ -1,6 +1,32 @@
 # LG TV (webOS) kurulumu
 
-LG TV'de yazı oyunun **üstünde** görünür. Bunun için küçük TV uygulamasını TV'ne kurman gerekir. Bu rehber adım adım gider.
+LG TV'de yazı oyunun **üstünde** görünür. İki yol var:
+
+- **Önerilen — kurulum yok (TV'nin kendi tarayıcısı):** aşağıdaki "0" bölümü. Geliştirici modu ya da LG hesabı gerekmez.
+- **Alternatif — TV uygulaması:** 1. bölümden itibaren. Tarayıcı yolu senin TV'nde görüntüyü açamazsa bunu kullan.
+
+## 0. Önerilen: TV'nin tarayıcısıyla (kurulumsuz)
+
+1. TV ile bilgisayar aynı modeme bağlı olsun (misafir ağı olmasın).
+2. AltYazıKöprüsü panelinde ana ekrandaki **TV'de göster** kartında adresi gör. Genelde kısa adrestir:
+   `http://192.168.1.20` (bilgisayarının adresi). Kısa adres açılamadıysa uzun adres yazar: `http://192.168.1.20:8642/tv`.
+3. LG kumandasında **Ev** tuşu → **Web Browser** (İnternet Tarayıcısı) aç, adresi yaz, OK'a bas. Bir kez **Yer İmlerine** ekle.
+4. Sayfa **"Konsol hangi HDMI girişine takılı?"** diye sorar. Okla seç, OK'a bas. Konsolun görüntüsü sayfanın içinde açılır,
+   Türkçe yazı üstüne gelir. Sonraki açılışta seçimin hatırlanır (5 sn sayaçla kendiliğinden açılır).
+5. Oynarken kumandada **OK** küçük bir menü açar (giriş değiştir, yalnız yazı, yeniden dene). **Ev** ya da **Giriş (Input)**
+   tuşu sayfayı kapatır: tarayıcıyı yeniden aç.
+
+**Görüntü açılmazsa:** sayfa "Bu TV'nin tarayıcısı HDMI görüntüsünü sayfada açamadı" der ve yazıları siyah ekranda
+göstermeye devam eder. Önce konsolda **120 Hz** ve **HDR**'yi kapatıp çözünürlüğü **4K 60** ya da **1080p** yap, **Yeniden dene**.
+Yine olmazsa aşağıdaki TV uygulaması yolunu kullan. (Benzer bir ürün bu yolun 2016 ve sonrası LG'lerde — webOS 3+ —
+çalıştığını, 2021 ve sonrasını önerdiğini söylüyor. Biz gerçek bir LG TV'de henüz deneyemedik.)
+
+**Ekran kararmasın:** OLED'lerde kumandaya uzun süre dokunulmazsa ekran koruyucu açılabilir. Paneldeki **TV ekranı
+kararmasın (LG)** anahtarını aç, **TV ile eşleştir**'e bas ve TV'de çıkan soruya kumandayla **Kabul et** de (yalnız bir kez).
+Çeviri sürerken bilgisayar 2 dakikada bir imleci 1 piksel oynatır. Ayrıca TV ayarlarında **Quick Start+**'ı kapatmak iyi olur.
+
+**Konsolsuz dene:** panelde **Konsolsuz dene**'ye bas; örnek bir oyun sahnesi çevrilir ve Türkçe yazının TV'de nasıl
+göründüğünü konsolu bağlamadan görürsün.
 
 > 🔧 Durum: test ediliyor. Gerçek TV'lerde henüz tam doğrulanmadı.
 
