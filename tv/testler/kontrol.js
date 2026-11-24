@@ -42,6 +42,7 @@ function paketAl() { // sunucunun sunduğu paketin aynısı
     var t = await p.textContent('.ak-yazi-kutu'); assert(t.indexOf('Merhaba dünya') >= 0 && t.indexOf('Ellie') >= 0, t); ok('altyazı + konuşan görünüyor');
     var renk = await p.$eval('.ak-konusan', function (e) { return getComputedStyle(e).color; }); assert.strictEqual(renk, 'rgb(255, 209, 102)'); ok('konuşan adı sarı');
     assert.strictEqual(await p.$$eval('.ak-asil', function (l) { return l.length; }), 0); ok('asil_goster=false iken özgün satır yok');
+    assert.strictEqual(await p.$$eval('.tt-secim', function (l) { return l.length; }), 0); ok('webOS olmayan tarayıcıda HDMI seçimi yok (eski davranış)');
     await p.screenshot({ path: path.join(SHOT, 'tv-html.png') });
     await bekle(1800); assert(await p.isVisible('.ak-yazi-kutu'), 'sure_ms dolunca kendiliğinden gizlendi'); ok('§13.4: sure_ms dolsa da istemci kendiliğinden gizlemez');
     s.yayinla('yazi', { id: 'a1b', metin: 'Yeni cümle', sure_ms: 300 }); await bekle(300);
@@ -419,6 +420,66 @@ function paketAl() { // sunucunun sunduğu paketin aynısı
     await p.waitForFunction(function () { return window.AKYukleyici && window.AKYukleyici.kaynak === 'gomulu'; }, null, { timeout: 10000 });
     assert.strictEqual(await p.evaluate(function () { return localStorage.getItem('ak_paket_kotu'); }), 'bozuk0000001'); ok('§18.3/4: hata veren paket kötü işaretlendi, gömülü paketle açıldı');
     await c.close(); s.tvPaket = PAKET;
+    // ---------- PROTOKOL 20.1: LG'nin kendi tarayıcısında /tv — HDMI seçimi, sayfa içi HDMI, desteklenmiyorsa yalnız yazı ----------
+    console.log('LG tarayıcısı (/tv, kurulumsuz)');
+    var UA_LG = 'Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.79 Safari/537.36 WebAppManager';
+    c = await b.newContext({ locale: 'tr-TR', viewport: { width: 1920, height: 1080 }, userAgent: UA_LG });
+    await c.addInitScript(function () {   // gerçek hdmiAc'ı sarar: oluşturduğu işaretlemeyi kaydeder
+      var gercek; window.__hdmi = []; Object.defineProperty(window, 'AKPlatform', { configurable: true, get: function () { return gercek; }, set: function (v) {
+        var asil = v.hdmiAc; v.hdmiAc = function (n, kutu, bildir) { var k = asil.call(v, n, kutu, bildir); window.__hdmi.push(kutu.innerHTML); return k; }; gercek = v; } });
+    });
+    p = await c.newPage(); var hl = hatalar(p);
+    await p.goto('http://127.0.0.1:8642/tv'); await p.waitForSelector('.tt-secim', { timeout: 3000 });
+    assert.strictEqual(await p.$$eval('.tt-secim button[data-hdmi]', function (l) { return l.length; }), 5);
+    assert.strictEqual(await p.evaluate(function () { return document.activeElement.getAttribute('data-hdmi'); }), '1'); ok('webOS tarayıcısı: HDMI seçimi açıldı, HDMI 1 odakta');
+    await p.screenshot({ path: path.join(SHOT, 'tv-tarayici-secim.png') });
+    await p.keyboard.press('ArrowRight'); await p.keyboard.press('Enter');
+    await p.waitForFunction(function () { return window.__hdmi.length === 1; }, null, { timeout: 2000 });
+    var ht = await p.evaluate(function () { return window.__hdmi[0]; });
+    assert(ht.indexOf('type="service/webos-external"') >= 0 && ht.indexOf('src="ext://hdmi:2"') >= 0, ht);
+    ok('ok + OK: HDMI 2, sayfanın içinde <video><source type="service/webos-external" src="ext://hdmi:2">');
+    await p.waitForSelector('.tt-desteksiz', { timeout: 9500 });
+    var mt = await p.textContent('.tt-mesaj-metin'); assert(mt.indexOf('açamadı') >= 0 && mt.indexOf('LG uygulaması') >= 0, mt);
+    assert.strictEqual(await p.$$eval('#hdmi video', function (l) { return l.length; }), 0); ok('desteklenmiyor: görüntü kaldırıldı, açık mesaj + Yeniden dene / Başka giriş');
+    await p.screenshot({ path: path.join(SHOT, 'tv-tarayici-desteksiz.png') });
+    for (i = 0; i < 40 && s.istemciSayisi() < 1; i++) { await bekle(100); }
+    s.yayinla('yazi', { id: 'lg1', metin: 'Yalnız yazı kipinde de çalışır', sure_ms: 2000 }); await p.waitForSelector('.ak-yazi-kutu:visible', { timeout: 3000 }); ok('desteksiz kipte Türkçe yazı yine görünüyor');
+    assert.strictEqual(await p.evaluate(function () { return localStorage.getItem('ak_tv_hdmi'); }), '2');
+    await p.reload(); await p.waitForSelector('.tt-secim'); await p.waitForFunction(function () { return /HDMI 2 açılıyor/.test(document.querySelector('.tt-oto').textContent); });
+    assert.strictEqual(await p.evaluate(function () { return document.activeElement.getAttribute('data-hdmi'); }), '2');
+    await p.keyboard.press('ArrowLeft'); assert.strictEqual((await p.textContent('.tt-oto')).trim(), ''); ok('seçim hatırlandı: 5 sn sayaçla kendiliğinden açılır, tuşa basınca sayaç durur');
+    await p.goto('http://127.0.0.1:8642/tv?hdmi=0'); await p.waitForFunction(function () { return window.AKTarayiciTV && window.AKTarayiciTV.durum() === 'yazi'; });
+    assert.strictEqual(await p.$$eval('.tt-secim', function (l) { return l.length; }), 0); ok('?hdmi=0: seçim sorulmadan görüntüsüz açıldı');
+    await p.keyboard.press('Enter'); await p.waitForSelector('.tt-menu'); await p.keyboard.press('Escape'); await p.waitForFunction(function () { return !document.querySelector('.tt-menu'); }); ok('çalışırken OK menüyü açar, Geri kapatır (sayfadan çıkmaz)');
+    assert.deepStrictEqual(hl.filter(function (x) { return x.indexOf('pageerror') === 0; }), []); await c.close();
+    // HDMI destekleyen TV (sahte hdmiAc 'tamam' der): görüntü açık kalır, seçim ekranı kapanır
+    c = await b.newContext({ locale: 'tr-TR', viewport: { width: 1920, height: 1080 }, userAgent: UA_LG });
+    await c.addInitScript(function () {
+      var gercek; Object.defineProperty(window, 'AKPlatform', { configurable: true, get: function () { return gercek; }, set: function (v) {
+        v.hdmiAc = function (n, kutu, bildir) { var vd = document.createElement('video'); vd.className = 'hdmi-video'; kutu.appendChild(vd); setTimeout(function () { bildir('tamam'); }, 200); return function () { kutu.innerHTML = ''; }; };
+        gercek = v; } });
+    });
+    p = await c.newPage(); await p.goto('http://127.0.0.1:8642/tv?hdmi=3');
+    await p.waitForFunction(function () { return window.AKTarayiciTV.durum() === 'hdmi' && /tt-hdmi/.test(document.body.className); }, null, { timeout: 3000 });
+    assert.strictEqual(await p.$$eval('#hdmi video', function (l) { return l.length; }), 1); ok('HDMI açılınca görüntü yazının altında kalır (durum hdmi)');
+    // PROTOKOL 20.6: görünüm 2 (canlı)
+    for (i = 0; i < 40 && s.istemciSayisi() < 1; i++) { await bekle(100); }
+    s.yayinla('gorunum', { yerlesim: 'cubuk', konum: 'alt', boyut: 'buyuk', zemin: 'serit', konusan_goster: false, kalinlik: 'normal', yazi_rengi: '#9AD8FF' });
+    s.yayinla('yazi', { id: 'g2', metin: 'Görünüm denemesi', konusan: 'Lucia', sure_ms: 3000 }); await p.waitForSelector('.ak-yazi-kutu:visible');
+    var gs = await p.evaluate(function () { var k = document.querySelector('.ak-kok'), y = document.querySelector('.ak-yazi'), m = document.querySelector('.ak-yazi-kutu');
+      return [/ak-zemin-serit/.test(k.className), /ak-ince/.test(k.className), parseFloat(getComputedStyle(y).fontSize), document.querySelectorAll('.ak-konusan').length, getComputedStyle(m).color, getComputedStyle(m).fontWeight, y.getBoundingClientRect().width]; });
+    assert.deepStrictEqual(gs.slice(0, 6), [true, true, 52, 0, 'rgb(154, 216, 255)', '450'], JSON.stringify(gs)); assert(gs[6] >= 1900, 'şerit ekran genişliğinde değil');
+    ok('§20.6: boyut büyük (52 px), şerit zemin, konuşan gizli, açık mavi, normal kalınlık');
+    await p.screenshot({ path: path.join(SHOT, 'tv-gorunum-serit.png') });
+    s.yayinla('gorunum', { yerlesim: 'ustune', boyut: 'otomatik', zemin: 'golge', konusan_goster: true, kalinlik: 'kalin', yazi_rengi: '#FFFFFF', konusan_rengi: '#FFD166' });
+    s.yayinla('yazi', { id: 'g3', metin: 'Örtü gölgeli', konusan: 'Jason', sure_ms: 3000, ortu: { x: 0.3, y: 0.8, g: 0.4, y2: 0.06, zemin: '#101010' } });
+    await p.waitForSelector('.ak-ortu-yazi.ak-acik');
+    var og = await p.evaluate(function () { var d = document.querySelector('.ak-ortu-yazi'); return [getComputedStyle(d).backgroundColor, d.querySelector('.ak-ortu-konusan').textContent, getComputedStyle(d.querySelector('.ak-ortu-konusan')).color]; });
+    assert.deepStrictEqual(og, ['rgba(0, 0, 0, 0)', 'Jason:', 'rgb(255, 209, 102)']); ok('§20.6: gölge zeminde örtü saydam; konuşan ön eki ayrı renkte');
+    // PROTOKOL 20.7: konsolsuz dene karesi arka planda
+    s.yayinla('demo', { acik: true, kare: '/statik/yazi-latin.woff2' }); await p.waitForFunction(function () { return !document.getElementById('demo-kare').hidden; });
+    s.yayinla('demo', { acik: false }); await p.waitForFunction(function () { return document.getElementById('demo-kare').hidden; }); ok('§20.7: demo olayı örnek kareyi gösterir/kaldırır');
+    await c.close();
     console.log('\nTÜM KONTROLLER GEÇTİ (' + sonuc.length + ')');
   } catch (e) { console.error('\nBAŞARISIZ:', e && e.stack || e); process.exitCode = 1; }
   finally { await b.close(); s.close(); process.exit(process.exitCode || 0); }

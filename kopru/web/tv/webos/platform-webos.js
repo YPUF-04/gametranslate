@@ -53,7 +53,7 @@
       s.addEventListener('error', function () { bildir('hata'); }, false);
       v.addEventListener('playing', function () { bildir('tamam'); }, false);
       kutu.appendChild(v);
-      try { v.play(); } catch (e) { /* autoplay yeter */ }
+      try { var oy = v.play(); if (oy && oy.catch) { oy.catch(function () { /* autoplay yeter; kapatılınca kesilir */ }); } } catch (e) { /* autoplay yeter */ }
       return function kapat() { try { v.pause(); } catch (e) { /* yok say */ } kutu.innerHTML = ''; };
     },
 

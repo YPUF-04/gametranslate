@@ -195,9 +195,18 @@
     kontrol = window.AKOverlay.baslat(adresUrl(pc) + sorgu, $('kok'), {
       onDurum: bilgiDurumu, onBilgi: function (v) { bilgi = v; panelYenile(); }, onYazi: function () { panelYenile(); },
       onReklam: reklamOynat, onReklamBitti: function () { if (reklam) { reklam.durdur(); reklam = null; } },
+      onDemo: demoKare,
       metinKoptu: T('rozet_koptu'), metinBaglaniyor: T('rozet_baglaniyor')
     });
     ipucuGoster();
+  }
+
+  // PROTOKOL 20.7: bilgisayardaki "Konsolsuz dene" — örnek oyun karesi HDMI görüntüsünün yerine arka planda
+  function demoKare(v) {
+    var k = $('hdmi'), acik = !!(v && v.acik && typeof v.kare === 'string' && v.kare.charAt(0) === '/' && pc);
+    k.style.backgroundImage = acik ? 'url("' + adresUrl(pc) + v.kare + '")' : '';
+    k.style.backgroundSize = acik ? 'cover' : '';
+    var vd = k.getElementsByTagName('video')[0]; if (vd) { vd.style.visibility = acik ? 'hidden' : ''; }
   }
 
   // ---- "+30 dk" reklamı (PROTOKOL 17.3): TV yalnız oynatır ve "bitti" der; süreyi PC verir ----
