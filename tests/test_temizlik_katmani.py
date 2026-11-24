@@ -179,3 +179,33 @@ async def test_bagirma_motora_cumle_duzeninde_gider(monkeypatch):
     seg = [(0.0, 2.0, "GET DOWN! THEY'RE SHOOTING AT US")]
     k = await kos(monkeypatch, seg, 4.0, gecikme=0.2)
     assert [v["metin"] for _, v in k.olay("yazi")][0] == "[TR] Get down! They're shooting at us!"
+
+
+def test_ek_uyumu_ingilizce_ad_son_y():
+    assert on_katman.ek_kur("Strawberry", "e") == "ye" and on_katman.ek_kur("Strawberry", "da") == "de"
+
+
+def test_cevrimdisi_motor_adlari_vekille_korur():
+    from kopru.ceviri import yerel
+    d = sozluk_mod.Sozluk({"Hope": "Hope", "Ölü": "x"}, {"Hope"})
+    m, vekil = yerel._adlari_vekille("Tell Hope that Joe is here.", d)
+    assert m == "Tell Max that Joe is here." and vekil == {"Max": "Hope"}
+    # ek, asıl adın yazılışına göre yeniden kurulur (Max'e -> Hope'e; İngilizce okunuş tahmin edilmez)
+    assert yerel._vekilleri_geri_koy("Max'a Joe'nun burada olduğunu söyle.", vekil) == "Hope'e Joe'nun burada olduğunu söyle."
+
+
+def test_kalite_ornekleri_gecerli():
+    import json
+    from pathlib import Path
+    v = json.loads((Path(__file__).parent / "kalite" / "ornekler.json").read_text(encoding="utf-8"))["ornekler"]
+    from collections import Counter
+    c = Counter(o["kat"] for o in v)
+    assert len(v) >= 60 and set(c) == {"diyalog", "gorev", "ad", "bagirma", "bolunmus", "ocr", "dugme", "konusan", "arayuz"}
+    for o in v:
+        assert o["en"].strip() and o["tr"].strip()
+        if o["kat"] == "bolunmus":
+            assert len(o["parcalar"]) == 2 and on_katman.bolunmus_mu(*o["parcalar"])
+        if o["kat"] == "arayuz":
+            assert o["tr"] == o["en"] and okuma_gurultusu_mu(o["en"])
+        if o["kat"] == "bagirma":
+            assert on_katman.bagirma_mi(o["en"])

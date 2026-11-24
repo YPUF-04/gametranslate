@@ -71,6 +71,7 @@ function sahteSunucu() {
     paketKur: [], video: { durum: 'bosta' }, videoBasla: [], videoGoster: 0, profiller: [{ ad: 'Lucia', sure_sn: 18.2, klip: 3, tarih: '2026-11-20' }], profilSil: [],
     tvUyg: { paket_surum: 'a1b2c3d4e5f6', yukleyici_guncel: 2, durum: 'eski', mesaj: 'TV uygulaması eski: bir kez yeniden kurun, sonra hep kendiliğinden güncellenir', tvler: [{ adres: '192.168.1.30', yukleyici: 1, paket: null, guncel: false, son_gorulme_sn: 4 }] },
     gel: { belirtec_var: false, otomatik: true, son_uzatma: null, kalan_sn: null, bitis_tahmini: null, hata: null, durum: 'belirtec_yok', mesaj: 'Geliştirici modu süresi uzatılamıyor: TV\'yi bir kez daha bağlayın.', hatirlatma: true, tv: '192.168.1.30' }, gelPostlari: [],
+    uyanik: { acik: false, adres: '192.168.1.30', eslesti: false, durum: 'kapali', son_dokunus: null, hata: null, mesaj: 'Kapalı.' }, uyanikPostlari: [], demo: false,
     okumaMod: 'iyi', okumaIstekleri: 0, kaynakCihazlar: [], kartVar: false, uyari: null, bilgiMod: 'ok',
     yerel: { hazir: false, boyut_mb: 95, indirme: { durum: 'yok', yuzde: 0, mesaj: null } }, yerelHazirla: 0, yerelDene: 0, yerelAdim: 0,
     katman: { destek: true, acik: false, ekran: 1, ekranlar: [{ no: 1, ad: 'Ekran 1 (1920×1080)' }, { no: 2, ad: 'Ekran 2 (2560×1440)' }] }, katmanDene: [],
@@ -100,6 +101,7 @@ function sahteSunucu() {
         s.writeHead(200, { 'Content-Type': TURLER[path.extname(tam)] || 'application/octet-stream' });
         return s.end(fs.readFileSync(tam));
       }
+      if (url.pathname === '/kopru/demo/kare.jpg') { s.writeHead(200, { 'Content-Type': 'image/png' }); return s.end(KARE); }   // §20.7 örnek kare
       if (url.pathname.startsWith('/statik/')) {   // yazı tipi gibi ortak dosyalar (gerçek sunucuda kopru/web/tv)
         const tam = path.join(TV, url.pathname.slice('/statik/'.length));
         if (!tam.startsWith(TV) || !fs.existsSync(tam)) { s.writeHead(404); return s.end(); }
@@ -117,7 +119,8 @@ function sahteSunucu() {
       switch (q.method + ' ' + url.pathname) {
         case 'GET /api/durum':
           return j({ calisiyor: st.calisiyor, motor: st.ayarlar.motor, yedekte: false, tv_sayisi: st.calisiyor ? 1 : 0,
-            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642, sinir: st.sinir, uyari: st.uyari || null, bildirim: st.bildirim || null,
+            son_yazi: st.calisiyor || st.sonYazi ? (st.sonYazi || 'Ana kampa dön') : '', adresler: ['192.168.1.20'], kapi: 8642,
+            kisa_adres: { acik: true, kapi: 80, hata: null }, tv_adresi: 'http://192.168.1.20', demo: !!st.demo, sinir: st.sinir, uyari: st.uyari || null, bildirim: st.bildirim || null,
             gecikme: st.calisiyor ? (st.gecikme || { kare_ms: 40, okuma_ms: 120, ceviri_ms: 1000, toplam_ms: 1400, kuyruk: 0, olcum: 12, iyilestirilen: 2, iyilestirme_istek: 3 }) : undefined, hata: st.durumHata });
         case 'GET /api/kisayollar': {   // PROTOKOL 13.1
           const k = st.ayarlar.kisayollar || { baslat_durdur: 'ctrl+shift+t', gizle_goster: 'ctrl+shift+h', yeniden_oku: 'ctrl+shift+r' }, hata = st.kisayolHata || {};
@@ -179,7 +182,15 @@ function sahteSunucu() {
           return j({ ceviri: 'Merhaba, nasılsın?', sure_ms: 640 });
         case 'POST /api/baslat': st.calisiyor = true; return j({ tamam: true });
         case 'POST /api/durdur': st.durdurSayi = (st.durdurSayi || 0) + 1; return setTimeout(() => { st.calisiyor = false; j({ tamam: true }); }, st.durdurGecikme || 0);
-        case 'POST /api/deneme-yazi': st.sonYazi = 'Merhaba, bu bir deneme altyazısı'; return j({ tamam: true });
+        case 'POST /api/deneme-yazi': if (b.onizleme) { st.onizlemeler = (st.onizlemeler || 0) + 1; return j({ tamam: true }); } st.sonYazi = 'Merhaba, bu bir deneme altyazısı'; return j({ tamam: true });
+        case 'GET /api/qr': s.writeHead(200, { 'Content-Type': 'image/svg+xml' }); return s.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#fff"/><rect x="2" y="2" width="3" height="3"/></svg>');
+        case 'GET /api/tv/lg/uyanik': return j(st.uyanik);
+        case 'POST /api/tv/lg/uyanik':
+          if ('acik' in b) st.uyanik.acik = b.acik;
+          if (b.esle) { st.uyanik.durum = 'esleniyor'; st.uyanik.mesaj = 'TV\'nin ekranındaki soruya kumandayla \'Kabul et\' deyin (60 sn).'; setTimeout(() => { st.uyanik.durum = 'bekliyor'; st.uyanik.eslesti = true; st.uyanik.mesaj = 'Hazır: çeviri başlayınca TV ekranı açık tutulur.'; }, 600); }
+          else st.uyanik.mesaj = st.uyanik.acik ? 'TV ile eşleşmedi: \'TV ile eşleştir\'e basın, TV\'de çıkan soruya Kabul et deyin.' : 'Kapalı.';
+          st.uyanikPostlari.push(b); return j(st.uyanik);
+        case 'POST /api/demo': st.demo = b.acik; return j({ acik: !!b.acik });
         case 'GET /api/kaynaklar': {   // PROTOKOL 12.2: cihaza göre "onerilen" + "tur"
           const cihaz = url.searchParams.get('cihaz') || st.ayarlar.cihaz;
           st.kaynakCihazlar.push(cihaz);
@@ -579,7 +590,7 @@ function dilKontrol() {
     assert.strictEqual(await sayfa.locator('[data-gosterim]').count(), 3, 'Samsung/Android eşit kare değil');
     assert.match(await metin('#yakinda'), /Bağlantı rehberleri/);
     await sayfa.click('#rehber-bolum > summary');
-    assert.strictEqual(await sayfa.locator('#rehber-bolum .rehber-kart').count(), 6, 'aşama 4: 6 ekran rehberi');
+    assert.strictEqual(await sayfa.locator('#rehber-bolum .rehber-kart').count(), 7, 'aşama 4: 7 ekran rehberi (LG tarayıcı önerilen + LG uygulaması)');
     await sayfa.click('#rehber-lg > summary');
     assert.ok(await sayfa.isVisible('#rehber-lg-ac'), 'LG rehberi: kurulum kartına gitme düğmesi');
     await sayfa.click('#rehber-bolum > summary');
@@ -885,6 +896,23 @@ function dilKontrol() {
     assert.match(await sayfa.getAttribute('#degistir-motor', 'aria-label'), /^Değiştir: Çeviri motoru$/);
     assert.strictEqual(await sayfa.locator('#kurulum-durumu, #rehber-link, #bolge-ac, #oyun-degistir, #gelismis #tv-kart, #son-yazi').count(), 0, 'eski dağınık denetimler yok');
     assert.ok(await sayfa.evaluate(() => document.querySelector('#dublaj-kart').tagName === 'DETAILS' && !document.querySelector('#dublaj-kart').open), 'dublaj kapalı gelir');
+    // PROTOKOL 20.1-20.3, 20.7: TV'de göster — kısa adres büyük + QR, LG ekranı kararmasın, konsolsuz dene
+    await sayfa.waitForFunction(() => document.querySelector('#tv-adres') && document.querySelector('#tv-adres').textContent === 'http://192.168.1.20');
+    assert.match(await sayfa.getAttribute('#tv-qr', 'src'), /^\/api\/qr\?metin=http%3A%2F%2F192\.168\.1\.20$/);
+    assert.match(await metin('#tv-goster-kart'), /tarayıcısına[\s\S]*Kısa adres açık[\s\S]*HDMI girişini seç[\s\S]*Geliştirici modu ya da LG hesabı gerekmez/);
+    assert.ok(await sayfa.isHidden('#tv-esle'), 'kapalıyken eşleştir düğmesi yok');
+    await sayfa.click('#tv-uyanik', { force: true });
+    await sayfa.waitForSelector('#tv-esle:not([hidden])');
+    assert.deepStrictEqual(st.uyanikPostlari.slice(-1)[0], { acik: true });
+    await sayfa.click('#tv-esle');
+    await sayfa.waitForFunction(() => /Kabul et/.test(document.querySelector('#tv-uyanik-durum').textContent));
+    await sayfa.waitForFunction(() => /Hazır/.test(document.querySelector('#tv-uyanik-durum').textContent), null, { timeout: 6000 });
+    assert.deepStrictEqual(st.uyanikPostlari.slice(-1)[0], { esle: true });
+    await sayfa.click('#demo-dene');
+    await sayfa.waitForFunction(() => /Örnek sahne oynuyor/.test(document.body.textContent));
+    assert.strictEqual(st.demo, true); st.demo = false;
+    await kes('8-tv-goster.png', '#tv-goster-kart');
+    adim('§20: TV\'de göster kartı — kısa adres + QR, TV ekranı kararmasın (eşleştirme), konsolsuz dene');
     assert.match(await metin('#durum-metin'), /Çalışıyor/);
     assert.match(await metin('#pk-goruntu'), /PS Remote Play[\s\S]*Bu bilgisayarda/);
     assert.match(await metin('#pk-motor-deger'), /Yerel/);
@@ -1017,8 +1045,8 @@ function dilKontrol() {
     await sayfa.waitForSelector('#rehber-ekran');
     assert.ok(!(await sayfa.isVisible('#tercih .tercih-pano')), 'menü kapanır');
     assert.match(await metin('h1'), /Bağlantı rehberleri/);
-    assert.strictEqual(await sayfa.locator('#rehber-ekran details.rehber-kart').count(), 6);
-    const REH = { bilgisayar: [3, /Kenarlıksız/], lg: [4, /Developer Mode/], samsung: [5, /Küçük bir gecikme[\s\S]*Win \+ K/], android: [5, /Android \/ Google TV[\s\S]*Win \+ K/], apple: [4, /Windows'ta yerleşik AirPlay yok[\s\S]*HDMI/], hdmi: [4, /HDMI kablosunu tak/] };
+    assert.strictEqual(await sayfa.locator('#rehber-ekran details.rehber-kart').count(), 7);
+    const REH = { bilgisayar: [3, /Kenarlıksız/], lgweb: [4, /önerilen, kurulumsuz[\s\S]*HDMI[\s\S]*http:\/\/192\.168\.1\.20[\s\S]*oyunun üstündedir/], lg: [4, /uygulama \(alternatif\)[\s\S]*Developer Mode/], samsung: [5, /Küçük bir gecikme[\s\S]*Win \+ K/], android: [5, /Android \/ Google TV[\s\S]*Win \+ K/], apple: [4, /Windows'ta yerleşik AirPlay yok[\s\S]*HDMI/], hdmi: [4, /HDMI kablosunu tak/] };
     for (const [id, [n, ara]] of Object.entries(REH)) {
       assert.ok(!(await sayfa.isVisible('#rehber-' + id + ' .rehber-adim')), id + ' kapalı başlar');
       await sayfa.click('#rehber-' + id + ' > summary');
@@ -1028,11 +1056,11 @@ function dilKontrol() {
       assert.match(await metin('#rehber-' + id), /Bu ne işe yarar\?[\s\S]*Sorun mu var\?/);
       const sl = await sayfa.locator('#rehber-' + id + ' .rehber-sorun li').count(); assert.ok(sl >= 2 && sl <= 3, id + ' sorun satırı');
     }
-    assert.match(await metin('#rehber-samsung .rehber-adres'), /http:\/\/192\.168\.1\.20:8642\/tv/);
+    assert.match(await metin('#rehber-samsung .rehber-adres'), /http:\/\/192\.168\.1\.20(?!:)/);   // §20.2: kısa adres açık
     assert.ok(await sayfa.isVisible('#rehber-lg #tv-kart'), 'LG rehberinde mevcut TV kurulum kartı');
     assert.strictEqual(await sayfa.inputValue('#rehber-lg #tv-ip'), '192.168.1.30', 'TV IP hatırlanır');
     assert.ok(await sayfa.isVisible('#rehber-apple .rehber-adres'));
-    for (const id of ['lg', 'android', 'apple', 'hdmi']) await sayfa.click('#rehber-' + id + ' > summary');
+    for (const id of ['lgweb', 'lg', 'android', 'apple', 'hdmi']) await sayfa.click('#rehber-' + id + ' > summary');
     await sayfa.click('#rehber-samsung .rehber-sorun > summary');
     await gor('rehber-baglanti.png', true);
     await sayfa.click('#rehber-samsung > summary');
@@ -1465,11 +1493,26 @@ function dilKontrol() {
     assert.strictEqual(await sayfa.inputValue('#konum'), 'ustune');
     assert.match(await sayfa.textContent('#konum'), /Orijinal yazının üstünde/);
     await sayfa.selectOption('#konum', 'ust');
-    await sayfa.waitForTimeout(200);
+    await sayfa.waitForTimeout(450);   // §20.6: kayıt 300 ms gecikmeli (canlı önizleme)
     assert.strictEqual(st.ayarlar.gorunum.yerlesim, 'cubuk'); assert.strictEqual(st.ayarlar.gorunum.konum, 'ust');
     await sayfa.selectOption('#konum', 'ustune');
-    await sayfa.waitForTimeout(200);
+    await sayfa.waitForTimeout(400);
     assert.strictEqual(st.ayarlar.gorunum.yerlesim, 'ustune');
+    // PROTOKOL 20.6: boyut / zemin / renk / kalınlık / konuşan — canlı önizleme + TV'ye örnek satır
+    const onceOn = st.onizlemeler || 0;
+    await sayfa.selectOption('#yazi-boyut', 'buyuk');
+    await sayfa.selectOption('#yazi-zemin', 'golge');
+    await sayfa.click('#renk-sari');
+    await sayfa.selectOption('#yazi-kalinlik', 'normal');
+    await sayfa.click('#konusan-goster', { force: true });
+    await sayfa.waitForTimeout(500);
+    assert.deepStrictEqual([st.ayarlar.gorunum.boyut, st.ayarlar.gorunum.zemin, st.ayarlar.gorunum.yazi_rengi, st.ayarlar.gorunum.kalinlik, st.ayarlar.gorunum.konusan_goster], ['buyuk', 'golge', '#FFE45C', 'normal', false]);
+    assert.ok((st.onizlemeler || 0) > onceOn, 'TV\'ye canlı önizleme satırı gönderildi');
+    const on = await sayfa.evaluate(() => { const k = document.querySelector('#onizleme-yazi'); return [k.className, getComputedStyle(k).color, document.querySelector('.on-konusan').hidden, document.querySelector('.on-asil').hidden, document.querySelector('#renk-sari').getAttribute('aria-checked')]; });
+    assert.deepStrictEqual(on, ['on-kutu zemin-golge ustune', 'rgb(255, 228, 92)', true, false, 'true'], JSON.stringify(on));
+    await kes('9-gorunum.png', '#onizleme-sahne');
+    await sayfa.selectOption('#yazi-zemin', 'kutu'); await sayfa.click('#renk-beyaz'); await sayfa.click('#konusan-goster', { force: true });
+    await sayfa.waitForTimeout(400);
     await sayfa.click('#sozluk-kaydet');
     await sayfa.waitForFunction(() => /Kaydedildi/.test(document.querySelector('#sozluk-durum').textContent));
     await sayfa.waitForFunction(() => /deneme altyazısı/.test(document.querySelector('#son-yazi').textContent));

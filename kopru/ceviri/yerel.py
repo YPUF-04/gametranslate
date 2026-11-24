@@ -269,13 +269,15 @@ class YerelMotor:
                 buyuk = _hepsi_buyuk(m)
                 if buyuk:   # "KILLER" gibi büyük harfli yazıyı model isim sanmasın: küçült, çevir, büyüt
                     m = m.lower().capitalize()
-                korunan, harita = sozluk_mod.koru(m, sozluk)
+                m, vekil = _adlari_vekille(m, sozluk)
+                korunan, harita = sozluk_mod.koru(m, {a: c for a, c in sozluk.items() if a not in vekil.values()})
                 s = metni_cevir(cevirici, sp, korunan)
                 if harita and not all(_yer_var(s, y) for y in harita):
                     # model yer tutucuyu bozdu: korumasız çevir, terimleri sonradan düzelt
                     s = sozluk_mod.son_kontrol(m, metni_cevir(cevirici, sp, m), sozluk)
                 else:
                     s = sozluk_mod.geri_koy(_YER_DESEN.sub(lambda x: f"[[T{x.group(1)}]]", s), harita)
+                s = _vekilleri_geri_koy(s.replace(" ⁇", "").replace("⁇", ""), vekil)   # ⁇: modelin bilinmeyen simgesi
                 out.append(_tr_buyuk(s) if buyuk and hedef == "tr" else s.upper() if buyuk else s)
         except MotorHatasi:
             raise
@@ -289,6 +291,34 @@ class YerelMotor:
         # model yükleme ve çeviri CPU işi: olay döngüsü dışında
         sonuc = await asyncio.to_thread(self._cevir_senkron, metinler, kaynak, hedef, sozluk)
         return [Ceviri(s) for s in sonuc]
+
+
+# PROTOKOL 20.4: Argos modeli "[[T0]]" yer tutucusunu çoğu zaman bozar ("Âyet-i kerime'nin…"). Korunacak ADLAR yerine
+# modelin hep aynen bıraktığı sıradan bir ad konur; çeviriden sonra asıl ad, eki ses uyumuna göre yeniden kurularak döner.
+VEKIL_ADLAR = ("Joe", "Max", "Tom", "Sam", "Ben", "Dan", "Bob", "Tim")
+
+
+def _adlari_vekille(metin: str, sozluk: dict[str, str]) -> tuple[str, dict[str, str]]:
+    """{vekil: asıl ad}. Yalnız Sozluk.adlar (büyük/küçük harfe duyarlı) için."""
+    adlar = [a for a in getattr(sozluk, "adlar", ()) if sozluk.get(a) == a]
+    vekil: dict[str, str] = {}
+    bos = [v for v in VEKIL_ADLAR if not re.search(r"(?<!\w)" + v + r"(?!\w)", metin)]
+    for ad in sorted(adlar, key=len, reverse=True):
+        desen = re.compile(r"(?<![\w'’])" + re.escape(ad) + r"(?![\w])")
+        if not bos or not desen.search(metin):
+            continue
+        v = bos.pop(0)
+        metin = desen.sub(v, metin)
+        vekil[v] = ad
+    return metin, vekil
+
+
+def _vekilleri_geri_koy(metin: str, vekil: dict[str, str]) -> str:
+    from . import on_katman
+    for v, ad in vekil.items():
+        metin = re.sub(r"(?<![\w])" + v + r"(?:(['’])([^\W\d_]{1,6}))?(?![\w])",
+                       lambda m, a=ad: a + (m.group(1) + on_katman.ek_kur(a, m.group(2)) if m.group(2) else ""), metin)
+    return metin
 
 
 def _yer_var(metin: str, yer: str) -> bool:

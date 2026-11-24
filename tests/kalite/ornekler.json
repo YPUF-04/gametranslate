@@ -1,0 +1,360 @@
+{
+ "aciklama": "PROTOKOL 20.8: oyun altyazısı kalite ölçümü. Türkçe başvuru çevirileri elle yazıldı (tek çevirmen). Kategoriler: diyalog, gorev, ad, bagirma, bolunmus (parcalar = iki altyazı kartı), ocr (giriş okuma hatalı), dugme, konusan (giriş konuşan ön ekli), arayuz (çevrilmemeli; doğru yanıt = aynısı).",
+ "ornekler": [
+  {
+   "kat": "diyalog",
+   "en": "Where were you last night?",
+   "tr": "Dün gece neredeydin?"
+  },
+  {
+   "kat": "diyalog",
+   "en": "I don't trust him, and neither should you.",
+   "tr": "Ona güvenmiyorum, sen de güvenmemelisin."
+  },
+  {
+   "kat": "diyalog",
+   "en": "We need to get out of here before the cops show up.",
+   "tr": "Polisler gelmeden buradan çıkmamız lazım."
+  },
+  {
+   "kat": "diyalog",
+   "en": "You owe me, and you know it.",
+   "tr": "Bana borçlusun, bunu sen de biliyorsun."
+  },
+  {
+   "kat": "diyalog",
+   "en": "Relax, I've done this a hundred times.",
+   "tr": "Rahat ol, bunu yüz kere yaptım."
+  },
+  {
+   "kat": "diyalog",
+   "en": "Is everyone okay?",
+   "tr": "Herkes iyi mi?"
+  },
+  {
+   "kat": "diyalog",
+   "en": "That's the last time I listen to you.",
+   "tr": "Seni son kez dinliyorum."
+  },
+  {
+   "kat": "diyalog",
+   "en": "Keep your voice down, they might hear us.",
+   "tr": "Sesini alçalt, bizi duyabilirler."
+  },
+  {
+   "kat": "diyalog",
+   "en": "I'm sorry, I didn't mean to scare you.",
+   "tr": "Özür dilerim, seni korkutmak istemedim."
+  },
+  {
+   "kat": "diyalog",
+   "en": "We should split up and meet back at the car.",
+   "tr": "Ayrılalım, sonra arabada buluşalım."
+  },
+  {
+   "kat": "diyalog",
+   "en": "He's not answering his phone.",
+   "tr": "Telefonunu açmıyor."
+  },
+  {
+   "kat": "diyalog",
+   "en": "Don't worry about the money, I'll handle it.",
+   "tr": "Parayı dert etme, ben hallederim."
+  },
+  {
+   "kat": "diyalog",
+   "en": "What are you doing here?",
+   "tr": "Burada ne yapıyorsun?"
+  },
+  {
+   "kat": "diyalog",
+   "en": "I need a drink.",
+   "tr": "Bir içkiye ihtiyacım var."
+  },
+  {
+   "kat": "diyalog",
+   "en": "It's getting dark, we should head back.",
+   "tr": "Hava kararıyor, geri dönmeliyiz."
+  },
+  {
+   "kat": "gorev",
+   "en": "Return to the safehouse.",
+   "tr": "Güvenli eve dön.",
+   "oyun": "gta5"
+  },
+  {
+   "kat": "gorev",
+   "en": "Lose the cops.",
+   "tr": "Polisleri atlat.",
+   "oyun": "gta5"
+  },
+  {
+   "kat": "gorev",
+   "en": "Follow the truck without being seen.",
+   "tr": "Görünmeden kamyonu takip et."
+  },
+  {
+   "kat": "gorev",
+   "en": "Find a place to hide the car.",
+   "tr": "Arabayı saklayacak bir yer bul."
+  },
+  {
+   "kat": "gorev",
+   "en": "Head to the marked location.",
+   "tr": "İşaretli konuma git."
+  },
+  {
+   "kat": "gorev",
+   "en": "Collect the money from the safe.",
+   "tr": "Kasadaki parayı al."
+  },
+  {
+   "kat": "gorev",
+   "en": "Wait for your crew outside the bank.",
+   "tr": "Bankanın önünde ekibini bekle.",
+   "oyun": "gta5"
+  },
+  {
+   "kat": "gorev",
+   "en": "Get back in the car.",
+   "tr": "Arabaya geri bin."
+  },
+  {
+   "kat": "ad",
+   "en": "Tell Hope we are on our way.",
+   "tr": "Hope'a yolda olduğumuzu söyle.",
+   "karakterler": [
+    "Hope"
+   ]
+  },
+  {
+   "kat": "ad",
+   "en": "Dutch has a plan, he always does.",
+   "tr": "Dutch'ın bir planı var, her zaman olur.",
+   "oyun": "rdr2"
+  },
+  {
+   "kat": "ad",
+   "en": "Meet me in Valentine at noon.",
+   "tr": "Öğlen Valentine'de buluşalım.",
+   "oyun": "rdr2"
+  },
+  {
+   "kat": "ad",
+   "en": "Grace and Rook are waiting at the docks.",
+   "tr": "Grace ve Rook rıhtımda bekliyor.",
+   "karakterler": [
+    "Grace",
+    "Rook"
+   ]
+  },
+  {
+   "kat": "ad",
+   "en": "We ride to Strawberry tonight.",
+   "tr": "Bu gece Strawberry'ye gidiyoruz.",
+   "oyun": "rdr2"
+  },
+  {
+   "kat": "ad",
+   "en": "Mercy is the one who called me.",
+   "tr": "Beni arayan Mercy'ydi.",
+   "karakterler": [
+    "Mercy"
+   ]
+  },
+  {
+   "kat": "ad",
+   "en": "Take Lamar back to Grove Street.",
+   "tr": "Lamar'ı Grove Street'e geri götür.",
+   "oyun": "gta5"
+  },
+  {
+   "kat": "bagirma",
+   "en": "GET DOWN! THEY'RE SHOOTING AT US!",
+   "tr": "Yere yat! Bize ateş ediyorlar!"
+  },
+  {
+   "kat": "bagirma",
+   "en": "WATCH OUT, BEHIND YOU",
+   "tr": "Dikkat et, arkanda!"
+  },
+  {
+   "kat": "bagirma",
+   "en": "RUN! THE BRIDGE IS GOING TO COLLAPSE!",
+   "tr": "Koş! Köprü çökecek!"
+  },
+  {
+   "kat": "bagirma",
+   "en": "ARTHUR, GET THE HORSES",
+   "tr": "Arthur, atları getir!",
+   "oyun": "rdr2"
+  },
+  {
+   "kat": "bagirma",
+   "en": "I SAID DROP THE GUN",
+   "tr": "Silahı bırak dedim!"
+  },
+  {
+   "kat": "bagirma",
+   "en": "WE'RE NOT LEAVING WITHOUT HER",
+   "tr": "Onsuz gitmiyoruz!"
+  },
+  {
+   "kat": "bolunmus",
+   "en": "I told you we should never have come here.",
+   "tr": "Sana buraya hiç gelmememiz gerektiğini söylemiştim.",
+   "parcalar": [
+    "I told you we should",
+    "never have come here."
+   ]
+  },
+  {
+   "kat": "bolunmus",
+   "en": "If we don't find the boat before sunrise, we're finished.",
+   "tr": "Gün doğmadan tekneyi bulamazsak işimiz biter.",
+   "parcalar": [
+    "If we don't find the boat",
+    "before sunrise, we're finished."
+   ]
+  },
+  {
+   "kat": "bolunmus",
+   "en": "The man who sold us the map was lying the whole time.",
+   "tr": "Bize haritayı satan adam baştan beri yalan söylüyordu.",
+   "parcalar": [
+    "The man who sold us the map",
+    "was lying the whole time."
+   ]
+  },
+  {
+   "kat": "bolunmus",
+   "en": "You can take the car, but you bring it back in one piece.",
+   "tr": "Arabayı alabilirsin ama tek parça geri getireceksin.",
+   "parcalar": [
+    "You can take the car, but",
+    "you bring it back in one piece."
+   ]
+  },
+  {
+   "kat": "bolunmus",
+   "en": "We wait here until the guards change shifts.",
+   "tr": "Nöbetçiler vardiya değiştirene kadar burada bekliyoruz.",
+   "parcalar": [
+    "We wait here until the",
+    "guards change shifts."
+   ]
+  },
+  {
+   "kat": "ocr",
+   "en": "l'm not going back there.",
+   "tr": "Oraya geri dönmüyorum.",
+   "girdi_aciklama": "l'm -> I'm"
+  },
+  {
+   "kat": "ocr",
+   "en": "We need rnore time.",
+   "tr": "Daha fazla zamana ihtiyacımız var.",
+   "girdi_aciklama": "rnore -> more"
+  },
+  {
+   "kat": "ocr",
+   "en": "Get to the b0at, now!",
+   "tr": "Hemen tekneye git!",
+   "girdi_aciklama": "b0at -> boat"
+  },
+  {
+   "kat": "ocr",
+   "en": "| told you to wait.",
+   "tr": "Sana beklemeni söyledim.",
+   "girdi_aciklama": "| -> I"
+  },
+  {
+   "kat": "ocr",
+   "en": "There's sorne food in the wagon.",
+   "tr": "Arabada biraz yiyecek var.",
+   "girdi_aciklama": "sorne -> some"
+  },
+  {
+   "kat": "dugme",
+   "en": "Press ✕ to open the door.",
+   "tr": "Kapıyı açmak için ✕'e bas."
+  },
+  {
+   "kat": "dugme",
+   "en": "Hold R2 to accelerate.",
+   "tr": "Hızlanmak için R2'yi basılı tut."
+  },
+  {
+   "kat": "dugme",
+   "en": "Press △ to enter the vehicle.",
+   "tr": "Araca binmek için △'ya bas."
+  },
+  {
+   "kat": "dugme",
+   "en": "Hold L2 to aim and R2 to shoot.",
+   "tr": "Nişan almak için L2'yi, ateş etmek için R2'yi basılı tut."
+  },
+  {
+   "kat": "dugme",
+   "en": "Press OPTIONS to open the map.",
+   "tr": "Haritayı açmak için OPTIONS'a bas."
+  },
+  {
+   "kat": "konusan",
+   "en": "MARCUS: We leave at dawn.",
+   "tr": "Şafakta yola çıkıyoruz.",
+   "konusan": "MARCUS"
+  },
+  {
+   "kat": "konusan",
+   "en": "Lucia: Stay close to me.",
+   "tr": "Yanımdan ayrılma.",
+   "oyun": "gta6",
+   "konusan": "Lucia"
+  },
+  {
+   "kat": "konusan",
+   "en": "[Hosea] Easy now, nobody needs to get hurt.",
+   "tr": "Sakin olun, kimsenin canının yanmasına gerek yok.",
+   "oyun": "rdr2",
+   "konusan": "Hosea"
+  },
+  {
+   "kat": "konusan",
+   "en": "JASON: Baby, we gotta go.",
+   "tr": "Bebeğim, gitmemiz lazım.",
+   "oyun": "gta6",
+   "konusan": "JASON"
+  },
+  {
+   "kat": "arayuz",
+   "en": "$1,250",
+   "tr": "$1,250"
+  },
+  {
+   "kat": "arayuz",
+   "en": "NW",
+   "tr": "NW"
+  },
+  {
+   "kat": "arayuz",
+   "en": "30/120",
+   "tr": "30/120"
+  },
+  {
+   "kat": "arayuz",
+   "en": "02:15",
+   "tr": "02:15"
+  },
+  {
+   "kat": "arayuz",
+   "en": "HP 100",
+   "tr": "HP 100"
+  },
+  {
+   "kat": "arayuz",
+   "en": "x3",
+   "tr": "x3"
+  }
+ ]
+}

@@ -203,6 +203,8 @@ def _okunus(kelime: str) -> str:
     if len(k) >= 4 and k.endswith("e") and k[-2] not in _UNLU and any(c in _UNLU for c in k[:-1]) \
             and not re.search(r"[çğışöü]", k):
         k = k[:-1]
+    if len(k) >= 3 and k.endswith("y") and k[-2] not in _UNLU:   # Strawberry, Lucky: son ses "i"
+        k = k[:-1] + "i"
     return k
 
 
