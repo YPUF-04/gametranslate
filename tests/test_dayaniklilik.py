@@ -581,7 +581,10 @@ async def test_her_yerel_yol_uzak_adresten_403(istemci, monkeypatch):
         assert y == "/" or y.startswith(("/api/", "/panel/")), f"beklenmeyen yol öneki: {y}"
     monkeypatch.setattr(sunucu, "uzak_adres", lambda req: "192.168.1.50")
     for m, y in yerel_olmayan:
-        r = await istemci.request(m, y, json={})
+        r = await istemci.request(m, y, json={}, allow_redirects=False)
+        if (m, y) == ("GET", "/"):   # PROTOKOL 20.2: TV tarayıcısı kısa adresle gelir -> /tv (panel yine yerel)
+            assert r.status == 302 and r.headers["Location"] == "/tv", (r.status, dict(r.headers))
+            continue
         assert r.status == 403, (m, y, r.status)
         assert (await r.json())["hata"] == "yalniz_yerel"
 

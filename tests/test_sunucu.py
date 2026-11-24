@@ -69,10 +69,12 @@ async def test_durum_olayi_periyodik_ve_nabiz(aiohttp_client, uygulama_ayari, mo
 async def test_yerel_katman(istemci, monkeypatch):
     assert (await istemci.get("/api/durum")).status == 200
     monkeypatch.setattr(sunucu, "uzak_adres", lambda req: "192.168.1.50")
-    for yol in ("/api/durum", "/api/ayarlar", "/", "/panel/x.js"):
+    for yol in ("/api/durum", "/api/ayarlar", "/panel/x.js"):
         r = await istemci.get(yol)
         assert r.status == 403
         assert (await r.json())["hata"] == "yalniz_yerel"
+    r = await istemci.get("/?hdmi=2", allow_redirects=False)   # PROTOKOL 20.2: panel değil, TV sayfası
+    assert r.status == 302 and r.headers["Location"] == "/tv?hdmi=2"
     assert (await istemci.post("/api/baslat")).status == 403
     assert (await istemci.get("/kopru/merhaba")).status == 200  # TV erişimi serbest
     assert (await istemci.get("/tv")).status in (200, 404)

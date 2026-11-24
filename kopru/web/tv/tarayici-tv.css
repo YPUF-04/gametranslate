@@ -1,0 +1,26 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* PROTOKOL 20.1: /tv sayfası, LG tarayıcısında HDMI görüntüsü + seçim ekranı. 10 ayak uzaktan okunacak boyutlar. */
+#hdmi { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: transparent; }
+#hdmi .hdmi-video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: fill; }
+#demo-kare { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }
+#demo-kare[hidden] { display: none; }
+#kok { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.tt-ui { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; font-family: "AYK Yazi", system-ui, sans-serif;
+  color: #F3F6FA; font-size: 2.2vh; }
+.tt-ui.tt-secim, .tt-ui.tt-menu, .tt-ui.tt-desteksiz { pointer-events: auto; background: rgba(5, 10, 18, 0.72); display: flex;
+  align-items: center; justify-content: center; }
+.tt-kutu { max-width: 78%; padding: 4vh 4vw; border-radius: 2vh; background: #0E1B2E; box-shadow: 0 1vh 5vh rgba(0, 0, 0, 0.5); text-align: center; }
+.tt-baslik { margin: 0 0 1.5vh; font-size: 5vh; font-weight: 750; }
+.tt-ipucu, .tt-mesaj-metin { margin: 0 0 3vh; font-size: 2.8vh; line-height: 1.4; color: #C9D6E6; }
+.tt-mesaj-metin { color: #FFE3A3; font-size: 3.2vh; }
+.tt-oto { margin: 2.5vh 0 0; min-height: 3vh; font-size: 2.6vh; color: #9FE7DF; }
+.tt-satir { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.6vh; margin-top: 1.6vh; }
+.tt-dugme { font: inherit; font-size: 3.2vh; font-weight: 650; color: #F3F6FA; background: #172B4A; border: 0.45vh solid transparent;
+  border-radius: 1.4vh; padding: 1.8vh 3vh; cursor: pointer; }
+.tt-dugme.tt-buyuk { font-size: 4.6vh; font-weight: 760; min-width: 18vw; padding: 3.2vh 3vh; }
+.tt-dugme:focus, .tt-dugme:hover { outline: none; border-color: #2EC4B6; background: #1F3E66; color: #FFFFFF; }
+.tt-not, .tt-kose { position: absolute; padding: 1vh 2vh; border-radius: 3vh; background: rgba(11, 21, 36, 0.9); color: #FFD166;
+  font-size: 2.6vh; font-weight: 600; }
+.tt-not { left: 50%; top: 45%; transform: translate(-50%, -50%); font-size: 3.4vh; }
+.tt-kose { right: 1.5%; top: 2%; }
+.tt-canli { position: absolute; left: 0; top: 0; width: 2px; height: 2px; opacity: 0.01; pointer-events: none; }

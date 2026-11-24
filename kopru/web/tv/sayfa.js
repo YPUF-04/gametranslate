@@ -19,7 +19,8 @@
     };
     x.send(JSON.stringify({ id: s.id, sure_sn: s.sure_sn }));
   }
-  window.AKOverlay.baslat(url, document.getElementById('kok'), {
+  var demoKare = document.getElementById('demo-kare');
+  var kontrol = window.AKOverlay.baslat(url, document.getElementById('kok'), {
     durumRozeti: !obs,
     onReklam: !reklamVar ? null : function (v) {
       if (!v || !v.id || reklam) { return; }
@@ -28,6 +29,16 @@
         metin: tr ? null : { reklam: 'Ad', sn: 's', destek: 'Thank you for supporting {marka}', destek_alt: '30 minutes of dubbing time will be added shortly.' },
         bitti: function (s) { reklam = null; bittiGonder(v, s, 0); } });
     },
-    onReklamBitti: function () { if (reklam) { reklam.durdur(); reklam = null; } }
+    onReklamBitti: function () { if (reklam) { reklam.durdur(); reklam = null; } },
+    // §20.7: konsolsuz dene — örnek oyun karesi arka planda (HDMI görüntüsü yokmuş gibi)
+    onDemo: function (v) {
+      if (!demoKare) { return; }
+      if (v && v.acik && typeof v.kare === 'string' && v.kare.charAt(0) === '/') { demoKare.src = v.kare + '?t=' + Date.now(); demoKare.hidden = false; }
+      else { demoKare.hidden = true; demoKare.removeAttribute('src'); }
+    }
   });
+  // §20.1: LG tarayıcısında konsolun HDMI görüntüsü sayfanın içinde (bindirmenin altında)
+  if (!obs && window.AKTarayiciTV && window.AKTarayiciTV.gerekli()) {
+    window.AKTarayiciTV.baslat(kontrol, document.getElementById('hdmi'), document.getElementById('tt-ui'));
+  }
 }());

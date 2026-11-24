@@ -15,7 +15,7 @@ import webbrowser
 from aiohttp import web
 
 from . import ayarlar, metinler
-from .sunucu import DURUM, GUNCELLEME, lan_adresleri, uygulama_olustur
+from .sunucu import DURUM, GUNCELLEME, KISA_ADRES, lan_adresleri, uygulama_olustur
 
 log = logging.getLogger("kopru")
 
@@ -279,6 +279,15 @@ def main() -> None:
         app.on_startup.append(baslat)
         app.on_cleanup.append(durdur)
         yaz(metinler.mesaj("demo_acik", dil))
+
+    async def kisa_adres_ac(app: web.Application) -> None:   # PROTOKOL 20.2: http://<PC-IP>/ -> /tv
+        d = app[DURUM]
+        if d.ayar.get("kisa_adres", True) is not False:
+            durum_ = await app[KISA_ADRES].baslat(kapi)
+            if durum_["acik"]:
+                for ip in lan_adresleri():
+                    yaz(metinler.mesaj("tv_adres", dil).format(adres=f"http://{ip}"))
+    app.on_startup.append(kisa_adres_ac)
 
     async def guncelleme_bak(app: web.Application) -> None:
         app[GUNCELLEME].arka_planda_denetle()   # günde en çok bir kez; ayar kapalıysa hiç

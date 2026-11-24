@@ -9,7 +9,9 @@
 
   var VARSAYILAN = { yazi_boyutu: 44, konum: 'alt', kenar_bosluk: 0.08, arka_plan: 0.55,
     yazi_rengi: '#FFFFFF', konusan_rengi: '#FFD166', asil_goster: false, ekran_cevir: true, onceki_goster: true, ekran_olcek: 1.0,
-    yerlesim: 'ustune' };
+    yerlesim: 'ustune', konusan_goster: true, boyut: 'otomatik', zemin: 'kutu', kalinlik: 'kalin' };
+  // PROTOKOL 20.6: sabit yazı boyları (1080p piksel); 'otomatik' = örtüde oyunun yazı boyu, çubukta yazi_boyutu
+  var BOYUTLAR = { kucuk: 32, orta: 40, buyuk: 52, cok_buyuk: 64 };
 
   var GIR_MS = 150;        // yeni cümle belirirken eskisi bu sürede solar (çapraz geçiş)
   var SIL_MS = 250;        // yazi-sil: bu sürede solarak kaybolur
@@ -132,10 +134,11 @@
   }
   // metni (g × y2 px) kutuya sığdırır: en büyük yazı boyundan başlar, en az enAz px; sığmazsa kutu büyür.
   // olc(metin, px) -> genişlik. Dönen: {px, satirlar, g, y2, dolgu, buyudu}
-  function ortuYerlesim(metin, olc, g, y2, satir, enAz) {
+  function ortuYerlesim(metin, olc, g, y2, satir, enAz, sabitPx) {
     var k = kelimeler(metin), enCok = Math.max(2, satir || 1), dolgu, ic, icY, px, n, sat, en = null, enGenis, i;
+    if (sabitPx > 0) { enAz = Math.round(sabitPx); enCok = 3; }   // §20.6: sabit boy; sığmazsa kutu büyür
     if (!k.length) { return { px: enAz, satirlar: [], g: g, y2: y2, dolgu: 0, buyudu: false }; }
-    var tepe = Math.max(enAz, Math.floor(y2 * 0.8 / Math.max(1, satir || 1)));
+    var tepe = sabitPx > 0 ? enAz : Math.max(enAz, Math.floor(y2 * 0.8 / Math.max(1, satir || 1)));
     for (px = tepe; px >= enAz; px = px > enAz + 1 ? Math.floor(px * 0.94) : px - 1) {
       dolgu = Math.max(1, Math.round(px * 0.2));
       ic = Math.max(1, g - 2 * dolgu); icY = y2 - 2 * dolgu * 0.5;
@@ -219,21 +222,21 @@
     // d: .ak-ortu öğesi; o: olayın `ortu` kutusu (0-1); kutuyu tam kaynağın yerine, o boyda, opak çizer ve yazıyı sığdırır.
     function ortuCiz(d, o, metin, enAz, konusan) {
       var W = kok.clientWidth || pencere.innerWidth || 1920, H = yukseklik(), s = H / 1080, r, x, y, onEk;
-      var g = sinirla(o.g, 0, 1) * W, h = sinirla(o.y2, 0, 1) * H, m = d._m;
-      onEk = konusan ? String(konusan) + ':' : '';
+      var g = sinirla(o.g, 0, 1) * W, h = sinirla(o.y2, 0, 1) * H, m = d._m, sabit = BOYUTLAR[gorunum.boyut] || 0;
+      onEk = (konusan && gorunum.konusan_goster !== false) ? String(konusan) + ':' : '';
       if (onEk) { metin = onEk + ' ' + metin; }
       r = ortuYerlesim(metin, function (t, px) { olcer.style.fontSize = px + 'px'; olcer.textContent = t; return olcer.getBoundingClientRect().width; },
-        g, h, sayi(o.satir, 1), Math.max(8, Math.round(enAz * s)));
+        g, h, sayi(o.satir, 1), Math.max(8, Math.round(enAz * s)), (d._altyazi && sabit) ? sabit * s : 0);
       x = Math.max(0, Math.min(sinirla(o.x, 0, 1) * W, W - r.g)); y = Math.max(0, Math.min(sinirla(o.y, 0, 1) * H, H - r.y2));
       d.style.left = Math.round(x) + 'px'; d.style.top = Math.round(y) + 'px';
       d.style.width = Math.ceil(r.g) + 'px'; d.style.height = Math.ceil(r.y2) + 'px';
       d.style.fontSize = r.px + 'px'; d.style.padding = '0 ' + r.dolgu + 'px';
-      d.style.background = renkRgba(o.zemin, sinirla(sayi(o.opaklik, ORTU_OPAKLIK), 0.5, 1));
+      d.style.background = zeminsiz() ? 'transparent' : renkRgba(o.zemin, sinirla(sayi(o.opaklik, ORTU_OPAKLIK), 0.5, 1));
       d.style.color = (typeof o.renk === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.renk)) ? o.renk : gorunum.yazi_rengi;
       satirDugmeli(m, r.satirlar, onEk);
       d._r = r;
     }
-    function ortuOgesi(sinif, ust) { var d = oge('ak-ortu ' + sinif, ust); d._m = oge('ak-ortu-metin', d); return d; }
+    function ortuOgesi(sinif, ust) { var d = oge('ak-ortu ' + sinif, ust); d._m = oge('ak-ortu-metin', d); d._altyazi = sinif === 'ak-ortu-yazi'; return d; }
     function ortuKaldir(d, ms) {
       if (!d) { return; }
       ms = sure(ms);
@@ -261,12 +264,25 @@
       bildir('onDurum', d);
     }
 
-    function arkaPlan() { return 'rgba(8,12,20,' + sinirla(sayi(gorunum.arka_plan, 0.55), 0, 1) + ')'; }
+    function zeminsiz() { return gorunum.zemin === 'golge' || gorunum.zemin === 'yok'; }
+    function arkaPlan() {
+      if (zeminsiz() || gorunum.zemin === 'serit') { return 'transparent'; }
+      return 'rgba(8,12,20,' + sinirla(sayi(gorunum.arka_plan, 0.55), 0, 1) + ')';
+    }
+    // §20.6: zemin / kalınlık sınıfları kökte; şerit kipinde zemin altyazı alanının tamamındadır
+    function stilSiniflari() {
+      var c = kok.className.replace(/\s*ak-(zemin-[a-z]+|ince)\b/g, '');
+      c += ' ak-zemin-' + (gorunum.zemin || 'kutu');
+      if (gorunum.kalinlik === 'normal') { c += ' ak-ince'; }
+      kok.className = c;
+      yazi.style.background = gorunum.zemin === 'serit' ? 'rgba(8,12,20,' + sinirla(sayi(gorunum.arka_plan, 0.55), 0.2, 1) + ')' : '';
+    }
 
     function gorunumUygula(g) {
       if (g) { gorunum = kopyala(gorunum, g); }
       var o = olcek(), i, k;
-      yazi.style.fontSize = Math.round(sayi(gorunum.yazi_boyutu, 44) * o * 10) / 10 + 'px';
+      stilSiniflari();
+      yazi.style.fontSize = Math.round(sayi(BOYUTLAR[gorunum.boyut] || gorunum.yazi_boyutu, 44) * o * 10) / 10 + 'px';
       yazi.style.color = gorunum.yazi_rengi;
       durumRozet.style.fontSize = Math.round(26 * o * 10) / 10 + 'px';
       var kb = sinirla(sayi(gorunum.kenar_bosluk, 0.08), 0, 0.45) * 100 + '%';
@@ -326,7 +342,7 @@
     function kutuIcerik(k, v) {
       var m, a;
       bosalt(k);
-      if (v.konusan) { a = oge('ak-konusan', k); a.textContent = v.konusan; a.style.color = gorunum.konusan_rengi; }
+      if (v.konusan && gorunum.konusan_goster !== false) { a = oge('ak-konusan', k); a.textContent = v.konusan; a.style.color = gorunum.konusan_rengi; }
       m = oge('ak-metin', k);
       metinYaz(m, v.metin);
       if (denge) { m.style.width = ''; dengeleJs(m, v.metin); }
@@ -681,6 +697,7 @@
       dinle('durum', function (v) { bildir('onBilgi', v); });
       dinle('reklam', function (v) { bildir('onReklam', v); });            // §17.3: yalnız reklam=1 ile bağlanan istemciler oynatır
       dinle('reklam-bitti', function (v) { bildir('onReklamBitti', v); });
+      dinle('demo', function (v) { bildir('onDemo', v); });                  // §20.7: konsolsuz dene
     }
 
     // §13.1: yazılar gizlendi/gösteriliyor (çeviri sürer; yalnız çizim saklanır)
@@ -712,6 +729,8 @@
       durdur: durdur, yaziGoster: yaziGoster, yaziSil: function () { yaziSil(); }, ekranGoster: ekranGoster, ekranSil: ekranSil, gizliAyarla: gizliAyarla,
       gorunumUygula: gorunumUygula,
       sesCal: sesCal, sesDurdur: sesDurdur,
+      // kullanıcı hareketi içinde çağrılırsa ses bağlamı açılır (tarayıcılar sesi ilk tıklamaya dek askıda tutar)
+      sesAc: function () { var c = sesBaglam(); if (c && c.state === 'suspended' && c.resume) { try { c.resume(); } catch (x) { /* yok say */ } } },
       durumu: function () { return durum; },
       sonYazi: function () { return sonYazi; }
     };

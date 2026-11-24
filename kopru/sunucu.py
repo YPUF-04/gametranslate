@@ -17,7 +17,10 @@ from aiohttp import web
 from . import (PROTOKOL, SURUM, ayarlar, anahtarlar, erisim as erisim_mod, guncelleme as guncelleme_mod, hafiza as hafiza_mod,
                metinler, oyunlar, paket as paket_mod, sozluk as sozluk_mod)
 from . import oyun_bilgisi
+from . import kisa_adres as kisa_adres_mod
 from . import oyun_paketleri
+from . import qr as qr_mod
+from .tv_kurulum.lg_uyanik import LgUyanik
 from .ceviri import BILGI, _http, motor_olustur
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .ceviri.yonetici import CeviriYoneticisi
@@ -52,6 +55,8 @@ LG_KURULUM = web.AppKey("lg_kurulum", object)
 TV_KAYDI = web.AppKey("tv_kaydi", object)          # PROTOKOL 18.5
 LG_GELISTIRICI = web.AppKey("lg_gelistirici", object)   # PROTOKOL 18.6
 PAKET_GUNCELLEYICI = web.AppKey("paket_guncelleyici", object)   # PROTOKOL 20.5
+LG_UYANIK = web.AppKey("lg_uyanik", object)   # PROTOKOL 20.3
+KISA_ADRES = web.AppKey("kisa_adres", object)   # PROTOKOL 20.2
 PSN_ISTEK = web.AppKey("psn_istek", object)   # testlerde sahte Sony istemcisi
 
 
@@ -114,6 +119,9 @@ class Durum:
         self.dublaj = DublajYonetici(lambda: self.ayar, self.yayin, lambda: self.yonetici,
                                      **(dublaj_fabrikalari or {}))
         self.dublaj.izin = self.erisim.dublaj_izni   # PROTOKOL 17.2: yalnız dublaj süreli
+        self.demo: Any = None   # §20.7: çalışan örnek sahne
+        self.son_lg_adresi: str | None = None   # §20.3: /tv'yi webOS tarayıcısıyla açan son adres (yalnız RAM)
+        self.kisa_adres: dict[str, Any] = {"acik": False, "kapi": 80, "hata": "kapali"}   # §20.2
         self.reklam_istemci = 0   # reklam gösterebilen TV istemcisi sayısı (/kopru/akis?reklam=1)
         # bilgisayar ekranı katmanı (PROTOKOL 10.3): ayrı süreç
         self.katman = katman_yonetim.KatmanYonetici(
@@ -309,6 +317,45 @@ class Durum:
     def calisiyor(self) -> bool:
         return bool(self.gorev and not self.gorev.done())
 
+    # -- PROTOKOL 20.7: konsolsuz dene --
+    def demo_acik(self) -> bool:
+        return self.demo is not None and self.calisiyor()
+
+    def demo_baslat(self) -> None:
+        from . import demo as demo_mod
+        if self.calisiyor():
+            self.durdur()
+        sahne = demo_mod.Sahne()
+        a = lambda: {**self.ayar, "kaynak": "demo", "bolgeler": [], "ekrani_cevir": True}  # noqa: E731
+        self.demo = sahne
+        self.isleme = Isleme(sahne.kare, sahne, self.yonetici, self.yayin, a)
+        self.gorev = asyncio.get_running_loop().create_task(self._demo_calis(self.isleme, sahne))
+        self.gorev.add_done_callback(self._gorev_bitti)
+        self.yayin.yayinla("demo", {"acik": True, "kare": "/kopru/demo/kare.jpg"})
+        self.yayin.yayinla("durum", {**self.durum_olayi(), "calisiyor": True})
+
+    async def _demo_calis(self, isleme: Isleme, sahne: Any) -> None:
+        from . import demo as demo_mod
+        gorev = asyncio.ensure_future(isleme.calis())
+        try:
+            bas = time.monotonic()
+            while not sahne.bitti() and time.monotonic() - bas < demo_mod.EN_COK_SN and not gorev.done():
+                await asyncio.sleep(0.25)
+        finally:
+            gorev.cancel()
+            await asyncio.gather(gorev, return_exceptions=True)
+            if self.demo is sahne:
+                self.demo = None
+                self.yayin.yayinla("demo", {"acik": False})
+                self.yayin.yayinla("yazi-sil", {})
+                self.yayin.yayinla("ekran-sil", {})
+
+    def demo_durdur(self) -> None:
+        if self.demo is not None:
+            self.demo = None
+            self.durdur()
+            self.yayin.yayinla("demo", {"acik": False})
+
     async def kaynak_uyarisi(self) -> dict[str, str] | None:
         """§12.2: cihaz ps5/xbox/kart, uygun bir pencere var ama kaynak tüm ekran ise sakin bir uyarı."""
         cihaz = self.ayar.get("cihaz")
@@ -359,12 +406,19 @@ class Durum:
         if gorev.cancelled() or gorev is not self.gorev:
             return
         e = gorev.exception()
+        if e is None:   # §20.7: örnek sahne bitti (normal son)
+            self.gorev = None
+            self.yayin.yayinla("durum", {**self.durum_olayi(), "calisiyor": False})
+            return
         log.error("Boru hattı beklenmedik biçimde durdu: %r", e)
         self.gorev = None
         self.yayin.yayinla("durum", {"calisiyor": False, "motor": self.yonetici.birincil.ad,
                                      "yedek": False, "hata": "genel"})
 
     def durdur(self) -> None:
+        if self.demo is not None:   # §20.7: demo sırasında Durdur = demoyu bitir
+            self.demo = None
+            self.yayin.yayinla("demo", {"acik": False})
         self.dublaj.senkronla(False)
         if self.gorev:
             self.gorev.cancel()
@@ -422,6 +476,8 @@ async def yerel_katman(request: web.Request, handler: Callable[[web.Request], Aw
     yol = request.path
     if yol == "/" or yol.startswith(("/panel/", "/api/")) or yol == "/panel":
         if uzak_adres(request) not in YEREL:
+            if yol == "/" and request.method == "GET":   # PROTOKOL 20.2: TV tarayıcısı kısa adresle gelir
+                raise web.HTTPFound("/tv" + (("?" + request.query_string) if request.query_string else ""))
             return hata("yalniz_yerel", 403, request)
         # DNS yeniden bağlama ve siteler arası istek (CSRF) koruması: yalnız yerel adla, yalnız
         # yerel kökenden. (Başka sitedeki bir sayfa tarayıcınız üzerinden ayarları değiştiremez.)
@@ -598,6 +654,10 @@ async def panel_dosya(request: web.Request) -> web.StreamResponse:
 
 
 async def tv_sayfa(request: web.Request) -> web.StreamResponse:
+    ua = request.headers.get("User-Agent", "")
+    adres = uzak_adres(request)
+    if ("Web0S" in ua or "webOS" in ua) and adres and adres not in YEREL:   # §20.3: LG tarayıcısının adresi (RAM)
+        request.app[DURUM].son_lg_adresi = adres
     return _dosya(WEB / "tv" / "tv.html", WEB / "tv")
 
 
@@ -633,6 +693,10 @@ async def api_durum(request: web.Request) -> web.Response:
         "tv_sayisi": d.yayin.istemci_sayisi, "son_yazi": y["metin"] if y else "",
         "adresler": lan_adresleri(), "kapi": d.calisan_kapi or d.ayar["kapi"],
         **d.yonetici.durum_ek()}
+    yanit["kisa_adres"] = dict(request.app[KISA_ADRES].durum)   # §20.2
+    ip = (yanit["adresler"] or ["127.0.0.1"])[0]
+    yanit["tv_adresi"] = f"http://{ip}" if yanit["kisa_adres"]["acik"] else f"http://{ip}:{yanit['kapi']}/tv"
+    yanit["demo"] = d.demo_acik()
     if d.dublaj_durdu():
         yanit["dublaj_sinir"] = True
     if d.isleme is not None and d.calisiyor():   # §16.4: aşama aşama gecikme
@@ -977,6 +1041,20 @@ async def api_kapat(request: web.Request) -> web.Response:
 
 async def api_deneme_yazi(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
+    onizleme = False
+    if request.can_read_body:
+        try:
+            v = await request.json()
+            onizleme = isinstance(v, dict) and v.get("onizleme") is True
+        except ValueError:
+            onizleme = False
+    if onizleme:   # PROTOKOL 20.6: görünüm değişince TV'de konuşanlı örnek satır (çeviri çalışırken değil)
+        if d.calisiyor():
+            return web.json_response({"tamam": False, "neden": "calisiyor", "tv_sayisi": d.yayin.istemci_sayisi})
+        d.yayin.yayinla("yazi", {
+            "id": f"o{time.time_ns()}", "metin": metinler.mesaj("onizleme_tr", "tr"), "asil": metinler.mesaj("onizleme_tr", "en"),
+            "tur": "konusma", "konusan": "Lucia", "sure_ms": 4000, "otomatik_sil": True, "onizleme": True})
+        return web.json_response({"tamam": True, "tv_sayisi": d.yayin.istemci_sayisi})
     d.yayin.yayinla("yazi", {
         "id": f"d{int(time.time())}", "metin": metinler.mesaj("deneme_tr", "tr"),
         "asil": metinler.mesaj("deneme_tr", "en"), "tur": "altyazi",
@@ -1835,6 +1913,61 @@ async def api_ps5_unut(request: web.Request) -> web.Response:
     return web.json_response({"tamam": True})
 
 
+# ---------- PROTOKOL 20.7: konsolsuz dene ----------
+async def api_demo(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    if not isinstance(v.get("acik"), bool):
+        return hata("gecersiz_istek", 400, request)
+    if v["acik"]:
+        d.demo_baslat()
+    else:
+        d.demo_durdur()
+    return web.json_response({"acik": d.demo_acik()})
+
+
+async def kopru_demo_kare(request: web.Request) -> web.Response:
+    from . import demo as demo_mod
+    veri = await asyncio.to_thread(demo_mod.Sahne().jpeg)
+    return web.Response(body=veri, content_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
+
+
+# ---------- PROTOKOL 20.2 / 20.3 ----------
+async def api_qr(request: web.Request) -> web.StreamResponse:
+    metin = request.query.get("metin", "")
+    if not metin or len(metin) > 200:
+        return hata("gecersiz_istek", 400, request)
+    return web.Response(text=qr_mod.svg(metin), content_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
+
+
+async def api_lg_uyanik_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    return web.json_response(await asyncio.to_thread(request.app[LG_UYANIK].bilgi, d.dil))
+
+
+async def api_lg_uyanik_yaz(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    u: LgUyanik = request.app[LG_UYANIK]
+    v = await _json(request)
+    yeni = dict(d.ayar.get("lg_uyanik") or {})
+    if "acik" in v:
+        if not isinstance(v["acik"], bool):
+            return hata("gecersiz_istek", 400, request)
+        yeni["acik"] = v["acik"]
+        u.hata = None
+    if "adres" in v:
+        if not (isinstance(v["adres"], str) and (v["adres"] == "" or ayarlar.lg_adres_gecerli(v["adres"]))):
+            return hata("gecersiz_istek", 400, request)
+        yeni["adres"] = v["adres"]
+    if yeni != d.ayar.get("lg_uyanik"):
+        d.ayar = ayarlar.guncelle(d.ayar, {"lg_uyanik": yeni})
+    if v.get("unut") is True:
+        await asyncio.to_thread(u.unut)
+    if v.get("esle") is True:
+        u.esle_baslat()
+    return web.json_response(await asyncio.to_thread(u.bilgi, d.dil))
+
+
 # ---------- PROTOKOL 20.5: oyun paketleri ----------
 async def api_oyun_paketleri_al(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
@@ -1853,6 +1986,7 @@ async def api_oyun_paketleri_denetle(request: web.Request) -> web.Response:
 
 def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None, lg_kurulum: Any = None,
                      psn_istek: Any = None, lg_gelistirici: Any = None, paket_guncelleyici: Any = None,
+                     lg_uyanik: Any = None,
                      **fabrikalar: Any) -> web.Application:
     app = web.Application(middlewares=[kopru_katman, yerel_katman])
     app[PSN_ISTEK] = psn_istek
@@ -1863,6 +1997,14 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     app[LG_KURULUM] = lg_kurulum or LgKurulum(lambda: durum.ayar, belirtec_al=app[LG_GELISTIRICI].kurulumdan)
     app[TV_KAYDI] = tv_uygulama.TvKaydi()
     app[PAKET_GUNCELLEYICI] = paket_guncelleyici or oyun_paketleri.Guncelleyici(lambda: durum.ayar)
+    app[KISA_ADRES] = kisa_adres_mod.KisaAdres()
+
+    def son_lg() -> str | None:   # §20.3: ayarda adres yoksa son görülen LG (tarayıcı ya da paketli uygulama)
+        if durum.son_lg_adresi:
+            return durum.son_lg_adresi
+        tvler = app[TV_KAYDI].durum("").get("tvler") or []
+        return tvler[0]["adres"] if tvler else None
+    app[LG_UYANIK] = lg_uyanik or LgUyanik(lambda: durum.ayar, durum.calisiyor, son_lg)
     r = app.router
     r.add_get("/kopru/merhaba", merhaba)
     r.add_get("/kopru/akis", akis)
@@ -1914,6 +2056,11 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_get("/api/tv/uygulama", api_tv_uygulama)
     r.add_get("/api/oneriler", api_oneriler_al)
     r.add_get("/api/oyun-paketleri", api_oyun_paketleri_al)
+    r.add_get("/api/qr", api_qr)
+    r.add_post("/api/demo", api_demo)
+    r.add_get("/kopru/demo/kare.jpg", kopru_demo_kare)
+    r.add_get("/api/tv/lg/uyanik", api_lg_uyanik_al)
+    r.add_post("/api/tv/lg/uyanik", api_lg_uyanik_yaz)
     r.add_post("/api/oyun-paketleri/denetle", api_oyun_paketleri_denetle)
     r.add_post("/api/oneriler", api_oneriler_yaz)
     r.add_get("/api/ekran-katmani", api_katman_al)
@@ -2017,9 +2164,11 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
         app["nvidia_gorevi"] = asyncio.create_task(nvidia_isit())
         app["gelistirici_gorevi"] = asyncio.create_task(gelistirici_dongusu())
         app["paket_gorevi"] = asyncio.create_task(paket_dongusu())
+        app["uyanik_gorevi"] = asyncio.create_task(app[LG_UYANIK].dongu())
 
     async def kapat(_: web.Application) -> None:
-        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi", "katman_gorevi", "gelistirici_gorevi", "paket_gorevi")
+        arka = [app[k] for k in ("durum_gorevi", "erisim_gorevi", "katman_gorevi", "gelistirici_gorevi", "paket_gorevi",
+                                 "uyanik_gorevi")
                 if k in app]
         for t in arka:
             t.cancel()
@@ -2027,6 +2176,7 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
         durum.kisayol.durdur()
         await durum.kapat()
         await app[GUNCELLEME].kapat()
+        await app[KISA_ADRES].durdur()
         await _http.ortak_kapat()   # §16.4: açık tutulan çeviri bağlantıları
     app.on_startup.append(ac)
     app.on_cleanup.append(kapat)

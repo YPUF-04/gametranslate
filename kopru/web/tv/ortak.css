@@ -67,6 +67,15 @@
   line-height: 1.05; font-weight: 700; font-size: 0.9em; vertical-align: 0.04em; }
 .ak-kok .ak-olcer { position: absolute; left: -10000px; top: 0; visibility: hidden; white-space: nowrap; font-weight: 600; line-height: 1.2; }
 
+/* PROTOKOL 20.6: zemin ve kalınlık seçenekleri */
+.ak-kok.ak-zemin-serit .ak-yazi { left: 0; width: 100%; padding: 0.3em 0; }
+.ak-kok.ak-zemin-serit .ak-yazi-kutu, .ak-kok.ak-zemin-golge .ak-yazi-kutu, .ak-kok.ak-zemin-yok .ak-yazi-kutu { box-shadow: none; }
+.ak-kok.ak-zemin-golge .ak-yazi-kutu, .ak-kok.ak-zemin-golge .ak-ortu-yazi {
+  text-shadow: 0 0.06em 0.18em #000, 0 0 0.3em rgba(0, 0, 0, 0.95), 0 0 0.08em #000; }
+.ak-kok.ak-zemin-yok .ak-yazi-kutu, .ak-kok.ak-zemin-yok .ak-ortu-yazi {
+  text-shadow: -0.04em -0.04em 0 #000, 0.04em -0.04em 0 #000, -0.04em 0.04em 0 #000, 0.04em 0.04em 0 #000; }
+.ak-kok.ak-ince .ak-yazi-kutu, .ak-kok.ak-ince .ak-ortu-yazi { font-weight: 450; }
+
 /* §13.1: yazılar gizli (kısayol): çeviri sürer, çizim görünmez */
 .ak-kok.ak-gizli .ak-yazi, .ak-kok.ak-gizli .ak-ekran, .ak-kok.ak-gizli .ak-ortu-katman { visibility: hidden; }
 

@@ -335,6 +335,7 @@ DIGER: dict[str, dict[str, str]] = {
     "katman_deneme": {"tr": "Merhaba! Çeviriler burada, oyunun üstünde görünecek.",
                       "en": "Hello! Translations will appear here, on top of the game."},
     "deneme_tr": {"tr": "Merhaba! Bu bir deneme altyazısıdır.", "en": "Hello! This is a test subtitle."},
+    "onizleme_tr": {"tr": "Hemen gitmemiz lazım, hadi!", "en": "We have to go, now!"},
     "tv_adres": {"tr": "TV'de bu adresi açın: {adres}", "en": "Open this address on the TV: {adres}"},
     "panel_adres": {"tr": "Kontrol paneli: {adres}", "en": "Control panel: {adres}"},
     "demo_acik": {"tr": "Deneme modu: örnek altyazılar gönderiliyor.",
