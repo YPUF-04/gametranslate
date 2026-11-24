@@ -49,6 +49,15 @@ def _oyun_blogu(b: Baglam) -> str:
     if kar:
         satirlar.append("Characters (keep these names; use the gender for gendered words):\n" +
                         "\n".join(kar))
+    yer = [_kes(y, 60) for y in b.yerler[:80] if y.strip()]
+    if yer:
+        satirlar.append("Places, gangs and organisations (proper names; keep them, add Turkish suffixes with an "
+                        "apostrophe): " + ", ".join(yer))
+    if b.argo:
+        satirlar.append("Slang used in this game (source => natural Turkish equivalent; only where it fits):\n" +
+                        "\n".join(f"- {_kes(a, 40)} => {_kes(c, 40)}" for a, c in b.argo[:40]))
+    if b.notlar:
+        satirlar.append(f"Translator notes for this game: {_kes(b.notlar, 600)}")
     return "\n".join(satirlar)
 
 
@@ -176,6 +185,10 @@ def degisken_baglam(baglam: Baglam | None) -> str:
     parcalar = []
     if baglam.ipucu:
         parcalar.append(baglam.ipucu)
+    if baglam.satir_adlari:   # PROTOKOL 20.4
+        parcalar.append("KNOWN NAMES in the lines to translate (characters/places of this game; when used as a name "
+                        "keep it exactly, never translate it as a word, add Turkish suffixes with an apostrophe): " +
+                        ", ".join(_kes(a, 60) for a in baglam.satir_adlari[:30]))
     if baglam.son_satirlar:
         satirlar = [f"{i}. {_kes(a, 300)}  =>  {_kes(c, 300)}"
                     for i, (a, c) in enumerate(baglam.son_satirlar[-SON_SATIR_ADEDI:], 1)]

@@ -49,6 +49,11 @@ class Baglam:
     # PROTOKOL 19.1: hitap hafızası [(konuşan, dinleyen, "sen"|"siz")] ve oturumda öğrenilen adlar
     hitaplar: list[tuple[str, str, str]] = field(default_factory=list)
     bilinen_adlar: dict[str, str] = field(default_factory=dict)
+    # PROTOKOL 20.4/20.5: oyun paketinden yerler, notlar, argo; bu satırlarda geçen adlar (istemin değişken kısmı)
+    yerler: list[str] = field(default_factory=list)
+    notlar: str = ""
+    argo: list[tuple[str, str]] = field(default_factory=list)
+    satir_adlari: list[str] = field(default_factory=list)
     derin: bool = False   # PROTOKOL 19.2: iyileştirme isteği (daha çok düşünme / daha güçlü model)
 
 

@@ -35,6 +35,14 @@ def sozluk_dict(terimler: list[dict[str, str]]) -> dict[str, str]:
     return {t["asil"]: t["ceviri"] for t in terimler}
 
 
+class Sozluk(dict):
+    """Sözlük + büyük/küçük harfe DUYARLI korunacak adlar (PROTOKOL 20.4): "Hope" (ad) korunur, "hope" çevrilir."""
+
+    def __init__(self, terimler: dict[str, str] | None = None, adlar: set[str] | frozenset[str] = frozenset()):
+        super().__init__(terimler or {})
+        self.adlar = frozenset(adlar)
+
+
 def _yer(i: int) -> str:
     return f"[[T{i}]]"
 
@@ -43,8 +51,9 @@ def koru(metin: str, sozluk: dict[str, str]) -> tuple[str, dict[str, str]]:
     """Terimleri yer tutucuyla değiştirir (talimat alamayan motorlar için)."""
     harita: dict[str, str] = {}
     # uzun terimler önce
+    adlar = getattr(sozluk, "adlar", frozenset())
     for i, (asil, ceviri) in enumerate(sorted(sozluk.items(), key=lambda kv: -len(kv[0]))):
-        desen = re.compile(r"(?<!\w)" + re.escape(asil) + r"(?!\w)", re.IGNORECASE)
+        desen = re.compile(r"(?<!\w)" + re.escape(asil) + r"(?!\w)", 0 if asil in adlar else re.IGNORECASE)
         if desen.search(metin):
             yer = _yer(i)
             metin = desen.sub(yer, metin)
@@ -56,7 +65,10 @@ def geri_koy(metin: str, harita: dict[str, str]) -> str:
     for yer, ceviri in harita.items():
         # motorlar bazen boşluk ekler: [[ T0 ]]
         num = yer[3:-2]
-        metin = re.sub(r"\[\[\s*T" + num + r"\s*\]\]", lambda _m, c=ceviri: c, metin)
+        # PROTOKOL 20.4: yer tutucuya kesmesiz bitişen ek ("[[T0]]u") özel adda kesmeyle ayrılır
+        metin = re.sub(r"\[\[\s*T" + num + r"\s*\]\](['’]?)([^\W\d_]{1,5}(?![\w]))?",
+                       lambda m, c=ceviri: c + ((m.group(1) or ("'" if c[:1].isupper() else "")) + m.group(2)
+                                                if m.group(2) else m.group(1)), metin)
     return metin
 
 

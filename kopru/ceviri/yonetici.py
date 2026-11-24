@@ -14,7 +14,7 @@ from .. import sozluk as sozluk_mod
 from ..hafiza import Hafiza, OneriDeposu
 from ..onbellek import normallestir
 from ..onbellek import Onbellek
-from . import ingilizce
+from . import ingilizce, on_katman
 from .istem import SON_SATIR_ADEDI, dublaj_ipucu, hitap_sez, iyilestirme_ipucu, video_dublaj_ipucu
 from .temel import AgHatasi, Baglam, Ceviri, CeviriMotoru, ErisimSiniri, ModelBulunamadi, MotorHatasi
 
@@ -99,6 +99,9 @@ class CeviriYoneticisi:
         b = self.oyun_bilgisi
         return Baglam(oyun_ad=b.get("ad", ""), aciklama=b.get("aciklama", ""),
                       hitap=b.get("hitap", "sen"), karakterler=list(b.get("karakterler", [])),
+                      yerler=[str(y) for y in b.get("yerler") or [] if isinstance(y, str)],
+                      notlar=str(b.get("notlar") or ""),
+                      argo=[(str(a), str(c)) for a, c in (b.get("argo") or [])],
                       son_satirlar=list(self.son_satirlar),
                       hitaplar=[(a, d, f) for (a, d), f in self.hitaplar.items()],
                       bilinen_adlar=dict(self.ogrenilen))
@@ -138,6 +141,35 @@ class CeviriYoneticisi:
                 c = k.get("cinsiyet")
                 return c if c in ("k", "e") else None
         return None
+
+    def bilinen_adlar(self) -> list[str]:
+        """PROTOKOL 20.4: korunacak adlar = karakterler (+ ilk adları) + yerler + sözlükte aynen kalan terimler
+        + oturumda öğrenilen adlar."""
+        b = self.oyun_bilgisi
+        out: list[str] = []
+        for k in b.get("karakterler") or []:
+            ad = " ".join(str(k.get("ad") or "").split()) if isinstance(k, dict) else ""
+            if ad:
+                out.append(ad)
+                if " " in ad:
+                    out.append(ad.split(" ")[0])
+        out += [" ".join(str(y).split()) for y in b.get("yerler") or [] if isinstance(y, str) and y.strip()]
+        out += [a for a, c in self.terimler.items() if a == c]
+        out += [a for a, c in self.ogrenilen.items() if a == c]
+        return list(dict.fromkeys(a for a in out if 0 < len(a) <= 60))
+
+    def adlari_bul(self, metinler: list[str]) -> list[str]:
+        bilinen = self.bilinen_adlar()
+        out: list[str] = []
+        for m in metinler:
+            for a in on_katman.adlari_bul(m, bilinen):
+                if a not in out and a.casefold() not in {t.casefold() for t in self.terimler if self.terimler[t] != t}:
+                    out.append(a)
+        return out[:30]
+
+    def altyazi_hazirla(self, govde: str) -> str:
+        """PROTOKOL 20.4: altyazı satırı motora gitmeden: BÜYÜK HARF bağırma cümle düzenine (adlar korunur)."""
+        return on_katman.bagirma_duzelt(govde, self.bilinen_adlar())[0]
 
     def konusan_ipucu(self, konusan: str | None) -> str:
         if not konusan:
@@ -190,7 +222,11 @@ class CeviriYoneticisi:
                          aciklama: bool, baglam: Baglam) -> list[Ceviri]:
         if getattr(motor, "baglam_destekler", False):
             return await motor.cevir(metinler, kaynak, hedef, self.terimler, aciklama, baglam=baglam)
-        return await motor.cevir(metinler, kaynak, hedef, self.terimler, aciklama)
+        sozluk: dict[str, str] = self.terimler
+        adlar = [a for a in baglam.satir_adlari if a not in self.terimler]
+        if adlar:   # PROTOKOL 20.4: talimat almayan motorda adlar yer tutucuyla (büyük/küçük harfe duyarlı) korunur
+            sozluk = sozluk_mod.Sozluk({**self.terimler, **{a: a for a in adlar}}, set(adlar))
+        return await motor.cevir(metinler, kaynak, hedef, sozluk, aciklama)
 
     async def _cagir(self, motor: CeviriMotoru, metinler: list[str], kaynak: str, hedef: str,
                      aciklama: bool, baglam: Baglam) -> list[Ceviri]:
@@ -217,6 +253,7 @@ class CeviriYoneticisi:
         """(sonuç, motor kodu); yedek motor kullanıldıysa kod None (hafızaya yazılmaz)."""
         baglam = self._baglam()
         baglam.ipucu = ipucu
+        baglam.satir_adlari = self.adlari_bul(metinler)
         # yedekteyken belirli aralıkla birincili yeniden dene
         if self.yedekte and self.yedek and time.monotonic() - self._yedek_zamani < YENIDEN_DENEME_SN:
             try:
@@ -356,6 +393,12 @@ class CeviriYoneticisi:
                 sonuc[i] = c
         return sonuc
 
+    def _son_isle(self, asil: str, ceviri: str) -> str:
+        """Motordan sonra: sözlük son denetimi, Türkçe ek uyumu (PROTOKOL 20.4), düğme belirteçleri (§16.2)."""
+        c = sozluk_mod.son_kontrol(asil, ceviri, self.terimler)
+        c = on_katman.ek_duzelt(c, list(self.terimler.values()) + self.adlari_bul([asil]))
+        return dugmeler.dugme_koru(asil, c)
+
     async def _ucustaki(self, ayri: list[str], kaynak: str, hedef: str,
                         aciklama: bool, ipucu: str = "") -> dict[str, Ceviri]:
         """Aynı anda aynı metin için tek istek (dedupe)."""
@@ -376,7 +419,7 @@ class CeviriYoneticisi:
                     raise MotorHatasi("Çeviri sayısı uyuşmuyor")
                 ceviriler = await self._cevrilmeyenleri_zorla(yeni, ceviriler, kaynak, hedef, aciklama, ipucu)
                 for m, c in zip(yeni, ceviriler):
-                    c = Ceviri(dugmeler.dugme_koru(m, sozluk_mod.son_kontrol(m, c.metin, self.terimler)), c.aciklama)
+                    c = Ceviri(self._son_isle(m, c.metin), c.aciklama)
                     if normallestir(c.metin) == normallestir(m):
                         self._degismez_onayli.add(normallestir(m))
                     if self.onbellek and c.metin:
@@ -436,7 +479,7 @@ class CeviriYoneticisi:
             if isinstance(e, AgHatasi) and "429" in str(e):
                 self._iyi_durak = time.monotonic() + IYILESTIRME_DURAK_SN
             return None
-        yeni = dugmeler.dugme_koru(metin, sozluk_mod.son_kontrol(metin, c.metin, self.terimler))
+        yeni = self._son_isle(metin, c.metin)
         if not yeni.strip() or normallestir(yeni) == n or not anlamli_fark(taslak, yeni):
             return None
         if self.onbellek:

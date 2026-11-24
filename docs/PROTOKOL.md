@@ -1033,3 +1033,148 @@ Sahibin isteği: "aşırı iyi, profesyonel çevirsin" — gecikmeyi artırmadan
   beklenen nitelikler (`yasak` sözcükler, `en_cok_karakter`, korunacak belirteçler).
 - `araclar/ceviri_degerlendir.py`: istemi kurar, sahte modelle yapıyı denetler; `GEMINI_API_KEY` varsa (ve
   `--canli`) gerçek modelle çalıştırıp kuralları puanlar. CI'da canlı kısım atlanır.
+
+## 20. Kurulumsuz LG, uyanık TV, temizlik katmanı, oyun paketleri, görünüm 2, konsolsuz deneme, kalite ölçümü (sonraki sürüm)
+
+Sahibin isteği: başarılı bir rakibin (telefondan çeviren, LG'de TV'nin kendi tarayıcısını kullanan bir uygulama)
+yaklaşımından öğrenip onu yakalamak ya da geçmek. Kod, metin ve görsel alınmadı; yalnız yaklaşım incelendi.
+
+### 20.1 LG'de kurulumsuz yol: TV'nin tarayıcısında HDMI + Türkçe (önerilen LG yolu)
+- `/tv` sayfası webOS tarayıcısını tanır (`navigator.userAgent` içinde `Web0S`/`webOS`; denemek için `?webos=1`).
+  webOS'te açılışta **HDMI seçimi** gösterilir: `HDMI 1`–`HDMI 4` ve `Görüntüsüz (yalnız yazı)`. Kumandanın ok tuşları ve
+  OK ile seçilir; seçim `localStorage.ak_tv_hdmi`'de hatırlanır (sonraki açılışta 5 sn sayaçla kendiliğinden açılır,
+  bir tuşa basılırsa seçim ekranı kalır). Sorgu: `?hdmi=1..4` doğrudan açar, `?hdmi=0` görüntüsüz açar.
+- Seçilen giriş sayfanın içinde, yazıların ARKASINDA tam ekran oynatılır:
+  `<video autoplay><source type="service/webos-external" src="ext://hdmi:N"></video>` (paketli uygulamadaki
+  `platform-webos.js` `hdmiAc` ile aynı işaretleme; dosya `/statik/webos/platform-webos.js` olarak yeniden kullanılır).
+- **Desteklenmiyorsa:** `<video>`/`<source>` `error` verirse ya da 8 sn içinde `playing` gelmezse görüntü kaldırılır,
+  sayfa siyah zeminde yalnız yazıyla sürer ve ekranda (10 sn, sonra köşede küçük) açık bir mesaj kalır:
+  "Bu TV'nin tarayıcısı HDMI görüntüsünü sayfada açamadı. Türkçe yazılar siyah ekranda gösteriliyor. Oyunun üstünde
+  görmek için panelde 'LG uygulaması' yolunu kullanın." + `Yeniden dene` / `Başka giriş` düğmeleri.
+- **Tam ekran:** seçim tıklamasında (kullanıcı hareketi) `document.documentElement.requestFullscreen()` denenir.
+- **Ekran açık kalsın (sayfa içi):** `navigator.wakeLock.request('screen')` varsa alınır (görünürlük geri gelince
+  yeniden); görüntüsüz kipte ve wake lock yoksa görünmez bir 2×2 tuvalden `captureStream` ile sessiz, döngülü bir
+  `<video>` oynatılır (varsa). Asıl güvence PC tarafıdır (§20.3).
+- **Ses:** dublaj sesi (§9) Web Audio ile çalar; seçim tıklaması ses bağlamını açar.
+- **Kumanda:** çalışırken OK → küçük menü (Giriş değiştir / Görüntüsüz / Yeniden dene / Kapat); Geri (461) menüyü
+  açar/kapatır (sayfadan çıkmaz).
+- Paketli LG uygulaması (§18) **alternatif** olarak kalır (geliştirici modu + LG hesabı gerektirir).
+- Not (doğrulanmadı): LG tarayıcısının `ext://hdmi` desteği modele/yıla göre değişir; rakip 2016+ (webOS 3+)
+  çalıştığını, 2021+ önerildiğini söylüyor. Gerçek TV'de denenmedi: yedek davranış bu yüzden zorunludur.
+
+### 20.2 Kısa adres (kapı 80), `/` yönlendirmesi, QR
+- Program açılışta ek olarak `0.0.0.0:80` dinlemeyi dener (ayar `kisa_adres`, varsayılan `true`). Bu sunucu YALNIZ
+  yönlendirir: `GET /` ve `GET /tv` → `302 Location: http://<Host'taki ad, kapısız>:<kapi>/tv` (sorgu korunur); başka her
+  yol `404`. Başka hiçbir şey sunulmaz. Kapı doluysa ya da izin yoksa sessizce vazgeçilir.
+- Ana kapıda: yerel olmayan istemciden `GET /` → `302 /tv` (eskiden `403`). Panel (`/`) yine yalnız yereldir.
+- `GET /api/durum` ek alan: `"kisa_adres": {"acik": bool, "kapi": 80, "hata": null|"dolu"|"izin"|"kapali"}` ve
+  `"tv_adresi": "http://192.168.1.20"` (kapı 80 açıksa) ya da `"http://192.168.1.20:8642/tv"`.
+- `GET /api/qr?metin=<en çok 200 karakter>` (yalnız yerel) → `image/svg+xml` QR kodu (bayt kipi, hata düzeltme M,
+  sürüm 1–10). Panel, TV adresinin yanında telefonla okutmak için gösterir.
+- Windows: aynı program için verilen güvenlik duvarı izni 80'i de kapsar; 80 IIS/başka bir sunucudaysa kısa adres
+  kapalı kalır ve panel uzun adresi gösterir.
+
+### 20.3 LG ekranı kararmasın (SSAP, PC tarafı)
+- Ayar `lg_uyanik`: `{"acik": false, "adres": ""}` (adres boşsa son görülen LG: TV kaydı §18.5 ya da `/tv` sayfasını
+  webOS tarayıcısıyla açan son adres; bu adres yalnız RAM'de tutulur).
+- **Eşleşme (bir kez):** `wss://<tv>:3001/` (TV'nin kendi imzalı sertifikası: doğrulanmaz), olmazsa `ws://<tv>:3000/`.
+  `{"type":"register","id":"kayit","payload":{"forcePairing":false,"pairingType":"PROMPT","manifest":{…},
+  "client-key":"<varsa>"}}` gönderilir; TV ekranında izin sorusu çıkar, kullanıcı **Kabul et** der; yanıt
+  `{"type":"registered","payload":{"client-key":"…"}}`. Bekleme en çok 60 sn. Manifest, LG Connect SDK'nın yayımlanmış
+  imzalı izin bildirimidir (Apache-2.0; THIRD-PARTY-NOTICES). İstemci anahtarı **şifreli kasaya** yazılır (`keyring`,
+  ad `lg_ssap`); ayar dosyasına, günlüğe, yanıta asla girmez. Kasa yoksa saklanmaz (her açılışta yeniden sorulur).
+- **Uyanık tutma:** yalnız çeviri çalışırken, ayar açıksa ve anahtar varsa, **120 sn**'de bir: kayıtlı anahtarla
+  bağlanılır, `ssap://com.webos.service.networkinput/getPointerInputSocket` istenir, dönen `socketPath`'e bağlanıp
+  iki zararsız imleç hareketi gönderilir (`type:move\ndx:1\ndy:0\ndown:0\n\n` ve `dx:-1`), bağlantı kapatılır.
+  Başka hiçbir komut gönderilmez. 3 ardışık hata → `hata:"ag"` (sonraki döngüde yine denenir).
+- API (yalnız yerel): `GET /api/tv/lg/uyanik` → `{"acik":bool,"adres":"…"|null,"eslesti":bool,
+  "durum":"kapali"|"bekliyor"|"esleniyor"|"calisiyor"|"hata","son_dokunus":<epoch|null>,
+  "hata":null|"ag"|"reddedildi"|"kasa_yok"|"adres_yok"|"zaman_asimi","mesaj":"…"}`.
+  `POST /api/tv/lg/uyanik`: `{"acik":bool}` | `{"adres":"192.168.1.30"}` | `{"esle":true}` (eşleşmeyi başlatır, hemen
+  döner; durum `esleniyor`) | `{"unut":true}` (anahtarı siler).
+- Panel: "TV ekranı kararmasın" anahtarı + "TV ile eşleştir" düğmesi ("TV'de çıkan soruya Kabul et deyin").
+- Doğrulanmadı: gerçek LG TV'de denenmedi; LG'nin imleç hareketinin ekran koruyucuyu sıfırladığı kabulüne dayanır.
+
+### 20.4 Çeviri öncesi/sonrası temizlik katmanı (her motor)
+Sıra: OCR düzeltme ve konuşan ayırma (§19.3) → HUD süzgeci → bölünmüş cümle → bağırma düzeltme → ad koruma → MOTOR →
+sözlük denetimi → Türkçe ek uyumu → düğme belirteçleri (§16.2). Tekrar eden satır hafıza/önbellekten gelir (aynen).
+- **HUD süzgeci:** pusula (`N`, `NW`, `SE 120°`), para (`$1,250`, `+$500`), cephane (`30/120`, `24 | 120`), çarpan
+  (`x3`), süre (`02:15`), yüzde, `HP 100`, `Lv. 12`, `250 XP`, mesafe/hız (`1.2 mi`, `45 mph`) çevrilmez (§16.3'e ek).
+- **Bölünmüş cümle:** kesinleşen yeni altyazı kartı, kuyruktaki bir önceki kart (aynı konuşan ya da konuşansız) cümle
+  sonu noktalamasıyla bitmiyorsa ve yeni kart küçük harfle/bağlaçla başlıyorsa (ya da önceki virgül/kısa çizgiyle
+  bitiyorsa) ve aralarında ≤ 4 sn varsa: iki kart tek cümle olarak çevrilir (`asil` birleşik metindir, en çok 300
+  karakter). Önceki kart hâlâ ekrandaysa aynı birleşik çeviriyle yerinde güncellenir (`devam:true`); yeni kart aynı
+  metinle zıplamadan birleşir. Böylece cümle iki kart boyunca tam görünür.
+- **Bağırma:** altyazıda düğmeler dışındaki harflerin hepsi büyükse (en az 4 harf, yalnız kısaltma değil) metin motora
+  cümle düzeninde gider: `GET DOWN! THEY'RE SHOOTING AT US` → `Get down! They're shooting at us!`. Bilinen adlar ve
+  kısaltmalar (FBI, LSPD, GPS…) korunur, `I` büyük kalır; sonunda noktalama yoksa vurgu için `!` eklenir. Çeviri büyük
+  harfe döndürülmez. (Ekran öğeleri — menü — eskisi gibi motorun büyük harf kuralına bırakılır.)
+- **Ad koruma:** bilinen adlar = oyun bilgisi karakterleri (+ ilk adları), yerler (oyun paketi), sözlükte aynen kalan
+  terimler, oturumda öğrenilen adlar. Satırda büyük harfle geçen bilinen ad (cümle başında ise ardından `you/we/it/that…`
+  gelmiyorsa: "Hope you're right" ad değildir) ve cümle ortasında büyük harfle yazılmış kelimeler (gün/ay/unvan gibi
+  istisnalar hariç) "bu satırdaki adlar" olur. LLM motorlarına istemin değişken kısmında `KNOWN NAMES in the lines to
+  translate: …` olarak verilir; talimat almayan motorlarda (yerel, DeepL) büyük/küçük harfe duyarlı yer tutucuyla
+  korunur (küçük harfli `hope` çevrilir).
+- **Ek uyumu:** sözlük karşılığı ya da korunan adın ardından kesmeli ek gelirse ek ses uyumuna göre yeniden kurulur
+  (belirtme, ilgi, yönelme, bulunma(+ki), ayrılma, vasıta, çoğul; kaynaştırma harfleri; sert ünsüzde `t`):
+  `Dead Eye'ı` → (sözlük) `Ölü Göz'ı` → `Ölü Göz'ü`. Yer tutucuya kesmesiz bitişen ek özel adda kesmeyle ayrılır
+  (`[[T0]]u` → `Ölü Göz'ü`).
+- Oyun bilgisi istemde ayrıca `Places, gangs and organisations`, `Slang used in this game` ve `Translator notes`
+  bloklarını alabilir (§20.5).
+
+### 20.5 Oyun paketleri (uygulama güncellemesi beklemeden güncellenen oyun sözlükleri)
+- Kaynak: depodaki `oyun-paketleri/` klasörü. Dizin `oyun-paketleri/index.json`:
+  `{"bicim":1,"paketler":[{"kod":"gta-6","ad":"Grand Theft Auto VI","surum":"2026.11.24","sha256":"<64 hex>",
+  "boyut":12345}]}`. Paket `oyun-paketleri/<kod>.json`:
+  `{"bicim":1,"kod":"gta-6","ad":"…","adlar":["gta 6","gta vi",…],"surum":"…","hitap":"sen"|"siz",
+  "notlar":"…","karakterler":[{"ad":"…","cinsiyet":"k"|"e"|""}],"yerler":["…"],
+  "terimler":[{"asil":"…","ceviri":"…"}],"argo":[{"asil":"…","ceviri":"…"}]}`.
+  Sınırlar: paket ≤ 256 KB, ≤ 2000 terim, ≤ 300 karakter, ≤ 500 yer, ≤ 200 argo; metinler kısaltılır; `kod` §6 oyun kodu
+  biçiminde.
+- Program pakete gömülü bir kopyayla gelir (`oyun-paketleri/`, PyInstaller `--add-data`). Arka planda (açılıştan 30 sn
+  sonra, sonra 24 sa'de bir; ayar `oyun_paketleri_guncelle`, varsayılan `true`) yalnız
+  `https://raw.githubusercontent.com/YPUF-04/gametranslate/main/oyun-paketleri/…` adresinden dizin, sonra yalnız
+  `surum`'u yerel kopyadan farklı olan paketler indirilir. Yalnız https, yalnız bu sunucu, yönlendirme izlenmez, vekil
+  ayarına uyulur, en çok 15 sn; indirilen paketin SHA-256'sı dizindekiyle aynı ve şema geçerli değilse atılır.
+  Geçerliler `<ayar_dizini>/oyun_paketleri/<kod>.json`'a atomik yazılır. Kullanıcı verisi gönderilmez.
+- **Eşleme:** etkin oyunun `kod`'u ya da `ad`'ı (küçük harf, yalnız harf/rakam) paketin `kod`'u ya da `adlar`'ından
+  biriyle aynıysa paket uygulanır (indirilen sürüm varsa o, yoksa gömülü).
+- **Birleştirme (yalnız bellekte; kullanıcının sözlük dosyasına yazılmaz):** terimler sözlüğe eklenir (aynı `asil`
+  için kullanıcının sözlüğü kazanır); karakterler oyun bilgisindeki karakterlere eklenir (aynı ad varsa kullanıcınınki);
+  `yerler`, `argo`, `notlar` istemin oyun bloğuna (§20.4) girer ve yerler korunan adlardır; `hitap` yalnız oyun bilgisinde
+  açık hitap yoksa kullanılır.
+- API (yalnız yerel): `GET /api/oyun-paketleri` → `{"paketler":[{"kod","ad","surum","kaynak":"gomulu"|"indirilen",
+  "terim":n}],"etkin":"gta-6"|null,"son_denetim":<epoch|null>,"hata":null|"ag"|"gecersiz"}`;
+  `POST /api/oyun-paketleri/denetle` → hemen denetler, aynı biçimde döner.
+
+### 20.6 Altyazı görünümü 2 ve canlı önizleme
+- `gorunum` yeni alanları: `konusan_goster` (bool, varsayılan `true`; kapalıysa konuşan adı hiç çizilmez),
+  `boyut`: `"otomatik"` (varsayılan; örtüde oyunun yazı boyuna uyar, çubukta `yazi_boyutu`) | `"kucuk"` (32) |
+  `"orta"` (40) | `"buyuk"` (52) | `"cok_buyuk"` (64) — 1080p piksel; örtüde bu boydan başlanır, sığmazsa kutu büyür;
+  `zemin`: `"kutu"` (varsayılan; `arka_plan` opaklıkta kutu) | `"serit"` (ekran genişliğinde şerit) | `"golge"` (zemin
+  yok, kalın gölge) | `"yok"` (zemin yok, ince kontur); `kalinlik`: `"normal"` | `"kalin"` (varsayılan `"kalin"`).
+  `yazi_rengi` panelde üç hazır renk: beyaz `#FFFFFF`, sarı `#FFE45C`, açık mavi `#9AD8FF` (her `#RRGGBB` geçerli).
+  Örtü kipinde (`yerlesim:"ustune"`) `zemin` `golge`/`yok` iken orijinal yazı örtülmez (kutu saydam).
+- Konuşan adı: `konusan_rengi` (varsayılan `#FFD166`) ayrı renkte, ardından `:`; metin `yazi_rengi`.
+- Panelde **canlı önizleme**: örnek bir oyun karesi (kendi çizimimiz) üstünde, her değişiklikte anında. Değişiklik
+  `POST /api/ayarlar` ile kaydedilir (300 ms gecikmeli) ve `gorunum` olayıyla TV'lere hemen gider; panel ayrıca
+  `POST /api/deneme-yazi {"onizleme":true}` ile TV'de 4 sn'lik konuşanlı örnek satır gösterir (çeviri çalışırken
+  gönderilmez).
+
+### 20.7 Konsolsuz dene (örnek sahne)
+- `POST /api/demo {"acik":true|false}` (yalnız yerel) → `{"acik":bool}`. Açıkken program kendi çizdiği örnek bir oyun
+  karesini (PIL; kendi sahnemiz) ve sırayla 6 İngilizce satırı (bölünmüş cümle, bağırma, ad, düğme, konuşan, HUD) kare
+  kaynağı olarak kullanır ve **tam işlem hattını** çalıştırır (temizlik katmanı, motor, kuyruk, örtü, yayın). Okuma
+  adımı örnek karede bilinen yazıları döndürür (karede gerçekten çizilidir; OCR kurulu değilse de çalışsın diye).
+  Çeviri çalışıyorsa önce durdurulur; demo 60 sn sonra ya da `acik:false` ile biter.
+- Akışa `demo` olayı: `{"acik":true,"kare":"/kopru/demo/kare.jpg"}` | `{"acik":false}`. TV sayfası ve paketli uygulama
+  açıkken kareyi arka plan olarak gösterir (HDMI görüntüsü yokmuş gibi), bitince kaldırır. `GET /kopru/demo/kare.jpg`
+  (yerel ağ) örnek kareyi verir. `GET /api/durum` → `"demo": bool`.
+
+### 20.8 Kalite ölçümü
+- `tests/kalite/ornekler.json`: ~60 İngilizce satır, kategoriler: `diyalog`, `gorev`, `ad`, `bagirma`, `bolunmus`
+  (iki kart: `parcalar`), `ocr`, `dugme`, `konusan`, `arayuz` (çevrilmemesi gereken; doğru yanıt = aynısı). Her satır
+  için elle yazılmış Türkçe başvuru çevirisi.
+- `araclar/kalite_olc.py`: chrF++ (`sacrebleu`, geliştirme bağımlılığı) ile karşılaştırır: çevrimdışı motor **ham**
+  (doğrudan motor) ve **katmanla** (§20.4 + oyun paketi + yönetici); `GEMINI_API_KEY` varsa Gemini ham/katmanla
+  (yoksa atlanır). Arayüz satırları ayrıca "aynen kaldı" oranıyla ölçülür. CI'da yalnız veri dosyası denetlenir.

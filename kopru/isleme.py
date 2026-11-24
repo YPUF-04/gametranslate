@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 from . import dugmeler
 from .ayarlar import bolgeleri_temizle
+from .ceviri import on_katman
 from .ceviri.temel import AgHatasi, AnahtarHatasi, MotorHatasi
 from .onbellek import normallestir
 from .okuma import Satir
@@ -35,6 +36,8 @@ HUCRE_ESIGI = 32     # ...ya da tek bir hücredeki fark bu kadarsa (küçük bir
 YENIDEN_OKU_SN = 1.0   # §13.2: kare değişmemiş görünse de en geç bu sıklıkta yeniden okunur (yazının gittiği anlaşılsın)
 EN_AZ_GOSTERIM_MS = 1800   # eski kural; yalnız `sure_ms` (istemciye bilgi) için kalır
 EN_AZ_MS_VARSAYILAN = 800  # §13.4: en az gösterim süresi (gorunum.en_az_ms)
+BOLUNMUS_SN = 4.0          # §20.4: iki kart arasında en çok bu kadar sn varsa bölünmüş cümle sayılır
+BOLUNMUS_EN_COK = 300      # birleşik cümlenin en çok karakteri
 KAYIP_KARE = 3             # 7.2/2: bu kadar kare üst üste görünmezse "gitti"
 EKRAN_KAYIP_KARE = 2       # §13.2: ekran öğesi bu kadar kare üst üste görünmezse "gitti"
 YENI_BEKLE_SN = 2.0        # §13.4: yeni cümlenin çevirisi gecikirse eskisi en çok bu kadar daha bekler (boşluk olmasın)
@@ -159,7 +162,7 @@ def okuma_gurultusu_mu(metin: str) -> bool:
     """§11.3 + §16.3: çevrilmeyecek okuma: emoji/simgeler atıldıktan sonra <2 harf, çoğu rakam/simge (HUD
     sayıları), yalnız sayı/süre/koordinat, yalnız düğme simgeleri ya da tekrarlı kelime."""
     m = dugmeler.temizle(metin)
-    if len("".join(m.split())) <= 1:
+    if len("".join(m.split())) <= 1 or on_katman.hud_mu(m):   # §20.4: pusula, para, cephane, süre, sayaç
         return True
     return dugmeler.gurultu_mu(m) or tekrar_var_mi(m)
 
@@ -559,6 +562,7 @@ class Isleme:
         self.durum_hatasi: str | None = None
         self._spek: asyncio.Task | None = None   # önden başlatılmış çeviri (6.4)
         self._spek_aday = ""
+        self._spek_metin = ""
         self._spek_gitti = False
         self._son_hata_logu = -1e9
         self._adim_hatali = False
@@ -613,6 +617,7 @@ class Isleme:
     def _spek_basla(self, govde: str, aday: str, ayar: dict[str, Any], konusan: str | None = None) -> None:
         self._spek_iptal()
         self._spek_aday = aday
+        self._spek_metin = govde
         self._spek_gitti = False
         self._spek = asyncio.get_running_loop().create_task(
             self._spek_cevir(govde, ayar["kaynak_dil"], ayar["hedef_dil"], konusan))
@@ -940,16 +945,43 @@ class Isleme:
         if onceki and (aday.startswith(onceki) or onceki.startswith(aday)):
             self._spek_iptal()  # daktilo gibi yazılıyor: kararlı olunca çevrilecek
             return
-        konusan, govde = konusan_ayir(metin)
+        konusan, govde = self._govde_al(metin)
+        birlesik, _ = self._bolunmus(govde, konusan)
+        govde = birlesik or govde
         if self.yonetici.ara(govde, ayar["kaynak_dil"], ayar["hedef_dil"]):
             self._spek_iptal()
             self._kesinlestir(metin, aday, ayar)
         else:
             self._spek_basla(govde, aday, ayar, konusan)
 
+    def _govde_al(self, metin: str) -> tuple[str | None, str]:
+        """Konuşan ön eki ayrılır; altyazı gövdesi temizlik katmanından geçer (PROTOKOL 20.4: bağırma düzeltme)."""
+        konusan, govde = konusan_ayir(metin)
+        hazirla = getattr(self.yonetici, "altyazi_hazirla", None)
+        if callable(hazirla):
+            try:
+                govde = hazirla(govde)
+            except Exception:   # noqa: BLE001 — temizlik katmanı hatası altyazıyı durdurmasın
+                log.debug("altyazı hazırlığı başarısız", exc_info=True)
+        return konusan, govde
+
+    def _bolunmus(self, govde: str, konusan: str | None) -> tuple[str | None, SiraSatiri | None]:
+        """PROTOKOL 20.4: yeni kart bir önceki kartın yarım kalan cümlesinin devamıysa (birleşik metin, önceki)."""
+        o = self._sira.son()
+        if o is None or o.hata or not o.ek.get("govde"):
+            return None, None
+        if (o.ek.get("konusan") or None) != (konusan or None) and konusan is not None:
+            return None, None
+        bitti = o.git if o.git is not None else self._ag_t
+        if self._ag_t - bitti > BOLUNMUS_SN or len(o.ek["govde"]) + len(govde) > BOLUNMUS_EN_COK:
+            return None, None
+        if not on_katman.bolunmus_mu(o.ek["govde"], govde):
+            return None, None
+        return on_katman.birlestir(o.ek["govde"], govde), o
+
     def _kesinlestir(self, metin: str, aday: str, ayar: dict[str, Any]) -> None:
         """Satır kararlı: kuyruğa eklenir (ya da açık satırın devamıysa o satır yerinde yenilenir)."""
-        konusan, govde = konusan_ayir(metin)
+        konusan, govde = self._govde_al(metin)
         simdi = self.saat()
         gorev = self._spek if self._spek_aday == aday and self._spek_gitti else None
         if gorev is not None:
@@ -970,6 +1002,13 @@ class Isleme:
             return
         if acik is not None:   # kaynak hiç kaybolmadan değişti (§13.4): eskisinin t_git'i yeni cümlenin t_gel'idir
             acik.git, acik.git_tur = self._ag_t, "yeni"
+        birlesik, onceki = self._bolunmus(govde, konusan)
+        if birlesik is not None:   # §20.4: iki karta bölünmüş cümle tek cümle olarak çevrilir
+            ek.update({"govde": birlesik, "parca": govde, "bolunmus_onceki": onceki})
+            if gorev is not None and self._spek_metin != birlesik:
+                gorev.cancel()
+                gorev = None
+            govde = birlesik
         self._kayip, self._ilk_kayip = 0, None
         s = self._sira.ekle(SiraSatiri(self._yeni_id("a"), gel=self._ag_t, ek=ek))
         self._cevir_baslat(s, govde, ayar, gorev)
@@ -1021,6 +1060,9 @@ class Isleme:
         self._hazir(s, govde, c)
 
     def _hazir(self, s: SiraSatiri, govde: str, c: Any) -> None:
+        o = s.ek.get("bolunmus_onceki")
+        if o is not None and o is self._sira.gosterilen and c.metin and o.metin != c.metin:
+            o.metin, o.guncel = c.metin, True   # §20.4: önceki kart da cümlenin tamamını gösterir (yerinde)
         s.ek["ceviri"] = c
         s.ek["kaynak_tur"] = getattr(c, "kaynak", "motor")
         if s is self._sira.gosterilen:
