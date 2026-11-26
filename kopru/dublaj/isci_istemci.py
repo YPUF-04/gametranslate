@@ -28,7 +28,7 @@ EN_COK_SATIR = 64 * 1024 * 1024
 YUKLE_SN = 600.0            # model yükleme üst sınırı (ilk açılışta yavaş disk + CUDA derlemesi)
 MERHABA_SN = 240.0          # ilk açılışta torch + CUDA yüklemesi uzun sürebilir
 YENIDEN_SINIR = 3           # dakikada en çok bu kadar başlatma
-KOPYALANACAK = ["__init__.py", "ses/__init__.py", "dublaj/__init__.py", "dublaj/temel.py", "dublaj/dsp.py",
+KOPYALANACAK = ["__init__.py", "ses/__init__.py", "dublaj/__init__.py", "dublaj/temel.py", "dublaj/dsp.py", "dublaj/tanima.py",
                 "dublaj/isci/__init__.py", "dublaj/isci/__main__.py", "dublaj/isci/protokol.py",
                 "dublaj/isci/sunucu.py", "dublaj/isci/mantik.py", "dublaj/isci/motorlar.py",
                 "dublaj/isci/canli.py", "dublaj/isci/sahte.py"]
@@ -371,6 +371,7 @@ class IsciParca:
     bitis: float
     temiz: Any = None          # ayrılmış (arka plansız) konuşma sesi
     kaynak: str = "sistem"     # "surec" (yalnız oyun) | "sistem" | "giris" | "ps5" (gizli bağlantı)
+    iz: Any = None             # dublaj hafızası: parçanın 1 sn ön paylı ses izi [[özet, kare], ...] (PROTOKOL 21.4)
 
 
 class IsciSesKaynagi:
@@ -383,13 +384,19 @@ class IsciSesKaynagi:
         self.ayar_fn, self.pid_fn, self.hata_cb = ayar_fn, pid_fn, hata_cb
         self._gorev: asyncio.Task | None = None
         self.bilgi: dict[str, Any] = {}
+        self.parmak_izi = False                                   # dublaj hafızası izinli (PROTOKOL 21.4)
+        self.tanima_cb: Callable[[dict[str, Any]], None] | None = None
 
     def _olay(self, v: dict[str, Any]) -> None:
-        if v.get("olay") == "parca" and v.get("pcm"):
+        if v.get("olay") == "tanima":
+            if self.tanima_cb is not None:
+                self.tanima_cb(v)
+        elif v.get("olay") == "parca" and v.get("pcm"):
             bitis = self.saat()
             sure = float(v.get("sure_sn") or 0)
             self.parca_cb(IsciParca(pcm_coz(v["pcm"]), int(v.get("sr") or 16000), bitis - sure, bitis,
-                                    pcm_coz(v["temiz"]) if v.get("temiz") else None, str(v.get("kaynak") or "sistem")))
+                                    pcm_coz(v["temiz"]) if v.get("temiz") else None, str(v.get("kaynak") or "sistem"),
+                                    v.get("iz") if isinstance(v.get("iz"), list) else None))
         elif v.get("olay") in ("canli_hata", "isci_kapandi") and self.hata_cb:
             from ..ses import SesHatasi
             self.hata_cb(SesHatasi("Oyun sesi dinlenemedi.", str(v.get("hata") or "dublaj_ses_kaynagi")))
@@ -412,7 +419,7 @@ class IsciSesKaynagi:
             try:
                 istek = {"pid": self.pid_fn(), "ayirma": bool(d.get("ayirma", True)),
                          "tamamen_turkce": tamamen_turkce_mu(ayar) and ps5_ses is None,
-                         "giris": str(d.get("ses_girisi") or "")}
+                         "giris": str(d.get("ses_girisi") or ""), "parmak_izi": bool(self.parmak_izi)}
                 if ps5_ses is not None:
                     istek["ps5_ses"] = ps5_ses
                 self.bilgi = await self.isci.iste("canli_baslat", istek)
@@ -447,12 +454,59 @@ class IsciCikis:
                                            "kis": float(d.get("oyun_sesi_kis", 0.25)), "pid": self.pid_fn()})
         return r
 
+    async def ani_oynat(self, pcm: Any, sr: int, ayar: dict[str, Any], kimlik: str, gecikme_sn: float = 0.0) -> Any:
+        """Dublaj hafızası: seslendirme sırasını beklemeden, `gecikme_sn` sonra çalar (PROTOKOL 21.3). Hemen döner."""
+        d = ayar.get("dublaj") or {}
+        return await self.isci.iste("ani_cal", {"pcm": pcm_kodla(pcm), "sr": int(sr), "kimlik": kimlik,
+                                                "gecikme_sn": float(max(0.0, gecikme_sn)),
+                                                "seviye": float(d.get("ses_seviyesi", 1.0)),
+                                                "kis": float(d.get("oyun_sesi_kis", 0.25)), "pid": self.pid_fn()},
+                                    zaman_asimi=3.0)
+
     def durdur(self) -> None:
         if self.isci.calisiyor():
             try:
                 asyncio.get_running_loop().create_task(self.isci.iptal())
+                asyncio.get_running_loop().create_task(self.isci.iste("ani_durdur", {}, zaman_asimi=2.0))
             except RuntimeError:
                 pass
+
+
+class IsciKodlayici:
+    """Hafıza sesleri: işçide Ogg/Opus (yoksa FLAC); işçi yoksa/başarısızsa WAV (PROTOKOL 21.2)."""
+
+    def __init__(self, isci: IsciIstemci) -> None:
+        self.isci = isci
+
+    async def kodla(self, pcm: Any, sr: int) -> tuple[bytes, str, int]:
+        from .hafiza_canli import wav_kodla
+        if self.isci.calisiyor():
+            try:
+                r = await self.isci.iste("ses_kodla", {"pcm": pcm_kodla(pcm), "sr": int(sr)}, zaman_asimi=5.0)
+                return base64.b64decode(r["veri"]), str(r["bicim"]), int(r["sr"])
+            except DublajHatasi as e:
+                log.info("hafıza sesi işçide kodlanamadı (%s); WAV", e.kod)
+        return wav_kodla(pcm, sr)
+
+    async def coz(self, veri: bytes, bicim: str, sr: int) -> tuple[Any, int]:
+        from .hafiza_canli import wav_coz
+        if bicim == "wav":
+            return wav_coz(veri)
+        r = await self.isci.iste("ses_coz", {"veri": base64.b64encode(veri).decode("ascii"), "bicim": bicim},
+                                 zaman_asimi=5.0)
+        return pcm_coz(r["pcm"]), int(r["sr"])
+
+
+async def tanima_yukle(isci: IsciIstemci, girdiler: list[tuple[int, Any]], sifirla: bool = False) -> None:
+    """Kayıtlı satırların ses izlerini işçinin tanıma dizinine yükler (parça parça; satırlar büyümesin)."""
+    if not isci.calisiyor():
+        return
+    if sifirla and not girdiler:
+        await isci.iste("tanima_sil", {}, zaman_asimi=5.0)
+        return
+    for i in range(0, max(1, len(girdiler)), 200):
+        grup = [{"kimlik": int(k), "iz": iz} for k, iz in girdiler[i:i + 200]]
+        await isci.iste("tanima_yukle", {"girdiler": grup, "sifirla": sifirla and i == 0}, zaman_asimi=10.0)
 
 
 def isci_komutu(python: Path, kod_kok: Path, model_dizini: Path, ffmpeg: str | None, gunluk: Path | None,

@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Any, Callable
 from .. import ses as ses_mod
 from . import MOTORLAR, donanim, motor_olustur, tamamen_turkce_mu
 from .cikis import BilgisayarCikis, SesDeposu, TvCikis, _pencere_islemi
-from .isci_istemci import (IsciCikis, IsciIstemci, IsciMotoru, IsciSesKaynagi, IsciSTT, anlik_ses, isci_komutu,
-                           kod_kopyala)
+from .isci_istemci import (IsciCikis, IsciIstemci, IsciKodlayici, IsciMotoru, IsciSesKaynagi, IsciSTT, anlik_ses,
+                           isci_komutu, kod_kopyala, tanima_yukle)
 from .ortam import DublajOrtami
 from .temel import DublajHatasi
 
@@ -66,6 +66,9 @@ class DublajYonetici:
         self.son_hata: str | None = None
         # PROTOKOL 17.2: dublaj yalnız süre (ya da sınırsız kod) varken çalışır; Durum erişime bağlar
         self.izin: Callable[[], bool] = lambda: True
+        self._hafiza_depo: Any = None               # (oyun, DublajHafizasi) — yalnız izinle açılır (PROTOKOL 21)
+        self.hafiza_kok: Callable[[str], Path] | None = None   # testler: kök klasör
+        self.iyilestirici: Any = None
 
     # -- dublaj paketi / işçi --
     def isci_kullan(self) -> bool:
@@ -151,7 +154,7 @@ class DublajYonetici:
         satirlar = []
         for o in list(self.isleyici.olcumler if self.isleyici else [])[-5:]:
             satirlar.append({k: o.get(k) for k in ("yazi_id", "ilk_ses_ms", "bekleme_ms", "ceviri_ms", "ses_ms",
-                                                   "uretim_ms", "ref_sn", "ref_tur", "cinsiyet", "atildi", "erken")
+                                                   "uretim_ms", "ref_sn", "ref_tur", "cinsiyet", "atildi", "erken", "hafiza")
                              if o.get(k) is not None})
         return {"cihaz": cihaz, "uyari": uyari, "onarilabilir": uyari == "cpu_torch_cpu" and not self.ortam.gelistirici,
                 "isinma_ms": getattr(m, "isinma_ms", None), "satirlar": satirlar, "onarim": dict(self.ortam.onarim)}
@@ -189,8 +192,9 @@ class DublajYonetici:
         son = dict(isl.olcumler[-1])
         bekle = [o["bekleme_ms"] for o in isl.olcumler if o.get("bekleme_ms") is not None]
         ilk = [o["ilk_ses_ms"] for o in isl.olcumler if o.get("ilk_ses_ms") is not None and not o.get("atildi")]
+        hf = isl.hafiza.olcum() if getattr(isl, "hafiza", None) is not None else {}
         return {"son": son, "ortalama_bekleme_ms": int(sum(bekle) / len(bekle)) if bekle else None,
-                "ortalama_ilk_ses_ms": int(sum(ilk) / len(ilk)) if ilk else None,
+                "ortalama_ilk_ses_ms": int(sum(ilk) / len(ilk)) if ilk else None, **hf,
                 "atilan": sum(1 for o in isl.olcumler if o.get("atildi")), "olcum_sayisi": len(isl.olcumler)}
 
     def profiller(self) -> Any:
@@ -198,6 +202,47 @@ class DublajYonetici:
         from .profil import SesProfilleri
         oyun = str(self.ayar().get("aktif_oyun") or "varsayilan")
         return SesProfilleri(ayarlar.ayar_dizini() / "oyunlar" / oyun / "sesler")
+
+    # -- dublaj hafızası (PROTOKOL 21) --
+    def hafiza_oyun(self) -> str:
+        return str(self.ayar().get("aktif_oyun") or "varsayilan")
+
+    def hafiza(self) -> Any:
+        """Aktif oyunun dublaj hafızası; izin yoksa None (hiçbir dosya açılmaz/oluşturulmaz)."""
+        if not self._d().get("hafiza_izni"):
+            return None
+        oyun = self.hafiza_oyun()
+        if self._hafiza_depo is None or self._hafiza_depo[0] != oyun:
+            from .hafiza import DublajHafizasi, kok_dizin
+            if self._hafiza_depo is not None:
+                self._hafiza_depo[1].kapat()
+            kok = self.hafiza_kok(oyun) if self.hafiza_kok else kok_dizin(oyun)
+            self._hafiza_depo = (oyun, DublajHafizasi(kok))
+        return self._hafiza_depo[1]
+
+    def hafiza_birak(self) -> None:
+        if self._hafiza_depo is not None:
+            self._hafiza_depo[1].kapat()
+            self._hafiza_depo = None
+
+    def hafiza_kodlayici(self) -> Any:
+        if self.isci_kullan():
+            return IsciKodlayici(self.isci)
+        from .hafiza_canli import WavKodlayici
+        return WavKodlayici()
+
+    def _hafiza_oturumu(self, depo: Any) -> Any:
+        from .hafiza_canli import HafizaOturumu
+        isci = self.isci_kullan() and not self._kaynak_verildi
+
+        async def ekle(k: int, iz: Any) -> None:
+            await tanima_yukle(self.isci, [(k, iz)])
+
+        async def sil(kimlikler: list[int]) -> None:
+            for k in kimlikler:
+                await self.isci.iste("tanima_sil", {"kimlik": k}, zaman_asimi=5.0)
+        return HafizaOturumu(depo, self.hafiza_kodlayici(), ekle if isci else None,
+                             lambda: float(self._d().get("hafiza_sinir_mb", 1000)), sil if isci else None)
 
     # -- yardımcılar --
     def _d(self) -> dict[str, Any]:
@@ -353,11 +398,24 @@ class DublajYonetici:
             except Exception:   # noqa: BLE001
                 log.debug("ses profilleri okunamadı", exc_info=True)
             isleyici.profil_kaydet = profiller.kaydet
+        depo = self.hafiza()
+        if depo is not None:                         # yalnız izinle: dublaj hafızası (PROTOKOL 21)
+            isleyici.hafiza = self._hafiza_oturumu(depo)
         self.isleyici = isleyici
         self.yayin.dinle(isleyici.olay)
         kaynak = self.kaynak_fabrika(lambda p: loop.call_soon_threadsafe(isleyici.kuyruga_at, p), self.saat,
                                      hata_cb=lambda e: loop.call_soon_threadsafe(self._hata, e.kod))
         self._kaynak = kaynak
+        if isleyici.hafiza is not None and hasattr(kaynak, "tanima_cb"):
+            kaynak.parmak_izi = True
+            kaynak.tanima_cb = isleyici.tanima_olayi
+
+            async def dizin_yukle() -> None:
+                try:
+                    await tanima_yukle(self.isci, await isleyici.hafiza.tum_izler(), sifirla=True)
+                except Exception as e:   # noqa: BLE001 — tanıma olmadan da altyazı isabetleri çalışır
+                    log.info("tanıma dizini yüklenemedi: %s", e)
+            isleyici._gorev(dizin_yukle())
         try:
             kaynak.baslat(True)
         except ses_mod.SesHatasi as e:

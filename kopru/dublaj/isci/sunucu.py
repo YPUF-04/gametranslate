@@ -16,7 +16,9 @@ from typing import Any, BinaryIO, Callable
 from . import SURUM, protokol
 
 log = logging.getLogger("kopru.isci")
-ANINDA = ("iptal", "canli_durdur", "kapat", "canli_son")   # canli_son: sıradaki seslendirmeyi beklemez
+ANINDA = ("iptal", "canli_durdur", "kapat", "canli_son",   # canli_son: sıradaki seslendirmeyi beklemez
+          # dublaj hafızası (PROTOKOL 21): tanıma dizini, sırasız çalma ve ses kodlama seslendirmeyi beklemez
+          "tanima_yukle", "tanima_sil", "ani_cal", "ani_durdur", "ses_kodla", "ses_coz")
 
 
 class IsciHatasi(Exception):

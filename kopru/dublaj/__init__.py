@@ -34,6 +34,11 @@ VARSAYILAN: dict[str, Any] = {
     "erken_seslendir": True,         # ekrandaki altyazı görünür görünmez Türkçe sesi hazırlamaya başla
     "video_srt": True,
     "video_motor": "chatterbox",
+    # Dublaj hafızası (PROTOKOL 21.1): açık rıza ile klonlanmış Türkçe sesler + İngilizce ses izleri bu bilgisayarda
+    "hafiza_izni": False,
+    "hafiza_kullan": True,
+    "bosta_iyilestir": False,
+    "hafiza_sinir_mb": 1000,
 }
 ORIJINAL_SES = ("otomatik", "kis", "tamamen_turkce")
 HAFIF_MOD = ("otomatik", "acik", "kapali")
@@ -68,8 +73,10 @@ def ayar_gecerli(d: Any) -> bool:
             return False
         if k == "video_motor" and v not in VIDEO_MOTORLARI:
             return False
+        if k == "hafiza_sinir_mb" and (isinstance(v, bool) or not isinstance(v, int) or not 50 <= v <= 20000):
+            return False
         if k in ("elevenlabs_onay", "elevenlabs_klon_onay", "ayirma", "erken_seslendir", "video_srt",
-                 "ses_profili_izni") \
+                 "ses_profili_izni", "hafiza_izni", "hafiza_kullan", "bosta_iyilestir") \
                 and not isinstance(v, bool):
             return False
         if k in ("elevenlabs_ses_kimligi", "elevenlabs_model"):

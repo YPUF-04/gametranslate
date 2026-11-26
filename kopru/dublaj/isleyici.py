@@ -2,7 +2,8 @@
 """Dublaj boru hattı (PROTOKOL 9.1): konuşma parçası -> yazı -> çeviri -> ses -> süreye sığdır -> çal.
 
 Her şey dışarıdan verilebilir (STT, çevirmen, ses motoru, çıkış, saat): sahte parçalarla sınanır.
-Gizlilik: ses ve konuşmacı örnekleri YALNIZ bellekte (RAM); bu modül dosya yazmaz.
+Gizlilik: ses ve konuşmacı örnekleri YALNIZ bellekte (RAM); bu modül dosya yazmaz. Tek istisna: kullanıcı izin
+verdiyse dublaj hafızası (PROTOKOL 21) `self.hafiza` üzerinden kendi klasörüne yazar.
 """
 from __future__ import annotations
 
@@ -41,6 +42,10 @@ TV_BAYAT_PAY_MS = 4000        # TV: sesin, önündeki sıranın bitişinden sonr
 SESLI_ORAN_EN_AZ = 0.35       # klon örneği: konuşmalı çerçevelerin en az bu kadarı net perdeli olmalı (müzik/gürültü değil)
 KONUSAN_REF_HEDEF_SN = 8.0    # bir karakterin örneği zamanla birikerek bu süreye tamamlanır (en çok 10 sn)
 ANLIK_SN = 1.5                # altyazı görününce yakalanan son konuşma (cinsiyet/kimlik tahmini için)
+TANIMA_GEC_SN = 1.5           # hafıza (PROTOKOL 21.4): satırın bu kadarı geçtiyse tanıma çalmaz
+TEKRAR_SN = 4.0               # aynı hafıza satırı bu süre içinde yeniden çalınmaz
+GECIS_SN = 30.0               # sahne grafiği: bundan uzak satırlar art arda sayılmaz
+ON_HAZIRLIK = 3               # olası sonraki satır sayısı
 
 
 HEDEF_RMS = 0.08
@@ -124,6 +129,16 @@ class Isleyici:
         self._rms: deque[float] = deque(maxlen=40)
         self.olcumler: deque[dict[str, Any]] = deque(maxlen=20)
         self.profil_kaydet: Callable[[str, np.ndarray, int], None] | None = None
+        # Dublaj hafızası (PROTOKOL 21): yalnız izinle verilir (HafizaOturumu); None iken hiçbir şey yazılmaz
+        self.hafiza: Any = None
+        self._hafiza_calinan: dict[int, float] = {}                # satır kimliği -> çalındığı an
+        self._hafiza_araliklar: deque[tuple[float, float, int]] = deque(maxlen=16)   # İngilizce satırın tahmini aralığı
+        self._yazi_satir: dict[str, int] = {}                      # altyazı kimliği -> hafıza satırı
+        self._bekleyen_iz: dict[str, tuple[Any, float]] = {}       # satır kaydı bitmeden gelen ses izi
+        self._hafiza_iptal: set[str] = set()
+        self._son_satir: tuple[int, float] | None = None
+        self._on_hazir: set[int] = set()
+        self._gorevler: set[asyncio.Task] = set()
 
     # -- ekran altyazısı bilgisi (Yayin dinleyicisi) --
     def olay(self, olay: str, veri: dict[str, Any]) -> None:
@@ -134,7 +149,10 @@ class Isleyici:
             # Altyazının Türkçesi zaten hazır: dublaj onu seslendirir (ikinci bir çeviri isteği yok: daha hızlı
             # ve çeviri motorunun istek sınırı/kotası iki kat harcanmaz).
             tr = " ".join(str(veri.get("metin") or "").split())
-            self._erken_baslat(kimlik, str(veri["asil"]), veri.get("konusan"), tr or None)
+            if self._hafiza_acik():   # önce hafıza (ms): varsa seslendirme hiç başlamaz (ekran kartı boşa çalışmaz)
+                self._gorev(self._yazi_hafiza(kimlik, str(veri["asil"]), veri.get("konusan"), tr or None))
+            else:
+                self._erken_baslat(kimlik, str(veri["asil"]), veri.get("konusan"), tr or None)
 
     # -- önden hazırlık: altyazı görünür görünmez çeviri + ses --
     def _erken_baslat(self, kimlik: str, asil: str, konusan: str | None, tr: str | None = None) -> None:
@@ -257,10 +275,23 @@ class Isleyici:
                 e.ses = np.concatenate(sesler) if sesler else None
                 e.sr, e.iz, e.ses_ms = sr, (iz if iz is not None else np.zeros(13)), int((self.saat() - t1) * 1000)
                 olcum["ses_ms"] = e.ses_ms
+                if self.hafiza is not None:
+                    olcum["hafiza"] = "iskalama"
+                    if olcum.get("ilk_ses_ms") is not None:
+                        self.hafiza.iskalama_ms.append(int(olcum["ilk_ses_ms"]))
+                        self.hafiza.sayac["iskalama"] += 1
+                    if e.ses is not None:
+                        self._gorev(self._hafiza_yaz(kimlik, asil, konusan, tr, e.ses, sr, yazi_an, {
+                            "cinsiyet": cins, "profil": konusan if tur == "konusan" else tur,
+                            "ayar": {"motor": getattr(motor, "kod", None), "ref_tur": tur,
+                                     "ref_sn": olcum.get("ref_sn")}}))
             if not cal:
                 self._olcum_ekle(olcum)
             return e
         except asyncio.CancelledError:
+            if kimlik in self._hafiza_iptal:          # hafızada hazır çıktı: atılan satır sayılmaz
+                self._hafiza_iptal.discard(kimlik)
+                raise
             if "ilk_ses_ms" not in olcum and olcum.get("ref_tur"):
                 olcum["atildi"] = "iptal"
                 self._olcum_ekle(olcum)
@@ -419,6 +450,218 @@ class Isleyici:
             except Exception:   # noqa: BLE001
                 log.debug("ses profili kaydedilemedi", exc_info=True)
 
+    # -- dublaj hafızası (PROTOKOL 21) --
+    def _gorev(self, c: Any) -> asyncio.Task | None:
+        try:
+            t = asyncio.get_running_loop().create_task(c)
+        except RuntimeError:
+            c.close()
+            return None
+        self._gorevler.add(t)
+        t.add_done_callback(self._gorev_bitti)
+        return t
+
+    def _gorev_bitti(self, t: asyncio.Task) -> None:
+        self._gorevler.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            log.info("dublaj hafızası işi başarısız: %s", t.exception())
+
+    def _hafiza_acik(self) -> bool:
+        if self.hafiza is None:
+            return False
+        return bool((self.ayar().get("dublaj") or {}).get("hafiza_kullan", True)) and self.yonetici_dublaj_izni()
+
+    def _hafiza_kapsiyor(self, bas: float, bitis: float) -> int | None:
+        for a, b, k in reversed(self._hafiza_araliklar):
+            if bas < b + 0.3 and bitis > a - 0.3:
+                return k
+        return None
+
+    async def _yazi_hafiza(self, kimlik: str, asil: str, konusan: str | None, tr: str | None = None) -> None:
+        """Ekrana gelen altyazı hafızada sesiyle varsa: seslendirme beklenmez, kayıtlı ses hemen çalar."""
+        try:
+            s = await self.hafiza.bul(asil, konusan)
+        except Exception as e:   # noqa: BLE001 — hafıza okunamazsa her zamanki yol
+            log.info("dublaj hafızası okunamadı: %s", e)
+            s = None
+        if not s or not s.get("sesli"):
+            self._erken_baslat(kimlik, asil, konusan, tr)
+            return
+        an = self._yazi_ani(kimlik) or self.saat()
+        onceki = self._hafiza_calinan.get(s["id"])
+        if onceki is not None and an - onceki < 8.0:      # sahne tanıma bu satırı zaten çaldı
+            self._hafiza_ustlen(kimlik, s["id"])
+            return
+        await self._hafiza_cal(s, "isabet", yazi_id=kimlik, tetik_an=an)
+
+    def _hafiza_ustlen(self, kimlik: str, satir_id: int) -> None:
+        self._yazi_satir[kimlik] = satir_id
+        self._yapilan_yazilar.add(kimlik)
+        self._erken_calinan.add(kimlik)
+        t = self._erken.pop(kimlik, None)
+        if t is not None and not t.done():
+            self._hafiza_iptal.add(kimlik)
+            t.cancel()
+
+    def tanima_olayi(self, v: dict[str, Any]) -> None:
+        """İşçiden `tanima` olayı (PROTOKOL 21.4): kayıtlı bir İngilizce satır oyun sesinde tanındı."""
+        if not self._hafiza_acik():
+            return
+        try:
+            kimlik, ofset = int(v["kimlik"]), float(v["ofset_sn"])
+        except (KeyError, TypeError, ValueError):
+            return
+        self._gorev(self._tanindi(kimlik, ofset, self.saat()))
+
+    async def _tanindi(self, kimlik: int, ofset: float, an: float) -> None:
+        if ofset > TANIMA_GEC_SN:
+            return                                      # satırın ortası: başını kaçırdık, normal yol halleder
+        onceki = self._hafiza_calinan.get(kimlik)
+        if onceki is not None and an - onceki < TEKRAR_SN:
+            return
+        s = await self.hafiza.getir(kimlik)
+        if not s or not s.get("sesli"):
+            return
+        gecikme = max(0.0, -ofset - (self.saat() - an))
+        await self._hafiza_cal(s, "tanima", tetik_an=an - ofset, gecikme_sn=gecikme, ofset_sn=max(0.0, ofset + self.saat() - an))
+
+    async def _hafiza_cal(self, s: dict[str, Any], tur: str, yazi_id: str | None = None, tetik_an: float | None = None,
+                          gecikme_sn: float = 0.0, ofset_sn: float = 0.0) -> bool:
+        kimlik = int(s["id"])
+        self._hafiza_calinan[kimlik] = self.saat()          # aynı anda gelen ikinci tetik beklemesin
+        if yazi_id:
+            self._hafiza_ustlen(yazi_id, kimlik)
+        r = await self.hafiza.ses(kimlik)
+        if r is None:
+            self._hafiza_calinan.pop(kimlik, None)
+            return False
+        pcm, sr = r
+        ayar = self.ayar()
+        d = ayar.get("dublaj") or {}
+        if ofset_sn > 0.3:
+            # satırın başı geçti: baştaki sessizlik kırpılır, gerekirse hızlanır (İngilizceyle birlikte bitsin)
+            pcm = dsp.sessizlik_kirp(pcm, sr)
+            en = float(s.get("en_sure_sn") or s.get("sure_sn") or len(pcm) / sr)
+            hedef = max(0.5, en - ofset_sn)
+            oran = (len(pcm) / sr) / hedef
+            if oran > HIZ_TOLERANS:
+                pcm = dsp.hizlandir(pcm, sr, min(oran, float(d.get("hiz_siniri", 1.25))))
+        sure = len(pcm) / sr
+        simdi = self.saat()
+        cal_an = simdi + gecikme_sn
+        satir_bas = (tetik_an if tetik_an is not None else simdi) if tur == "tanima" else cal_an
+        en = float(s.get("en_sure_sn") or sure)
+        self._hafiza_araliklar.append((satir_bas, satir_bas + max(en, sure), kimlik))
+        self._hafiza_calinan[kimlik] = cal_an
+        cikis_ad = d.get("cikis", "bilgisayar")
+        cikis = self.cikis_getir(cikis_ad)
+        gecikme_ms = int(max(0.0, cal_an - (tetik_an if tetik_an is not None else simdi)) * 1000)
+        olcum = {"hafiza": tur, "yazi_id": yazi_id or f"h{kimlik}", "ilk_ses_ms": gecikme_ms, "erken": True,
+                 "ref_tur": "hafiza"}
+        self.hafiza.isabet_ms.append(gecikme_ms)
+        self.hafiza.sayac[tur] = self.hafiza.sayac.get(tur, 0) + 1
+        self._olcum_ekle(olcum)
+        if cikis_ad == "bilgisayar":
+            self._susturma.append((cal_an, cal_an + sure))
+        if hasattr(cikis, "ani_oynat"):
+            await cikis.ani_oynat(pcm, sr, ayar, f"h{kimlik}", gecikme_sn)
+        else:
+            async def sonra() -> None:
+                if gecikme_sn > 0:
+                    await asyncio.sleep(gecikme_sn)
+                if getattr(cikis, "ad", "") == "tv":
+                    kuyruk = max(0.0, self._tv_bitis - self.saat())
+                    self._tv_bitis = self.saat() + kuyruk + sure
+                    await cikis.oynat(pcm, sr, ayar, yazi_id, bayat_ms=int(kuyruk * 1000) + TV_BAYAT_PAY_MS)
+                else:
+                    await cikis.oynat(pcm, sr, ayar, yazi_id)
+            self._gorev(sonra())
+        self.son_sonuc = DublajSonucu(yazi_id or f"h{kimlik}", s.get("tr") or "", sure, 1.0, False, "hafiza", olcum)
+        await self._satir_goruldu(kimlik, satir_bas)
+        return True
+
+    async def _satir_goruldu(self, kimlik: int, an: float) -> None:
+        """Sahne grafiği (önceki → bu satır) ve olası sonraki satırların ön hazırlığı (PROTOKOL 21.5)."""
+        if self._son_satir is not None and self._son_satir[0] != kimlik:
+            dt = an - self._son_satir[1]
+            if 0 < dt < GECIS_SN:
+                await self.hafiza.gecis(self._son_satir[0], kimlik, round(dt, 2))
+        self._son_satir = (kimlik, an)
+        self._gorev(self._on_hazirla(kimlik))
+
+    async def _on_hazirla(self, kimlik: int) -> None:
+        for s in await self.hafiza.sonrakiler(kimlik, ON_HAZIRLIK):
+            if s.get("sesli"):
+                if not self.hafiza.bellekte(s["id"]):
+                    await self.hafiza.ses(s["id"], kullan=False)       # belleğe çöz: çalarken bekleme olmasın
+                continue
+            if s["id"] in self._on_hazir or not s.get("tr"):
+                continue
+            motor = self.motor_getir()
+            if motor is None or self._tts_sira.locked():
+                continue                                               # canlı satırlar önce
+            ref = self._konusan_ref.get(s.get("konusan") or "")
+            varsayilan = None
+            if ref is None:
+                if s.get("cinsiyet") not in ("k", "e") or not getattr(motor, "yerlesik_ses", False):
+                    continue
+                ref = (np.zeros(0, np.float32), 24000, None)
+                varsayilan = s["cinsiyet"]
+            self._on_hazir.add(s["id"])
+            async with self._tts_sira:
+                pcm, sr = await self._seslendir(motor, s["tr"], ref[0], ref[1], None, varsayilan)
+            await self.hafiza.kaydet(s["asil"], s.get("konusan"), s["tr"], dsp.mono_float(pcm), sr,
+                                     tr_kaynak=s.get("tr_kaynak") or "canli", cinsiyet=s.get("cinsiyet"),
+                                     profil=s.get("konusan") or varsayilan, ayar={"on_hazirlik": True})
+
+    async def _hafiza_yaz(self, yazi_id: str, asil: str, konusan: str | None, tr: str, pcm: Any, sr: int,
+                          an: float, ek: dict[str, Any]) -> None:
+        kimlik = await self.hafiza.kaydet(asil, konusan, tr, pcm, sr, **ek)
+        self._yazi_satir[yazi_id] = kimlik
+        bek = self._bekleyen_iz.pop(yazi_id, None)
+        if bek is not None:
+            await self.hafiza.iz_ekle(kimlik, bek[0], bek[1])
+        await self._satir_goruldu(kimlik, an)
+
+    async def _parca_izi(self, parca: Any) -> list[list[int]]:
+        iz = getattr(parca, "iz", None)
+        if iz:
+            return iz
+        from .tanima import iz_cikar
+        return await asyncio.to_thread(iz_cikar, parca.pcm, parca.sr, 0.0, None, 0.0)
+
+    async def _iz_bagla(self, yazi_id: str, parca: Any) -> None:
+        if self.hafiza is None:
+            return
+        try:
+            iz = await self._parca_izi(parca)
+            sure = len(parca.pcm) / parca.sr
+            if yazi_id in self._yazi_satir:
+                await self.hafiza.iz_ekle(self._yazi_satir[yazi_id], iz, sure)
+            else:
+                self._bekleyen_iz[yazi_id] = (iz, sure)
+                while len(self._bekleyen_iz) > 20:
+                    self._bekleyen_iz.pop(next(iter(self._bekleyen_iz)))
+        except Exception as e:   # noqa: BLE001
+            log.debug("ses izi bağlanamadı: %s", e)
+
+    async def _iz_satira(self, kimlik: int, parca: Any) -> None:
+        if self.hafiza is None:
+            return
+        try:
+            await self.hafiza.iz_ekle(kimlik, await self._parca_izi(parca), len(parca.pcm) / parca.sr)
+        except Exception as e:   # noqa: BLE001
+            log.debug("ses izi bağlanamadı: %s", e)
+
+    async def _hafiza_parca_yaz(self, yazi_id: str | None, asil: str, konusan: str | None, tr: str, ses: Any,
+                                sr: int, parca: Any, duygu: dict[str, float] | None) -> None:
+        iz = await self._parca_izi(parca)
+        kimlik = await self.hafiza.kaydet(asil, konusan, tr, ses, sr, iz=iz, en_sure_sn=len(parca.pcm) / parca.sr,
+                                          duygu=duygu, ayar={"motor": getattr(self.motor_getir(), "kod", None)})
+        if yazi_id:
+            self._yazi_satir[yazi_id] = kimlik
+        await self._satir_goruldu(kimlik, parca.bas)
+
     def temizle(self) -> None:
         """Oturum bitti: konuşmacı örnekleri ve ekran altyazısı hafızası silinir."""
         self._banka.clear()
@@ -432,6 +675,15 @@ class Isleyici:
         self._yazilar.clear()
         self._yapilan_yazilar.clear()
         self._susturma.clear()
+        for t in list(self._gorevler):
+            t.cancel()
+        self._gorevler.clear()
+        self._hafiza_calinan.clear()
+        self._hafiza_araliklar.clear()
+        self._yazi_satir.clear()
+        self._bekleyen_iz.clear()
+        self._son_satir = None
+        self._on_hazir.clear()
 
     # -- ana akış --
     def _susturulmus(self, bas: float, bitis: float) -> bool:
@@ -456,12 +708,18 @@ class Isleyici:
             return None
         if d.get("cikis", "bilgisayar") == "bilgisayar" and self._susturulmus(parca.bas, parca.bitis):
             return None   # kendi çaldığımız dublaj: geri dinleme yok
+        hk = self._hafiza_kapsiyor(parca.bas, parca.bitis)
+        if hk is not None:
+            # bu konuşma hafızadan çalındı (altyazı ya da sahne tanıma): yalnız ses izi ve karakter örneği için
+            await self._iz_satira(hk, parca)
+            return None
         # 0) altyazıyla önden çalınan kipte (TV / İngilizce çıkarılmış): bu konuşmanın altyazısı zaten seslendirildi
         #    ya da seslendiriliyor. Yazıya çevirme (Whisper) HİÇ çalıştırılmaz (işçide seslendirmenin önünü
         #    tıkamasın); parça yalnız karakterin ses örneği olarak kullanılır.
         if self._erken_cal_mi(ayar) and d.get("erken_seslendir", True):
             yakin = self._pencere_yazisi(parca.bas, parca.bitis)
             if yakin is not None:
+                await self._iz_bagla(yakin[0], parca)
                 ref, ref_sr, ref_tur = await asyncio.to_thread(self.referans_sec, konusma, sr)
                 if yakin[2] and ref_tur == "kendi":
                     self._konusan_biriktir(yakin[2], ref, ref_sr)
@@ -475,6 +733,7 @@ class Isleyici:
         esle = self._eslesen_yazi(stt_metin, parca.bas, parca.bitis, calinanlar_dahil=True)
         if esle and esle[0] in self._erken_calinan:
             # bu satır altyazıyla önden çalındı; yine de karakterin sesi bir sonraki satırlar için örneklenir
+            await self._iz_bagla(esle[0], parca)
             ref, ref_sr, ref_tur = await asyncio.to_thread(self.referans_sec, konusma, sr)
             if esle[2] and ref_tur == "kendi":
                 self._konusan_biriktir(esle[2], ref, ref_sr)
@@ -583,6 +842,10 @@ class Isleyici:
                 self._susturma.append((bas, self.saat()))
         self.olcumler.append(olcum)
         self.son_sonuc = DublajSonucu(yazi_id or "", tr, len(ses) / ses_sr, hiz, kisaltildi, ref_tur, olcum)
+        if self.hafiza is not None and yazi_id not in self._yazi_satir:
+            # altyazısız (ya da önden hazırlanmamış) satır: İngilizcesi, Türkçesi, sesi ve ses izi hafızaya
+            self._gorev(self._hafiza_parca_yaz(yazi_id, kaynak_metin, esle[2] if esle else None, tr, ses, ses_sr,
+                                               parca, duygu))
         return self.son_sonuc
 
     # -- kuyruk / döngü --

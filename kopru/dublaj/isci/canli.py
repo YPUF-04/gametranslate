@@ -394,8 +394,11 @@ class CanliYakalama:
                  ayirici: Callable[[np.ndarray, int], tuple[np.ndarray, np.ndarray]] | None = None,
                  tamamen_turkce: bool = False, kaynak_fabrika: Callable[[], Any] | None = None,
                  giris: str = "", ps5_ses: dict[str, Any] | None = None,
-                 parca_ayirici: Callable[[np.ndarray, int], tuple[np.ndarray, np.ndarray]] | None = None) -> None:
+                 parca_ayirici: Callable[[np.ndarray, int], tuple[np.ndarray, np.ndarray]] | None = None,
+                 tanici: Any = None) -> None:
         self.ps5_ses = ps5_ses
+        # Dublaj hafızası (PROTOKOL 21.4): ham oyun sesinin parmak izi; kayıtlı satırlar tanınınca `tanima` olayı
+        self.tanici = tanici
         # Konuşma parçası başına BİR kez ayırma (yalnız klon örneği temiz olsun diye). Akışlı ayırma (her 250 ms'de
         # 3 sn'lik pencere) yalnız "Tamamen Türkçe"de gerekir; aksi hâlde ekran kartını ve seslendirmenin kilidini
         # saniyede 4 kez meşgul edip Türkçe sesi geciktiriyordu.
@@ -502,6 +505,13 @@ class CanliYakalama:
                         arka_cal = False                 # ölçüm sürerken arka plan çalınmaz
                     elif kal is not None:
                         blok = blok * kal.kazanc         # kısılmış sesi görüyorsak geri büyüt
+                if self.tanici is not None:
+                    try:
+                        for e in self.tanici.besle(blok):
+                            self.gonder({"olay": "tanima", **e.sozluk()})
+                    except Exception as e:   # noqa: BLE001 — tanıma bozulursa dublaj sürer
+                        log.info("sahne tanıma başarısız: %s", type(e).__name__)
+                        self.tanici = None
                 if akis is not None:
                     try:
                         konusma, arka = akis.besle(blok)
@@ -520,6 +530,9 @@ class CanliYakalama:
                 k, h = sonuc
                 olay: dict[str, Any] = {"olay": "parca", "sr": SR, "sure_sn": len(h) / SR,
                                         "kaynak": self.kaynak_turu, "an": time.monotonic(), "pcm": protokol.pcm_kodla(h)}
+                if self.tanici is not None:      # parçanın (1 sn ön paylı) ses izi: hafızaya yazılabilsin
+                    son = self.tanici.akis.simdiki_kare()
+                    olay["iz"] = self.tanici.akis.aralik(son - len(h) / SR / 0.016, son)
                 if akis is not None:
                     olay["temiz"] = protokol.pcm_kodla(k)
                 elif self.parca_ayirici is not None:
@@ -646,6 +659,63 @@ def oynat(pcm: np.ndarray, sr: int, seviye: float, kis: float, pid: int | None, 
         if oturum:
             oturum.geri_ac()
     return {"sure_sn": len(veri) / sr}
+
+
+class AniOynatici:
+    """Dublaj hafızası (PROTOKOL 21.3): kayıtlı Türkçe sesi seslendirme sırasını BEKLEMEDEN, istenen anda çalar.
+
+    Her ses kendi iş parçacığında ve kendi çıkış akışında çalar (önceki `sd.play`i kesmez); çalarken oyunun sesi
+    kısılır. `durdur(kimlik)` bekleyen ya da çalan sesi keser."""
+
+    def __init__(self) -> None:
+        self._isler: dict[str, threading.Event] = {}
+        self._kilit = threading.Lock()
+
+    def cal(self, kimlik: str, pcm: np.ndarray, sr: int, gecikme_sn: float, seviye: float, kis: float,
+            pid: int | None, canli: Any) -> None:
+        dur = threading.Event()
+        with self._kilit:
+            eski = self._isler.pop(kimlik, None)
+            if eski is not None:
+                eski.set()
+            self._isler[kimlik] = dur
+        vakit = time.monotonic() + max(0.0, gecikme_sn)
+        threading.Thread(target=self._calis, args=(kimlik, pcm, sr, vakit, seviye, kis, pid, canli, dur),
+                         daemon=True, name="isci-ani").start()
+
+    def durdur(self, kimlik: str | None = None) -> None:
+        with self._kilit:
+            for k in ([kimlik] if kimlik else list(self._isler)):
+                e = self._isler.pop(k, None)
+                if e is not None:
+                    e.set()
+
+    def _calis(self, kimlik: str, pcm: np.ndarray, sr: int, vakit: float, seviye: float, kis: float,
+               pid: int | None, canli: Any, dur: threading.Event) -> None:
+        oturum = None
+        try:
+            if dur.wait(max(0.0, vakit - time.monotonic())):
+                return
+            import sounddevice as sd
+            veri = np.clip(pcm * seviye, -1.0, 1.0).astype(np.float32).reshape(-1, 1)
+            tamamen = bool(canli is not None and getattr(canli, "tamamen_aktif", False))
+            if kis < 1.0 and not tamamen and sys.platform == "win32":
+                oturum = OturumSesi(pid)
+                oturum.kis(kis)
+            with sd.OutputStream(samplerate=sr, channels=1, dtype="float32", latency="low") as akis:
+                adim = max(1, sr // 20)
+                for i in range(0, len(veri), adim):
+                    if dur.is_set():
+                        break
+                    akis.write(veri[i:i + adim])
+        except Exception as e:   # noqa: BLE001
+            log.info("hafıza sesi çalınamadı: %s", type(e).__name__)
+        finally:
+            if oturum is not None:
+                oturum.geri_ac()
+            with self._kilit:
+                if self._isler.get(kimlik) is dur:
+                    self._isler.pop(kimlik, None)
 
 
 class TamamenKalibrasyon:

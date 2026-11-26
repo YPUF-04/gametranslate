@@ -130,6 +130,8 @@ class GercekIsleyici:
         self._yari: Any = None                     # T3'ün yarı hassas türü (torch.bfloat16 / float16) ya da None
         self._son_uretim: dict[str, Any] = {}
         self._canli: Any = None
+        self._dizin: Any = None                    # dublaj hafızası: tanınacak satırların ses izleri (PROTOKOL 21.4)
+        self._ani: Any = None                      # hafıza sesini sırasız çalan oynatıcı (21.3)
         self._kilit = threading.RLock()
         self._son_kullanim = time.monotonic()
         self._gpu_disinda = False          # boşta kalınca ses motoru ekran kartından indirildi mi
@@ -591,10 +593,14 @@ class GercekIsleyici:
         # Türkçeye taşınmasını azaltır (Chatterbox önerisi: dil aktarımında cfg düşük); canlılık 0,5 civarı doğal.
         canlilik = float(np.clip(duygu.get("canlilik", 0.5), 0.25, 1.0))
         cfg = float(np.clip(duygu.get("cfg", 0.3), 0.15, 0.6))
+        sicaklik = float(np.clip(duygu.get("sicaklik", 0.8), 0.3, 1.2))
+        tohum = duygu.get("tohum")              # iyileştirme adayları (PROTOKOL 21.6): tekrarlanabilir çeşitlilik
         with self._kilit:
             self._kullan()
             self._son_uretim = {"kosul": 0}
             self._referans_hazirla(ref, ref_sr, canlilik)
+            if isinstance(tohum, int) and self._torch is not None:
+                self._torch.manual_seed(tohum)
             t0 = time.monotonic()
             if self._tts_kod == "pocket":
                 ses = self._tts.generate_audio(self._pocket_durum, metin)
@@ -603,7 +609,7 @@ class GercekIsleyici:
             else:
                 def uret() -> Any:
                     return self._tts.generate(metin, language_id="tr", exaggeration=canlilik, cfg_weight=cfg,
-                                              temperature=0.8)
+                                              temperature=sicaklik)
                 try:
                     wav = uret()
                 except RuntimeError as e:
@@ -752,9 +758,13 @@ class GercekIsleyici:
         # akışlı ayırma yalnız "Tamamen Türkçe"de; yoksa konuşma parçası başına bir kez (klon örneği için). PS5
         # gizli bağlantıda oyun bu bilgisayarın ekran kartında değildir: hafif kipte de parça ayrılır.
         parca = bool(v.get("ayirma")) and not tamamen and (not self.hafif or ps5 is not None)
+        tanici = None
+        if v.get("parmak_izi"):          # yalnız dublaj hafızası izinliyken (PROTOKOL 21.4)
+            from .. import tanima
+            tanici = tanima.Tanici(self._dizin_al())
         self._canli = CanliYakalama(self._gonder, pid=v.get("pid"), ayirici=ayir if tamamen else None,
                                     tamamen_turkce=tamamen, giris=str(v.get("giris") or ""), ps5_ses=ps5,
-                                    parca_ayirici=ayir if parca else None)
+                                    parca_ayirici=ayir if parca else None, tanici=tanici)
         return self._canli.baslat()
 
     def _ayir_canli(self, pcm: np.ndarray, sr: int) -> tuple[np.ndarray, np.ndarray]:
@@ -787,7 +797,94 @@ class GercekIsleyici:
         return oynat(pcm, int(v["sr"]), float(v.get("seviye", 1.0)), float(v.get("kis", 0.25)), v.get("pid"),
                      self._canli, is_)
 
+    # ---------- dublaj hafızası (PROTOKOL 21) ----------
+    def _dizin_al(self) -> Any:
+        if self._dizin is None:
+            from .. import tanima
+            self._dizin = tanima.Dizin()
+        return self._dizin
+
+    def k_tanima_yukle(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        d = self._dizin_al()
+        if v.get("sifirla"):
+            d.temizle()
+        for g in v.get("girdiler") or []:
+            d.ekle(int(g["kimlik"]), g.get("iz") or [])
+        return {"satir": len(d)}
+
+    def k_tanima_sil(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        d = self._dizin_al()
+        if v.get("kimlik") is None:
+            d.temizle()
+        else:
+            d.sil(int(v["kimlik"]))
+        return {"satir": len(d)}
+
+    def k_ani_cal(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        from .canli import AniOynatici
+        if self._ani is None:
+            self._ani = AniOynatici()
+        pcm = protokol.pcm_coz(v["pcm"])
+        self._ani.cal(str(v.get("kimlik") or "h"), pcm, int(v["sr"]), float(v.get("gecikme_sn") or 0),
+                      float(v.get("seviye", 1.0)), float(v.get("kis", 0.25)), v.get("pid"), self._canli)
+        return {"planlandi": True, "sure_sn": len(pcm) / int(v["sr"])}
+
+    def k_ani_durdur(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        if self._ani is not None:
+            self._ani.durdur(v.get("kimlik"))
+        return {}
+
+    def k_ses_kodla(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        """Hafıza sesi: Ogg/Opus (~32 kbit/sn), Opus yoksa FLAC. Diske yazmaz (bellekte)."""
+        import base64
+        import soundfile as sf
+        pcm = protokol.pcm_coz(v["pcm"])
+        sr = int(v["sr"])
+        for bicim, tur, alt in (("ogg", "OGG", "OPUS"), ("flac", "FLAC", "PCM_16")):
+            try:
+                if alt not in sf.available_subtypes(tur):
+                    continue
+                t = io.BytesIO()
+                hedef_sr = 24000 if bicim == "ogg" else sr       # Opus 48/24/16/12/8 kHz ister
+                sf.write(t, _yeniden_ornekle(pcm, sr, hedef_sr), hedef_sr, format=tur, subtype=alt)
+                return {"veri": base64.b64encode(t.getvalue()).decode("ascii"), "bicim": bicim, "sr": hedef_sr}
+            except Exception as e:   # noqa: BLE001
+                log.info("hafıza sesi %s olarak kodlanamadı: %s", bicim, type(e).__name__)
+        raise IsciHatasi("dublaj_kodla_hata", "soundfile")
+
+    def k_ses_coz(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        import base64
+        import soundfile as sf
+        pcm, sr = sf.read(io.BytesIO(base64.b64decode(v["veri"])), dtype="float32", always_2d=True)
+        return {"pcm": protokol.pcm_kodla(pcm.mean(1)), "sr": int(sr)}
+
+    def k_aday_olc(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        """İyileştirme adayı (PROTOKOL 21.6): Türkçe geri yazım (Whisper) ve konuşmacı benzerliği (ses kodlayıcı)."""
+        pcm = _yeniden_ornekle(protokol.pcm_coz(v["pcm"]), int(v["sr"]), STT_SR)
+        model = self._whisper or self._whisper_yukle(WHISPER_HAFIF if self.hafif else WHISPER_NORMAL)
+        parcalar, _ = model.transcribe(pcm, language="tr", vad_filter=False, beam_size=1)
+        metin = " ".join(p.text.strip() for p in parcalar).strip()
+        benzerlik = None
+        if v.get("ref_pcm"):
+            ref = _yeniden_ornekle(protokol.pcm_coz(v["ref_pcm"]), int(v["ref_sr"]), STT_SR)
+            if len(ref) >= int(0.5 * STT_SR):
+                benzerlik = float(np.dot(self._iz(pcm), self._iz(ref)))
+        return {"metin": metin, "benzerlik": benzerlik}
+
+    def k_parmak_izleri(self, v: dict[str, Any], is_: Is) -> dict[str, Any]:
+        """Video: her satırın orijinal (karışık) sesinin 1 sn ön paylı izi (PROTOKOL 21.7)."""
+        from .. import tanima
+        ses, sr = _ses_oku(v["giris"])
+        mono = _yeniden_ornekle(ses.mean(0), sr, STT_SR)
+        izler = []
+        for i, (b, s) in enumerate(v["araliklar"]):
+            is_.ilerleme(100.0 * i / max(1, len(v["araliklar"])))
+            izler.append(tanima.iz_cikar(mono, STT_SR, float(b), float(s)))
+        return {"izler": izler}
+
     def kapat(self) -> None:
+        if self._ani is not None:
+            self._ani.durdur()
         if self._canli is not None:
             self._canli.durdur()
 
