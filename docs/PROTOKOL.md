@@ -1180,3 +1180,91 @@ sözlük denetimi → Türkçe ek uyumu → düğme belirteçleri (§16.2). Tekr
 - `araclar/kalite_olc.py`: chrF++ (`sacrebleu`, geliştirme bağımlılığı) ile karşılaştırır: çevrimdışı motor **ham**
   (doğrudan motor) ve **katmanla** (§20.4 + oyun paketi + yönetici); `GEMINI_API_KEY` varsa Gemini ham/katmanla
   (yoksa atlanır). Arayüz satırları ayrıca "aynen kaldı" oranıyla ölçülür. CI'da yalnız veri dosyası denetlenir.
+
+## 21. Dublaj hafızası: hazır Türkçe ses, oyun sesinden sahne tanıma, ön hazırlık, boşta iyileştirme (sonraki sürüm)
+
+Amaç: bir satır bir kez seslendirildikten sonra bir daha **beklemeden** çalınsın. Her kullanıcı hafızasını **kendi
+bilgisayarında, kendi oyun oturumlarından** kurar; hiçbir satır, ses ya da parmak izi hiçbir yere gönderilmez,
+paylaşma özelliği yoktur.
+
+### 21.1 İzin ve ayarlar (`dublaj` içine eklenenler)
+`hafiza_izni`: bool (`false`) — **açık rıza**: klonlanmış Türkçe sesler ve İngilizce satırların ses parmak izleri bu
+bilgisayara yazılır. Kapalıyken hafızaya **hiçbir şey yazılmaz** ve okunmaz (bellekteki bağlantı da kapanır).
+İzin geri alınınca kayıtlar silinmez (panel "Hepsini sil" ister); yalnız kullanım durur.
+`hafiza_kullan`: bool (`true`) — kayıtlı satırı anında çal / sahne tanıma. `bosta_iyilestir`: bool (`false`).
+`hafiza_sinir_mb`: tam sayı 50–20000 (`1000`). Doğrulama `ayar_gecerli`de; bilinmeyen anahtar reddedilir.
+
+### 21.2 Saklama (oyun başına)
+`<ayar_dizini>/oyunlar/<oyun>/dublaj_hafizasi/hafiza.sqlite` + `sesler/<id>.<ogg|flac|wav>`.
+- Anahtar: `normallestir(İngilizce satır)` + `"|"` + küçük harfli konuşan adı (bilinmiyorsa boş). Bulmada önce tam
+  anahtar, sonra konuşansız anahtar, sonra benzerlik ≥ 0,92 (aynı oyunda).
+- Satır alanları: İngilizce, konuşan, Türkçe metin + kaynağı (`canli|en_iyi|kullanici|video`), ses dosyası, biçim,
+  örnekleme hızı, Türkçe süre, İngilizce süre, cinsiyet, ses profili kimliği (konuşan adı ya da `yerlesik_k/e`),
+  üretim ayarları (JSON), puanlar (JSON) + toplam puan (0–1), oluşturma / son kullanım (gerçek zaman), kullanım
+  sayısı, boyut, İngilizce satırın ses parmak izi (§21.4) ve izin ön payı.
+- Ses biçimi: işçi varsa Ogg/Opus (~32 kbit/sn; libsndfile Opus desteklemiyorsa FLAC), yoksa 16 bit WAV. 24 kHz mono.
+- Sınır: toplam ses boyutu `hafiza_sinir_mb`yi aşarsa **en uzun süre kullanılmayan** satırların sesi silinir (LRU).
+- Sahne grafiği: `gecis(onceki, sonraki, sayi, ort_dt)` — bir satırdan sonra hangi satırın, ortalama kaç sn sonra
+  geldiği. Gelecekte oyun paketindeki sahne metinleri aynı tabloya `sayi=0` ile girebilir.
+- Silme: satır / oyun / hepsi. Oyun silinince klasör tamamen kaldırılır.
+
+### 21.3 Anında çalma (canlı)
+- Ekrana gelen altyazı (`yazi` olayı) hafızada **sesiyle** varsa: seslendirme beklenmez, kayıtlı ses hemen çalınır
+  (§14.3'teki kısma / İngilizceyi çıkarma aynen). Tanıma (§21.4) aynı satırı daha önce çaldıysa yeniden çalınmaz.
+- Hafızada olmayan satır her zamanki gibi seslendirilir; çıkan ses ve çeviri izinliyse hafızaya yazılır; satırın
+  konuşma parçası gelince İngilizce sesin parmak izi ve süresi eklenir.
+- Ölçüm: her satırın `olcum`una `hafiza: "isabet"|"tanima"|"iskalama"` girer; `GET /api/dublaj` → `gecikme`
+  içinde `hafiza_isabet_ms` (isabetlerde altyazı/tanıma → ilk ses ortalaması) ve `hafiza_iskalama_ms`.
+- Bilgisayar çıkışında işçi `ani_cal` komutuyla, seslendirme sırasını beklemeden ayrı bir çıkış akışında çalar.
+
+### 21.4 Oyun sesinden sahne tanıma (mikrofon YOK)
+Yalnız zaten dinlenen oyun sesi (PS5 gizli bağlantı, süreç/sistem loopback, kullanıcının seçtiği kart girişi).
+- Parmak izi (`kopru/dublaj/tanima.py`, yalnız numpy): 8 kHz, 512 örnek pencere / 128 adım (16 ms), 125–3800 Hz.
+  Log genlikte yerel tepeler (±12 kutu, ±6 kare; çerçeve başına en çok 3; çerçeve ortancasının 10 dB üstü). Her tepe
+  sonraki 1–24 karedeki en çok 5 tepeyle çift olur: `özet = f1<<14 | f2<<6 | dt` (f: 0–255 kutu, dt: 1–63).
+  Ses düzeyinden bağımsızdır (tepeler göreli).
+- İşçi akışta her 250 ms bloğu parmak izine çevirir; her `parca` olayına parçanın başından **1 sn önce**sini de içeren
+  izler eklenir: `"iz": [[özet, kare], ...]` (kare: parça başına göre 16 ms birimi, ön pay negatif).
+- `tanima_yukle {"girdiler":[{"kimlik":int,"iz":[[özet,kare],...]}], "sifirla":bool}` ve `tanima_sil {"kimlik"}`
+  (anında komutlar). Eşleşince işçi olay yollar:
+  `{"olay":"tanima","kimlik":int,"ofset_sn":float,"puan":int,"oran":float}`
+  `ofset_sn`: satırın başına göre şu an (negatif: satır `-ofset` sn sonra başlayacak).
+- Karar: son 3 sn'deki sorgu izleri dizinde aranır, (kimlik, satır başı karesi) için oy toplanır (±1 kare). Eşleşme:
+  hizalı oy ≥ 9, o kimliğin oylarının ≥ %35'i aynı hizada, ve 6'dan fazla satırda geçen ya da satır içinde 4'ten çok
+  tekrarlanan özetler yok sayılır (müzik döngüsü). Aynı (kimlik, hiza) için tek olay.
+- Ana program: kayıt sesliyse `ofset_sn ≤ 1,5` iken çalar (negatifse tam başlangıçta, pozitifse başındaki sessizlik
+  kırpılıp gerekirse ≤ hız sınırı kadar hızlandırılarak İngilizce satırla aynı anda biter). Aynı satır 4 sn
+  içinde tekrar çalınmaz; satırın altyazısı sonra gelirse yeniden seslendirilmez.
+
+### 21.5 Ön hazırlık
+Bir satır çalınınca sahne grafiğinden olası sonraki 3 satır: sesi varsa belleğe çözülür; yalnız metni varsa
+(ör. oyun paketinden ya da sesi LRU ile silinmiş) arka planda seslendirilip hafızaya yazılır (canlı satırlar önce).
+
+### 21.6 Boşta iyileştir
+Yalnız `bosta_iyilestir:true`, canlı dublaj ve video işi kapalı, işçi boşken. Her satır için (en düşük puanlı önce):
+1) Türkçe metin "en iyi" çeviri yoluyla (§19.2) yeniden istenir (`tr_kaynak:"kullanici"` olan metne dokunulmaz);
+2) karakterin biriken en temiz örneği (ses profili) ile 3 aday üretilir (farklı tohum / canlılık / cfg);
+3) her aday puanlanır: işçide Türkçe Whisper geri yazım WER'i (anlaşılırlık), konuşmacı benzerliği (ses kodlayıcı
+   kosinüsü), İngilizce süreye uyum, kırpılma/sessizlik/bozulma, İngilizce satırın duygu (enerji/perde) profiline
+   yakınlık; toplam = 0,35·(1−WER) + 0,25·benzerlik + 0,15·süre + 0,15·temizlik + 0,10·duygu;
+4) en iyisi cilalanır (ses yüksekliği ~−18 LUFS hedefi, karakter başına sabit düzey, 10 ms giriş / 30 ms çıkış
+   yumuşatması, 80 Hz altı kesme, hafif sibilans bastırma) ve eski puandan iyiyse yerine yazılır.
+"Bu sahneyi en iyi kaliteyle hazırla" (`POST /api/dublaj/hafiza/hazirla {"dakika":N}`, 1–120): son N dakikada
+kullanılan satırlar iyileştirme sırasının başına alınır (iş boşta başlar).
+
+### 21.7 Video dublajı hafızayı doldurur
+`hafiza_izni:true` iken video işinin sonunda (`hafiza` aşaması) her satırın İngilizcesi, Türkçesi, Türkçe sesi ve
+orijinal (karışık) sesin parmak izi hafızaya yazılır; görevi kayıttan dublajlamak, o görevi canlıda da hazır yapar.
+
+### 21.8 API (yalnız yerel)
+- `GET /api/dublaj/hafiza?ara=&sayfa=0` → `{"izin","kullan","bosta","oyun","istatistik":{"satir","sesli","dakika",
+  "boyut_mb","karakterler":[{"ad","satir"}]},"satirlar":[{"id","asil","konusan","tr","puan","sure_sn","kullanim"}],
+  "toplam","iyilestirme":{"durum","kalan","son"}}`
+- `GET /api/dublaj/hafiza/ses?id=N` → WAV (panelde ▶).
+- `POST /api/dublaj/hafiza/duzelt {"id","tr"}` (metin kullanıcının olur, ses yeniden üretilir),
+  `POST /api/dublaj/hafiza/yeniden {"id"}`, `DELETE /api/dublaj/hafiza?id=N` | `?oyun=1` | `?hepsi=1`.
+- `POST /api/dublaj/hafiza/hazirla {"dakika"}`, `POST /api/dublaj/hafiza/iyilestir {"acik":bool}`.
+- `GET /api/dublaj/hafiza/disa` → kişisel yedek dosyası (`.kdh`, zip: `bilgi.json`, `satirlar.json`, `sesler/`).
+  `POST /api/dublaj/hafiza/ice` (gövde: dosya) → `{"eklenen","guncellenen"}` (aynı satırda yüksek puanlı kalır).
+  Panel uyarır: yedek yalnız kendi bilgisayarların arasında taşımak içindir; oyun seslerini/satırlarını paylaşmak
+  hak sahiplerinin haklarını ihlal edebilir. İzin kapalıyken içe aktarma reddedilir (`hafiza_izin_yok`, 400).
