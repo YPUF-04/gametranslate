@@ -244,6 +244,72 @@ class DublajYonetici:
         return HafizaOturumu(depo, self.hafiza_kodlayici(), ekle if isci else None,
                              lambda: float(self._d().get("hafiza_sinir_mb", 1000)), sil if isci else None)
 
+    def isci_bos(self) -> bool:
+        b = getattr(self.isci, "_bekleyen", None)
+        return not b
+
+    def bosta_mi(self) -> bool:
+        """Boşta iyileştirme için: canlı dublaj ve video işi yok, işçi boş (PROTOKOL 21.6)."""
+        canli = self._gorev is not None and not self._gorev.done()
+        video = self.video_isi is not None and self.video_isi.calisiyor()
+        return not canli and not video and self.isci_bos()
+
+    def iyilestirici_al(self) -> Any:
+        depo = self.hafiza()
+        if depo is None:
+            return None
+        if self.iyilestirici is not None and self.iyilestirici.depo is depo:
+            return self.iyilestirici
+        from .iyilestir import Iyilestirici
+        from .isci_istemci import pcm_kodla
+
+        async def olc(pcm: Any, sr: int, ref: Any, ref_sr: int) -> tuple[str, float | None]:
+            if not self.isci_kullan():
+                return "", None
+            v = {"pcm": pcm_kodla(pcm), "sr": int(sr)}
+            if ref is not None:
+                v.update(ref_pcm=pcm_kodla(ref), ref_sr=int(ref_sr))
+            r = await self.isci.iste("aday_olc", v)
+            return str(r.get("metin") or ""), r.get("benzerlik")
+
+        async def cevir(asil: str, taslak: str, konusan: str | None) -> str | None:
+            y = self.yonetici_getir()
+            f = getattr(y, "iyilestir", None)
+            if f is None:
+                return None
+            a = self.ayar()
+            c = await f(asil, taslak, a.get("kaynak_dil") or "otomatik", a.get("hedef_dil") or "tr", konusan)
+            return c.metin if c is not None else None
+
+        profiller: dict[str, Any] = {}
+
+        def referans(ad: str | None) -> Any:
+            if not ad or not self._d().get("ses_profili_izni"):
+                return None
+            if not profiller:
+                try:
+                    profiller.update(self.profiller().yukle())
+                except Exception:   # noqa: BLE001
+                    return None
+            return profiller.get(ad)
+        if self.iyilestirici is not None:
+            self.iyilestirici.durdur()
+        self.iyilestirici = Iyilestirici(depo, self.hafiza_kodlayici(), self.motor, olc, cevir, referans, self.bosta_mi)
+        return self.iyilestirici
+
+    def iyilestirme_senkron(self) -> None:
+        """`bosta_iyilestir` açık + izin varsa arka plan işi çalışır (yalnız boşta iş yapar), değilse durur."""
+        istenen = bool(self._d().get("bosta_iyilestir")) and bool(self._d().get("hafiza_izni"))
+        if istenen:
+            i = self.iyilestirici_al()
+            if i is not None:
+                try:
+                    i.baslat()
+                except RuntimeError:
+                    pass
+        elif self.iyilestirici is not None:
+            self.iyilestirici.durdur()
+
     # -- yardımcılar --
     def _d(self) -> dict[str, Any]:
         return self.ayar().get("dublaj") or {}
@@ -336,6 +402,7 @@ class DublajYonetici:
         """Çeviri çalışıyor + dublaj açık + motor hazır ise boru hattını başlatır, değilse durdurur."""
         if calisiyor is not None:
             self._calisiyor = calisiyor
+        self.iyilestirme_senkron()
         istenen = self.istenen() and self.izin()
         calisan = self._gorev is not None and not self._gorev.done()
         if istenen and not calisan:
@@ -520,6 +587,8 @@ class DublajYonetici:
     async def kapat_tum(self) -> None:
         """Program kapanıyor: video işi, kurulum ve işçi süreci kapanır."""
         self.durdur()
+        if self.iyilestirici is not None:
+            self.iyilestirici.durdur()
         if self.video_isi is not None:
             await self.video_isi.iptal()
         self.ortam.iptal()

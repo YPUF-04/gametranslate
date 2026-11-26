@@ -342,3 +342,90 @@ def test_isci_anlik_komutlar_seslendirmeyi_beklemez():
     assert {"tanima_yukle", "tanima_sil", "ani_cal", "ani_durdur", "ses_kodla", "ses_coz"} <= set(ANINDA)
     from kopru.dublaj.isci_istemci import KOPYALANACAK
     assert "dublaj/tanima.py" in KOPYALANACAK
+
+
+# ---------- boşta iyileştirme (PROTOKOL 21.6) ----------
+
+def test_wer_sure_temizlik_toplam():
+    from kopru.dublaj import iyilestir as I
+    assert I.wer("Dün gece neredeydin?", "dün gece neredeydin") == 0.0
+    assert I.wer("Arabaya bin hemen", "arabaya bir hemen") == pytest.approx(1 / 3)
+    assert I.wer("İyi misin", "iyi misin") == 0.0                    # Türkçe büyük İ
+    assert I.sure_uyumu(2.0, 2.0) == 1.0 and I.sure_uyumu(3.2, 2.0) == 0.0 and I.sure_uyumu(2.0, None) == 0.7
+    sr = 24000
+    temiz = T.sentetik_konusma(3, 2.0, sr)
+    kirpik = np.clip(temiz * 20, -1, 1)
+    bosluklu = np.concatenate([temiz[:sr // 2], np.zeros(sr * 2, np.float32), temiz[sr // 2:]])
+    assert I.temizlik(temiz, sr, "Dün gece neredeydin?") > 0.9
+    assert I.temizlik(kirpik, sr) < 0.5 and I.temizlik(bosluklu, sr) < I.temizlik(temiz, sr)
+    assert I.toplam({"anlasilirlik": 1, "benzerlik": None, "sure": 1, "temizlik": 1, "duygu": 1}) == 1.0
+
+
+def test_cila_yukseklik_hedefi_tepe_ve_yumusak_uclar():
+    from kopru.dublaj import iyilestir as I
+    sr = 24000
+    for kazanc in (0.05, 0.9):
+        x = I.cila(T.sentetik_konusma(4, 2.0, sr) * kazanc + 0.05, sr)
+        assert abs(I._yukseklik_db(x, sr) - I.HEDEF_LUFS) < 1.5        # karakterler arası tutarlı düzey
+        assert np.abs(x).max() <= 0.951 and abs(x[0]) < 1e-3 and abs(x[-1]) < 1e-3
+        assert abs(float(np.mean(x))) < 1e-3                            # DC / 80 Hz altı kesildi
+
+
+async def test_iyilestirici_en_iyi_adayi_secer_cevirir_cilalar_ve_yazar(tmp_path):
+    from kopru.dublaj.iyilestir import Iyilestirici
+    from kopru.dublaj.hafiza_canli import WavKodlayici
+    d = DublajHafizasi(tmp_path / "h")
+    k = d.kaydet("Get in the car!", "Ellie", "Arabaya gir!", ses=_wav(), bicim="wav", sr=24000, sure_sn=1.0,
+                 en_sure_sn=1.4, puan=0.2, duygu={"canlilik": 0.7, "cfg": 0.3})
+    sr = 24000
+
+    class M:
+        duygu_destekli = True
+        yerlesik_ses = True
+
+        def __init__(self):
+            self.ayarlar = []
+
+        async def seslendir(self, metin, ref, rsr, duygu=None, **ek):
+            self.ayarlar.append(duygu)
+            sure = {11: 3.0, 23: 1.4, 37: 1.0}[duygu["tohum"]]                # yalnız 23 süreye uyar
+            return T.sentetik_konusma(duygu["tohum"], sure, sr), sr
+
+    async def olc(pcm, psr, ref, rsr):
+        return ("arabaya bin hemen" if len(pcm) / psr < 2 else "araba"), 0.85
+
+    async def cevir(asil, taslak, konusan):
+        return "Arabaya bin hemen!"
+    m = M()
+    iy = Iyilestirici(d, WavKodlayici(), lambda: m, olc, cevir, lambda ad: (np.zeros(sr, np.float32) + 0.1, sr),
+                      lambda: True)
+    r = await iy.satir(d.getir(k))
+    s = d.getir(k)
+    assert len(m.ayarlar) == 3 and len({a["tohum"] for a in m.ayarlar}) == 3
+    assert r["yazildi"] and s["tr"] == "Arabaya bin hemen!" and s["tr_kaynak"] == "en_iyi"
+    assert s["ayar"]["tohum"] == 23 and s["puan"] == r["puan"] > 0.8 and s["puanlar"]["sure"] == 1.0
+    assert abs(s["sure_sn"] - 1.4) < 0.01
+    # daha kötü bir tur eskisini ezmez; kullanıcı metni yeniden çevrilmez
+    d.metin_duzelt(k, "Bin!")
+    r2 = await iy.satir(d.getir(k))
+    assert d.getir(k)["tr"] == "Bin!" and r2["tr"] == "Bin!"
+
+
+async def test_iyilestirici_canli_baslayinca_birakir(tmp_path):
+    from kopru.dublaj.iyilestir import Iyilestirici, Kesildi
+    from kopru.dublaj.hafiza_canli import WavKodlayici
+    d = DublajHafizasi(tmp_path / "h")
+    k = d.kaydet("a", None, "b")
+    bos = [True]
+
+    class M:
+        async def seslendir(self, metin, ref, rsr, **e):
+            bos[0] = False                                                   # canlı dublaj başladı
+            return np.zeros(24000, np.float32), 24000
+
+    async def olc(*a):
+        return "", None
+    iy = Iyilestirici(d, WavKodlayici(), lambda: M(), olc, None, lambda ad: None, lambda: bos[0])
+    with pytest.raises(Kesildi):
+        await iy.satir(d.getir(k))
+    assert not d.getir(k)["sesli"]
