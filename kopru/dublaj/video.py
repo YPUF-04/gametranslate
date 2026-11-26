@@ -65,8 +65,12 @@ def video_gecerli(yol: Any) -> Path | None:
 class VideoIsi:
     def __init__(self, video: Path, isci: Any, cevirmen: Any, ayar_fn: Callable[[], dict[str, Any]],
                  is_koku: Path | None = None, saat: Callable[[], float] = time.monotonic,
-                 yayinla: Callable[[dict[str, Any]], None] | None = None) -> None:
+                 yayinla: Callable[[dict[str, Any]], None] | None = None,
+                 hafiza_yaz: Callable[[list[dict[str, Any]]], Any] | None = None) -> None:
         self.video = video
+        # PROTOKOL 21.7: izinliyse iş sonunda satırlar (İngilizce, Türkçe, ses, orijinal sesin izi) hafızaya
+        self.hafiza_yaz = hafiza_yaz
+        self.hafiza_satir = 0
         self.isci = isci                  # .iste(komut, veri, ilerleme=...) -> dict
         self.cevirmen = cevirmen          # .video_cevir(metinler, sureler, kaynak, hedef, konusanlar, onceki, kisalt)
         self.ayar_fn = ayar_fn
@@ -132,6 +136,7 @@ class VideoIsi:
                 "yuzde": round(yuzde), "kalan_sn": self.kalan_sn(),
                 "satir": {"bitti": self.satir_bitti, "toplam": self.satir_toplam},
                 "konusmaci_sayisi": self.konusmaci_sayisi, "sure_sn": round(self.sure_sn, 1),
+                "hafiza_satir": self.hafiza_satir,
                 "cikti": str(self.cikti) if self.cikti else None, "srt": str(self.srt_yolu) if self.srt_yolu else None,
                 "hata": self.hata, "ayrinti": self.ayrinti,
                 "devam_edilebilir": self.durum in ("iptal", "hata") and self.klasor.exists()}
@@ -179,6 +184,7 @@ class VideoIsi:
                     self._olcum[a] = (self.saat() - self._asama_bas) / self.sure_sn
                 self.asama_yuzde[a] = 100.0
                 self._isaretle(a)
+            await self._hafizaya()
             self.durum, self.asama = "bitti", None
             shutil.rmtree(self.klasor, ignore_errors=True)    # ara dosyalar silinir; çıktı kullanıcının
         except asyncio.CancelledError:
@@ -190,6 +196,33 @@ class VideoIsi:
             self.durum, self.hata, self.ayrinti = "hata", "sunucu_hatasi", f"{type(e).__name__}: {e}"[:300]
             log.exception("Video dublajı çöktü")
         self.yayinla(self.bilgi())
+
+    async def _hafizaya(self) -> None:
+        """Dublaj hafızasını doldurur (PROTOKOL 21.7). Başarısız olursa video yine biter (hata yalnız günlükte)."""
+        if self.hafiza_yaz is None:
+            return
+        try:
+            satirlar = self._satirlar()
+            ceviri: list[str] = self._json_oku("ceviri.json")
+            biten = json.loads(self._p("seslendirme.json").read_text(encoding="utf-8"))
+            k = self._json_oku("konusmaci.json")
+            idx = [i for i in range(len(satirlar)) if biten.get(str(i))]
+            if not idx:
+                return
+            r = await self.isci.iste("parmak_izleri", {"giris": str(self._p("asil.wav")),
+                                                       "araliklar": [[satirlar[i].bas, satirlar[i].son] for i in idx]})
+            izler = r.get("izler") or [[] for _ in idx]
+            kayitlar = []
+            for i, iz in zip(idx, izler):
+                b = biten[str(i)]
+                kod = await self.isci.iste("ses_kodla", {"giris": b["yol"]})
+                kayitlar.append({"asil": satirlar[i].metin, "tr": b.get("metin") or (ceviri[i] if i < len(ceviri) else ""),
+                                 "veri": kod["veri"], "bicim": kod["bicim"], "sr": kod["sr"],
+                                 "sure_sn": kod.get("sure_sn") or b.get("sure"), "en_sure_sn": satirlar[i].sure, "iz": iz,
+                                 "duygu": k["duygular"][i] if i < len(k.get("duygular") or []) else None})
+            self.hafiza_satir = int(await self.hafiza_yaz(kayitlar) or 0)
+        except Exception as e:   # noqa: BLE001
+            log.warning("Video satırları dublaj hafızasına yazılamadı: %s", e)
 
     # -- aşamalar --
     async def _cikar(self) -> None:

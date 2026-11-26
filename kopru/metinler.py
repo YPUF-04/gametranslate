@@ -174,6 +174,15 @@ HATALAR: dict[str, dict[str, str]] = {
     "reklam_yok": {
         "tr": "Bu reklamın süresi zaten eklendi ya da reklam iptal oldu. \"+30 dk ekle\"ye yeniden bas.",
         "en": "Time for this ad was already added, or the ad was cancelled. Press \"+30 min\" again."},
+    "hafiza_izin_yok": {
+        "tr": "Dublaj hafızası kapalı. Önce \"Dublaj hafızası\" kartında izni aç.",
+        "en": "Dubbing memory is off. Turn on its permission in the \"Dubbing memory\" card first."},
+    "hafiza_yedek_gecersiz": {
+        "tr": "Bu dosya bir dublaj hafızası yedeği değil ya da bozuk.",
+        "en": "This file is not a dubbing memory backup, or it is damaged."},
+    "dublaj_kodla_hata": {
+        "tr": "Ses sıkıştırılamadı; dublaj paketini onarmayı deneyin.",
+        "en": "The audio could not be compressed; try repairing the dubbing package."},
     "dublaj_paket_onay": {
         "tr": "Dublaj paketini kurmak (ya da kaldırmak) için önce onay kutusunu işaretleyin.",
         "en": "Please tick the confirmation box first to install (or remove) the dubbing package."},

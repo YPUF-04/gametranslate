@@ -429,3 +429,96 @@ async def test_iyilestirici_canli_baslayinca_birakir(tmp_path):
     with pytest.raises(Kesildi):
         await iy.satir(d.getir(k))
     assert not d.getir(k)["sesli"]
+
+
+async def test_video_dublaji_hafizayi_doldurur(tmp_path):
+    import base64
+    from tests.test_dublaj_video import SahteCevirmen, SahteIsci, ayar
+    from kopru.dublaj.video import VideoIsi
+    v = tmp_path / "kayit" / "gorev.mp4"
+    v.parent.mkdir()
+    v.write_bytes(b"video")
+
+    class Isci(SahteIsci):
+        async def iste(self, komut, veri=None, ilerleme=None, **k):
+            if komut == "parmak_izleri":
+                self.komutlar.append((komut, veri))
+                return {"izler": [[[i, 0], [i + 1, 5]] for i in range(len(veri["araliklar"]))]}
+            if komut == "ses_kodla":
+                return {"veri": base64.b64encode(_wav(0.8)).decode(), "bicim": "wav", "sr": 24000, "sure_sn": 0.8}
+            return await super().iste(komut, veri, ilerleme, **k)
+    d = DublajHafizasi(tmp_path / "h")
+
+    async def yaz(kayitlar):
+        for x in kayitlar:
+            d.kaydet(x["asil"], None, x["tr"], "video", base64.b64decode(x["veri"]), x["bicim"], x["sr"], x["sure_sn"],
+                     x["en_sure_sn"], iz=x["iz"], duygu=x["duygu"])
+        return len(kayitlar)
+    isl = VideoIsi(v, Isci(), SahteCevirmen(), ayar, tmp_path / "isler", hafiza_yaz=yaz)
+    await isl.calis()
+    assert isl.bilgi()["durum"] == "bitti" and isl.bilgi()["hafiza_satir"] == 3
+    s = d.bul("Where were you?", "Joel")                      # canlıda konuşan adı olsa da bulunur
+    assert s and s["tr"] == "Neredeydin?" and s["tr_kaynak"] == "video" and s["sesli"] and s["iz_sayisi"] == 2
+    assert s["duygu"] == {"canlilik": 0.5, "cfg": 0.5}
+    # izinsiz: hiçbir şey yazılmaz
+    isl2 = VideoIsi(v, Isci(), SahteCevirmen(), ayar, tmp_path / "isler2")
+    await isl2.calis()
+    assert isl2.bilgi()["hafiza_satir"] == 0
+
+
+# ---------- API (PROTOKOL 21.8) ----------
+
+@pytest.fixture
+async def istemci(aiohttp_client, uygulama_ayari):
+    from kopru import sunucu
+    from tests.conftest import sahte_fabrika
+    uygulama_ayari["motor"] = "sahte"
+    app = sunucu.uygulama_olustur(uygulama_ayari, motor_fabrika=sahte_fabrika)
+    c = await aiohttp_client(app)
+    c.durum = app[sunucu.DURUM]
+    return c
+
+
+async def test_api_izin_yokken_bos_ve_reddeder(istemci, tmp_path):
+    j = await (await istemci.get("/api/dublaj/hafiza")).json()
+    assert j["izin"] is False and j["istatistik"] is None and j["satirlar"] == []
+    for yol, govde in (("/api/dublaj/hafiza/hazirla", {"dakika": 5}), ("/api/dublaj/hafiza/iyilestir", {"acik": True}),
+                       ("/api/dublaj/hafiza/duzelt", {"id": 1, "tr": "x"})):
+        r = await istemci.post(yol, json=govde)
+        assert r.status == 400 and (await r.json())["hata"] == "hafiza_izin_yok"
+    assert (await istemci.post("/api/dublaj/hafiza/ice", data=b"PK")).status == 400
+    assert not list(tmp_path.rglob("hafiza.sqlite"))                      # izinsiz hiçbir dosya yok
+
+
+async def test_api_liste_ara_ses_duzelt_sil_yedek(istemci, tmp_path):
+    r = await istemci.post("/api/dublaj", json={"hafiza_izni": True})
+    assert r.status == 200
+    h = istemci.durum.dublaj.hafiza()
+    k = h.kaydet("Where were you?", "Ellie", "Neredeydin?", ses=_wav(), bicim="wav", sr=24000, sure_sn=1.0, puan=0.7)
+    h.kaydet("Get down!", "Joel", "Eğil!")
+    j = await (await istemci.get("/api/dublaj/hafiza?ara=Ellie")).json()
+    assert j["izin"] and j["toplam"] == 1 and j["satirlar"][0]["tr"] == "Neredeydin?" and j["satirlar"][0]["puan"] == 0.7
+    assert j["istatistik"]["satir"] == 2 and j["istatistik"]["sesli"] == 1
+    r = await istemci.get(f"/api/dublaj/hafiza/ses?id={k}")
+    assert r.status == 200 and r.content_type == "audio/wav" and (await r.read())[:4] == b"RIFF"
+    assert (await istemci.get("/api/dublaj/hafiza/ses?id=999")).status == 404
+    r = await istemci.post("/api/dublaj/hafiza/duzelt", json={"id": k, "tr": "Nerelerdeydin?"})
+    j = await r.json()
+    assert r.status == 200 and j["seslendirildi"] is False            # motor kapalı: boşta yeniden üretilecek
+    assert h.getir(k)["tr"] == "Nerelerdeydin?" and h.getir(k)["tr_kaynak"] == "kullanici"
+    # yedek: dışa aktar, sil, geri yükle
+    r = await istemci.get("/api/dublaj/hafiza/disa")
+    yedek = await r.read()
+    assert r.status == 200 and "attachment" in r.headers["Content-Disposition"] and yedek[:2] == b"PK"
+    assert (await (await istemci.delete(f"/api/dublaj/hafiza?id={k}")).json())["silinen"] == 1
+    j = await (await istemci.post("/api/dublaj/hafiza/ice", data=yedek)).json()
+    assert j["tamam"] and j["eklenen"] == 1 and j["guncellenen"] == 1
+    assert (await istemci.post("/api/dublaj/hafiza/ice", data=b"bozuk")).status == 400
+    r = await istemci.post("/api/dublaj/hafiza/hazirla", json={"dakika": 30})
+    assert r.status == 200 and (await r.json())["satir"] == 2
+    assert (await istemci.post("/api/dublaj/hafiza/hazirla", json={"dakika": 0})).status == 400
+    # oyunun hafızası silinir
+    assert (await istemci.delete("/api/dublaj/hafiza?oyun=1")).status == 200
+    j = await (await istemci.get("/api/dublaj/hafiza")).json()
+    assert j["istatistik"]["satir"] == 0
+    assert (await istemci.delete("/api/dublaj/hafiza?hepsi=1")).status == 200

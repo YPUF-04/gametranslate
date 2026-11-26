@@ -1215,7 +1215,13 @@ bilgisayara yazılır. Kapalıyken hafızaya **hiçbir şey yazılmaz** ve okunm
   konuşma parçası gelince İngilizce sesin parmak izi ve süresi eklenir.
 - Ölçüm: her satırın `olcum`una `hafiza: "isabet"|"tanima"|"iskalama"` girer; `GET /api/dublaj` → `gecikme`
   içinde `hafiza_isabet_ms` (isabetlerde altyazı/tanıma → ilk ses ortalaması) ve `hafiza_iskalama_ms`.
-- Bilgisayar çıkışında işçi `ani_cal` komutuyla, seslendirme sırasını beklemeden ayrı bir çıkış akışında çalar.
+- Bilgisayar çıkışında işçi `ani_cal {"pcm","sr","kimlik","gecikme_sn","seviye","kis","pid"}` komutuyla (anında
+  komut; hemen `{"planlandi":true}` döner) seslendirme sırasını beklemeden, ayrı bir çıkış akışında, `gecikme_sn` sonra
+  çalar; `ani_durdur {"kimlik"?}` keser. TV çıkışında ses her zamanki `ses` olayıyla gider.
+- Ses kodlama: `ses_kodla {"pcm","sr"} | {"giris"}` → `{"veri":<base64>,"bicim","sr","sure_sn"}`,
+  `ses_coz {"veri","bicim"}` → `{"pcm","sr"}` (anında komutlar). İyileştirme ölçümü: `aday_olc {"pcm","sr",
+  "ref_pcm"?,"ref_sr"?}` → `{"metin","benzerlik"}` (sıralı komut). `seslendir`in `duygu`suna `tohum` (tam sayı) ve
+  `sicaklik` (0,3–1,2) eklenebilir. `canli_baslat`a `parmak_izi: bool` (yalnız hafıza izinliyken parmak izi çıkarılır).
 
 ### 21.4 Oyun sesinden sahne tanıma (mikrofon YOK)
 Yalnız zaten dinlenen oyun sesi (PS5 gizli bağlantı, süreç/sistem loopback, kullanıcının seçtiği kart girişi).
@@ -1255,8 +1261,11 @@ Yalnız `bosta_iyilestir:true`, canlı dublaj ve video işi kapalı, işçi boş
 kullanılan satırlar iyileştirme sırasının başına alınır (iş boşta başlar).
 
 ### 21.7 Video dublajı hafızayı doldurur
-`hafiza_izni:true` iken video işinin sonunda (`hafiza` aşaması) her satırın İngilizcesi, Türkçesi, Türkçe sesi ve
+`hafiza_izni:true` iken video işinin sonunda (birleştirmeden sonra; aşama listesi değişmez, hata olursa video yine
+biter) işçinin `parmak_izleri {"giris","araliklar"}` ve `ses_kodla {"giris"}` komutlarıyla her satırın İngilizcesi, Türkçesi, Türkçe sesi ve
 orijinal (karışık) sesin parmak izi hafızaya yazılır; görevi kayıttan dublajlamak, o görevi canlıda da hazır yapar.
+`GET /api/dublaj/video` → `hafiza_satir` (hafızaya yazılan satır sayısı). Konuşan adı videoda bilinmez: satır
+konuşansız anahtarla yazılır (canlıda §21.2'nin konuşansız bulma adımı eşler).
 
 ### 21.8 API (yalnız yerel)
 - `GET /api/dublaj/hafiza?ara=&sayfa=0` → `{"izin","kullan","bosta","oyun","istatistik":{"satir","sesli","dakika",

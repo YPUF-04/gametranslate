@@ -69,6 +69,10 @@ function sahteSunucu() {
       konum: 'C:\\Users\\Oyuncu\\AppData\\Local\\AltYaziKoprusu\\dublaj-ortami', destek: true,
       asamalar: ['python', 'ffmpeg', 'paketler', 'modeller', 'denetim'].map((k) => ({ kod: k, durum: 'bekliyor', yuzde: 0 })) },
     paketKur: [], video: { durum: 'bosta' }, videoBasla: [], videoGoster: 0, profiller: [{ ad: 'Lucia', sure_sn: 18.2, klip: 3, tarih: '2026-11-20' }], profilSil: [],
+    dh: [{ id: 1, asil: 'Get in the car, now!', konusan: 'Lucia', tr: 'Arabaya bin, hemen!', tr_kaynak: 'canli', puan: 0.74, sesli: true, sure_sn: 1.6, kullanim: 3, tanima: true },
+      { id: 2, asil: 'We need to go.', konusan: 'Lucia', tr: 'Gitmemiz lazım.', tr_kaynak: 'en_iyi', puan: 0.91, sesli: true, sure_sn: 1.2, kullanim: 1, tanima: true },
+      { id: 3, asil: 'Hold on.', konusan: null, tr: 'Dayan.', tr_kaynak: 'canli', puan: null, sesli: false, sure_sn: null, kullanim: 0, tanima: false }],
+    dhSil: [], dhYeniden: [], dhHazirla: [],
     tvUyg: { paket_surum: 'a1b2c3d4e5f6', yukleyici_guncel: 2, durum: 'eski', mesaj: 'TV uygulaması eski: bir kez yeniden kurun, sonra hep kendiliğinden güncellenir', tvler: [{ adres: '192.168.1.30', yukleyici: 1, paket: null, guncel: false, son_gorulme_sn: 4 }] },
     gel: { belirtec_var: false, otomatik: true, son_uzatma: null, kalan_sn: null, bitis_tahmini: null, hata: null, durum: 'belirtec_yok', mesaj: 'Geliştirici modu süresi uzatılamıyor: TV\'yi bir kez daha bağlayın.', hatirlatma: true, tv: '192.168.1.30' }, gelPostlari: [],
     uyanik: { acik: false, adres: '192.168.1.30', eslesti: false, durum: 'kapali', son_dokunus: null, hata: null, mesaj: 'Kapalı.' }, uyanikPostlari: [], demo: false,
@@ -290,6 +294,19 @@ function sahteSunucu() {
         case 'GET /api/dublaj/girisler': return j({ girisler: [{ ad: 'Elgato HD60 X', kimlik: 'el1', kart: true }] });
         case 'GET /api/dublaj/ses-profilleri': return j({ izin: !!st.ayarlar.dublaj.ses_profili_izni, oyun: 'gta6', profiller: st.profiller });
         case 'DELETE /api/dublaj/ses-profilleri': st.profilSil.push(url.searchParams.get('ad')); st.profiller = st.profiller.filter((p) => url.searchParams.get('ad') && p.ad !== url.searchParams.get('ad')); return j({ tamam: true, silinen: 1 });
+        case 'GET /api/dublaj/hafiza': {   // PROTOKOL 21.8
+          const dd = st.ayarlar.dublaj, ara = (url.searchParams.get('ara') || '').toLowerCase();
+          if (!dd.hafiza_izni) return j({ izin: false, kullan: true, bosta: false, sinir_mb: 1000, oyun: 'gta6', istatistik: null, satirlar: [], toplam: 0, iyilestirme: null });
+          const sat = st.dh.filter((x) => !ara || (x.asil + x.tr + (x.konusan || '')).toLowerCase().includes(ara));
+          return j({ izin: true, kullan: dd.hafiza_kullan !== false, bosta: !!dd.bosta_iyilestir, sinir_mb: 1000, oyun: 'gta6', toplam: sat.length, satirlar: sat,
+            istatistik: { satir: st.dh.length, sesli: st.dh.filter((x) => x.sesli).length, dakika: 1.5, boyut_mb: 0.4, karakterler: [{ ad: 'Lucia', satir: 2, sesli: 2 }, { ad: null, satir: 1, sesli: 0 }] },
+            iyilestirme: dd.bosta_iyilestir ? { durum: 'bekliyor', kalan: 3, biten: 0 } : null });
+        }
+        case 'DELETE /api/dublaj/hafiza': st.dhSil.push(url.search); st.dh = st.dh.filter((x) => String(x.id) !== url.searchParams.get('id')); return j({ tamam: true, silinen: 1 });
+        case 'POST /api/dublaj/hafiza/duzelt': st.dh.forEach((x) => { if (x.id === b.id) { x.tr = b.tr; x.tr_kaynak = 'kullanici'; } }); return j({ tamam: true, seslendirildi: true, puan: 0.9 });
+        case 'POST /api/dublaj/hafiza/yeniden': st.dhYeniden.push(b.id); return j({ tamam: true, puan: 0.88 });
+        case 'POST /api/dublaj/hafiza/hazirla': st.dhHazirla.push(b.dakika); return j({ tamam: true, satir: 3 });
+        case 'POST /api/dublaj/hafiza/iyilestir': st.ayarlar.dublaj.bosta_iyilestir = b.acik; return j({ tamam: true, iyilestirme: null });
         case 'POST /api/dublaj/dosya-sec': return j({ yol: 'D:\\Kayıt\\gta6.mp4', ad: 'gta6.mp4', boyut_mb: 812 });
         case 'GET /api/dublaj/video': {
           const v = st.video, kodlar = ['cikar', 'ayir', 'yazi', 'bol', 'konusmaci', 'cevir', 'seslendir', 'karistir', 'birlestir'];
@@ -1437,6 +1454,49 @@ function dilKontrol() {
       assert.deepStrictEqual(ihlal2, [], 'axe (video): ' + ihlal2.join(' | '));
     }
     adim('video dublaj: dosya seçildi, aşama aşama ilerleme + kalan süre, bitti, "Klasörde göster"');
+    // Dublaj hafızası (PROTOKOL 21): izin, istatistik, arama, düzelt, yeniden seslendir, sil, sahneyi hazırla, yedek uyarısı
+    await sayfa.click('#dhafiza-kart > summary');
+    await sayfa.waitForSelector('#dh-izin', { state: 'attached' });
+    assert.match(await sayfa.textContent('#dh-ic'), /İzin kapalıyken hafızaya hiçbir şey yazılmaz/);
+    assert.strictEqual(await sayfa.locator('#dh-liste').count(), 0);
+    await sayfa.click('#dh-izin', { force: true });
+    await sayfa.waitForSelector('#dh-liste li');
+    assert.strictEqual(st.ayarlar.dublaj.hafiza_izni, true);
+    assert.match(await sayfa.textContent('#dh-istatistik'), /3 satır \(2 sesli\).*1,5 dk Türkçe ses.*0,4 MB \/ 1000 MB/);
+    assert.match(await sayfa.textContent('#dh-karakterler'), /Lucia \(2\)/);
+    assert.match(await sayfa.textContent('#dh-ozet'), /3 satır · 1,5 dk/);
+    await sayfa.fill('#dh-ara', 'hold');
+    await sayfa.waitForFunction(() => document.querySelectorAll('#dh-liste li').length === 1);
+    assert.ok(await sayfa.isDisabled('#dh-liste li button'), 'sesi olmayan satırda ▶ kapalı');
+    await sayfa.fill('#dh-ara', '');
+    await sayfa.waitForFunction(() => document.querySelectorAll('#dh-liste li').length === 3);
+    await sayfa.click('#dh-liste li[data-id="1"] button:has-text("Metni düzelt")');
+    await sayfa.fill('#dh-tr-1', 'Bin arabaya, çabuk!');
+    await sayfa.click('#dh-kaydet-1');
+    await sayfa.waitForFunction(() => /Bin arabaya, çabuk!/.test(document.querySelector('#dh-liste').textContent));
+    await sayfa.click('#dh-liste li[data-id="2"] button:has-text("Yeniden seslendir")');
+    await sayfa.waitForTimeout(200);
+    assert.deepStrictEqual(st.dhYeniden, [2]);
+    await sayfa.click('#dh-liste li[data-id="3"] button:has-text("Sil")');
+    await sayfa.waitForFunction(() => document.querySelectorAll('#dh-liste li').length === 2);
+    await sayfa.selectOption('#dh-dakika', '30');
+    await sayfa.click('#dh-hazirla');
+    await sayfa.waitForTimeout(200);
+    assert.deepStrictEqual(st.dhHazirla, [30]);
+    await sayfa.click('#dh-bosta', { force: true });
+    await sayfa.waitForSelector('#dh-iyilestirme');
+    assert.match(await sayfa.textContent('#dh-iyilestirme'), /oyun bitince sürecek · 3 satır sırada/);
+    assert.match(await sayfa.textContent('#dh-yedek-not'), /paylaşmak hak sahiplerinin haklarını ihlal edebilir/);
+    assert.strictEqual(await sayfa.getAttribute('#dh-disa', 'href'), '/api/dublaj/hafiza/disa');
+    if (process.env.AXE) {
+      const ihlal3 = await sayfa.evaluate(() => window.axe.run(document.querySelector('#dhafiza-kart')).then((r) => r.violations.map((v) => v.id + ': ' + v.nodes.map((n) => n.target.join(' ')).join(', '))));
+      assert.deepStrictEqual(ihlal3, [], 'axe (dublaj hafızası): ' + ihlal3.join(' | '));
+    }
+    await sayfa.click('#dh-sil-oyun');
+    await sayfa.click('#dh-sil-evet');
+    await sayfa.waitForTimeout(200);
+    assert.ok(st.dhSil.includes('?oyun=1'));
+    adim('dublaj hafızası: izin, istatistik + gecikme, arama, metni düzelt, yeniden seslendir, sil, sahneyi hazırla, boşta iyileştir, yedek uyarısı');
     await sayfa.click('#dublaj-paket-kaldir-ac > summary');
     await sayfa.click('#dublaj-paket-kaldir');
     await sayfa.waitForTimeout(200);

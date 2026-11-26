@@ -1478,6 +1478,11 @@
     ]);
 
     ekran.erisim = h('div', { class: 'pk pk-genis erisim-kart', id: 'erisim-kart' });
+    var dhafiza = h('details', { class: 'pk pk-genis dublaj-ac', id: 'dhafiza-kart', ontoggle: function () { if (dhafiza.open) dhYukle(); } }, [
+      h('summary', {}, [h('span', { class: 'pk-ik', 'aria-hidden': 'true' }, ikon('liste')),
+        h('h2', { text: t('dh.baslik') }), h('span', { class: 'pk-not', id: 'dh-ozet', text: t((a.dublaj && a.dublaj.hafiza_izni) ? 'dh.ozet.acik' : 'dh.ozet.kapali') })]),
+      dhKarti()
+    ]);
     var dublaj = h('details', { class: 'pk pk-genis dublaj-ac', id: 'dublaj-kart' }, [
       h('summary', {}, [h('span', { class: 'pk-ik', 'aria-hidden': 'true' }, ikon('ses')),
         h('h2', { text: t('dublaj.baslik') }), h('span', { class: 'pk-not' }, [h('span', { id: 'dublaj-ozet', text: t('dublaj.' + ((a.dublaj && a.dublaj.motor) || 'kapali')) }), h('span', { id: 'dublaj-sure-ozet' })])]),
@@ -1487,7 +1492,7 @@
     ana.appendChild(h('section', { class: 'pano', id: 'pano' }, [
       h('h1', { class: 'gizli', text: t('ana.baslik') }),
       h('div', { id: 'guncelleme-alani' }), ekran.uyari, hero, ekran.baglantilar,
-      h('div', { class: 'pano-izgara' }, [oyunK, goruntuK, motorK, gosK, bolgeK, kisayolK, tvGosterKarti(), sonK, ekran.erisim, dublaj]),
+      h('div', { class: 'pano-izgara' }, [oyunK, goruntuK, motorK, gosK, bolgeK, kisayolK, tvGosterKarti(), sonK, ekran.erisim, dublaj, dhafiza]),
       h('div', { class: 'pano-alt' }, [
         h('button', { type: 'button', class: 'baglanti', id: 'gelismis-ac', text: t('gelismis.link'), onclick: function () { S.gelismisEkrani = true; ciz(); } })
       ])
@@ -3429,6 +3434,101 @@
     }
     dublajVideoCiz(k, b);
     k.appendChild(h('p', { class: 'sessiz', style: 'margin-top:16px', text: t('dublaj.haklar') }));
+  }
+
+  // ---------- DUBLAJ HAFIZASI (PROTOKOL 21) ----------
+  var dhKok = null, dhAra = '', dhDuzenle = null, dhGecikme = null;
+  function dhKarti() { dhKok = h('div', { class: 'dublaj-ic', id: 'dh-ic' }); dhCiz(); return dhKok; }
+  function dhYukle() {
+    return api('GET', '/api/dublaj/hafiza?ara=' + encodeURIComponent(dhAra)).then(function (j) { S.dhafiza = j; dhCiz(); }).catch(function () {});
+  }
+  function dhAyar(parca) { return dublajKaydet(parca).then(dhYukle); }
+  function dhSure(ms) { return ms == null ? '—' : (ms / 1000).toFixed(1).replace('.', ','); }
+  function dhCiz() {
+    if (!dhKok) return;
+    var j = S.dhafiza || {}, a = dublajAyar(), st = j.istatistik, k = dhKok;
+    var oz = $('#dh-ozet'); if (oz) oz.textContent = a.hafiza_izni ? (st ? t('dh.ozet', { n: st.satir, dk: String(st.dakika).replace('.', ',') }) : t('dh.ozet.acik')) : t('dh.ozet.kapali');
+    k.textContent = '';
+    k.appendChild(h('p', { class: 'ne', text: t('dh.ne') }));
+    k.appendChild(anahtar(t('dh.izin'), t('dh.izin.k'), a.hafiza_izni, function (v) { dhAyar({ hafiza_izni: v }); }, 'dh-izin'));
+    if (!a.hafiza_izni) { k.appendChild(h('p', { class: 'sessiz', text: t('dh.kapali') })); return; }
+    k.appendChild(anahtar(t('dh.kullan'), t('dh.kullan.k'), a.hafiza_kullan !== false, function (v) { dhAyar({ hafiza_kullan: v }); }, 'dh-kullan'));
+    k.appendChild(anahtar(t('dh.bosta'), t('dh.bosta.k'), !!a.bosta_iyilestir, function (v) {
+      api('POST', '/api/dublaj/hafiza/iyilestir', { acik: v }).then(function () { return ayarYukle(); }).then(dhYukle).catch(hataGoster);
+    }, 'dh-bosta'));
+    if (st) {
+      var g = (S.dublaj && S.dublaj.gecikme) || {};
+      k.appendChild(h('ul', { class: 'dh-istatistik', id: 'dh-istatistik' }, [
+        h('li', { text: t('dh.st.satir', { n: st.satir, s: st.sesli }) }),
+        h('li', { text: t('dh.st.dakika', { n: String(st.dakika).replace('.', ',') }) }),
+        h('li', { text: t('dh.st.disk', { n: String(st.boyut_mb).replace('.', ','), s: j.sinir_mb }) }),
+        h('li', { id: 'dh-gecikme', text: t('dh.st.gecikme', { hit: dhSure(g.hafiza_isabet_ms), miss: dhSure(g.hafiza_iskalama_ms) }) })
+      ]));
+      var kar = (st.karakterler || []).filter(function (x) { return x.ad; });
+      if (kar.length) k.appendChild(h('p', { class: 'sessiz', id: 'dh-karakterler', text: t('dh.karakterler') + ' ' + kar.map(function (x) { return x.ad + ' (' + x.satir + ')'; }).join(', ') }));
+    }
+    var iy = j.iyilestirme;
+    if (iy) k.appendChild(h('p', { class: 'sessiz', id: 'dh-iyilestirme', role: 'status', text: t('dh.iy.' + (iy.durum || 'bosta'), { n: iy.kalan == null ? '?' : iy.kalan, b: iy.biten || 0 }) }));
+    var dk = h('select', { id: 'dh-dakika', 'aria-label': t('dh.hazirla.dk') }, [5, 10, 30, 60].map(function (n) { return h('option', { value: String(n), text: t('dh.dk', { n: n }) }); }));
+    dk.value = '10';
+    k.appendChild(h('div', { class: 'satir', style: 'margin-top:8px' }, [
+      h('button', { type: 'button', class: 'dugme kucuk', id: 'dh-hazirla', text: t('dh.hazirla'), onclick: function () {
+        api('POST', '/api/dublaj/hafiza/hazirla', { dakika: Number(dk.value) }).then(function (r) { toast(t('dh.hazirla.tamam', { n: r.satir })); return dhYukle(); }).catch(hataGoster);
+      } }), h('label', { class: 'gizli', for: 'dh-dakika', text: t('dh.hazirla.dk') }), dk]));
+    k.appendChild(h('p', { class: 'sessiz', text: t('dh.hazirla.k') }));
+    var ara = h('input', { type: 'search', id: 'dh-ara', value: dhAra, placeholder: t('dh.ara'), 'aria-label': t('dh.ara') });
+    ara.addEventListener('input', function () { dhAra = ara.value; clearTimeout(dhGecikme); dhGecikme = setTimeout(function () { dhYukle().then(function () { var e = $('#dh-ara'); if (e) { e.focus(); e.selectionStart = e.selectionEnd = e.value.length; } }); }, 300); });
+    k.appendChild(ara);
+    var liste = h('ul', { class: 'dh-liste', id: 'dh-liste' });
+    (j.satirlar || []).forEach(function (x) {
+      var ust = h('div', { class: 'dh-ust' }, [h('span', { class: 'dh-en', text: x.asil }), x.konusan ? h('span', { class: 'rozet', text: x.konusan }) : null,
+        h('span', { class: 'sessiz', text: x.puan == null ? t('dh.puansiz') : t('dh.puan', { n: Math.round(x.puan * 100) }) })]);
+      var tr = dhDuzenle === x.id
+        ? h('input', { type: 'text', id: 'dh-tr-' + x.id, value: x.tr, 'aria-label': t('dh.duzelt') })
+        : h('p', { class: 'dh-tr', text: x.tr || '—' });
+      var dug = h('div', { class: 'satir dh-dugmeler' }, [
+        h('button', { type: 'button', class: 'baglanti', disabled: !x.sesli, 'aria-label': t('dh.cal_ad', { m: x.asil }), text: '▶ ' + t('dh.cal'), onclick: function () {
+          try { new Audio('/api/dublaj/hafiza/ses?id=' + x.id).play(); } catch (e) { /* tarayıcı çalamadı */ }
+        } }),
+        h('button', { type: 'button', class: 'baglanti', 'aria-label': t('dh.yeniden_ad', { m: x.asil }), text: t('dh.yeniden'), onclick: function () {
+          toast(t('dh.yeniden.suruyor'));
+          api('POST', '/api/dublaj/hafiza/yeniden', { id: x.id }, 600000).then(function (r) { toast(t('dh.yeniden.tamam', { n: Math.round((r.puan || 0) * 100) })); return dhYukle(); }).catch(hataGoster);
+        } }),
+        dhDuzenle === x.id
+          ? h('button', { type: 'button', class: 'baglanti', id: 'dh-kaydet-' + x.id, text: t('dh.kaydet'), onclick: function () {
+              var v = ($('#dh-tr-' + x.id) || {}).value || '';
+              api('POST', '/api/dublaj/hafiza/duzelt', { id: x.id, tr: v }, 600000).then(function (r) { dhDuzenle = null; toast(t(r.seslendirildi ? 'dh.duzelt.tamam' : 'dh.duzelt.sonra')); return dhYukle(); }).catch(hataGoster);
+            } })
+          : h('button', { type: 'button', class: 'baglanti', 'aria-label': t('dh.duzelt_ad', { m: x.asil }), text: t('dh.duzelt'), onclick: function () { dhDuzenle = x.id; dhCiz(); } }),
+        h('button', { type: 'button', class: 'baglanti', 'aria-label': t('dh.sil_ad', { m: x.asil }), text: t('dh.sil'), onclick: function () {
+          api('DELETE', '/api/dublaj/hafiza?id=' + x.id).then(dhYukle).catch(hataGoster);
+        } })]);
+      liste.appendChild(h('li', { 'data-id': String(x.id) }, [ust, tr, dug]));
+    });
+    k.appendChild(liste);
+    if (j.toplam > (j.satirlar || []).length) k.appendChild(h('p', { class: 'sessiz', text: t('dh.daha', { n: j.toplam - j.satirlar.length }) }));
+    var dosya = h('input', { type: 'file', id: 'dh-ice-dosya', accept: '.kdh', hidden: true, 'aria-label': t('dh.ice') });
+    dosya.addEventListener('change', function () {
+      var f = dosya.files && dosya.files[0]; if (!f) return;
+      fetch('/api/dublaj/hafiza/ice', { method: 'POST', body: f }).then(function (r) { return r.json().then(function (j2) { if (!r.ok) throw hataNesnesi(j2.mesaj || t('hata.genel'), j2.hata); return j2; }); })
+        .then(function (r) { toast(t('dh.ice.tamam', { e: r.eklenen, g: r.guncellenen })); return dhYukle(); }).catch(hataGoster);
+    });
+    k.appendChild(h('h3', { class: 'ara-baslik', text: t('dh.yedek') }));
+    k.appendChild(h('p', { class: 'sessiz', id: 'dh-yedek-not', text: t('dh.yedek.k') }));
+    k.appendChild(h('div', { class: 'satir' }, [
+      h('a', { class: 'dugme ikincil kucuk', id: 'dh-disa', href: '/api/dublaj/hafiza/disa', download: '', text: t('dh.disa') }),
+      h('button', { type: 'button', class: 'dugme ikincil kucuk', id: 'dh-ice', text: t('dh.ice'), onclick: function () { dosya.click(); } }), dosya]));
+    k.appendChild(h('div', { class: 'satir', style: 'margin-top:12px' }, [
+      h('button', { type: 'button', class: 'baglanti', id: 'dh-sil-oyun', text: t('dh.sil.oyun'), onclick: function () {
+        pencere(t('dh.sil.oyun'), t('dh.sil.govde'), [{ ad: t('dh.sil.evet'), deger: true, sinif: 'kirmizi', id: 'dh-sil-evet' }, { ad: t('dh.vazgec'), deger: false, sinif: 'ikincil', id: 'dh-sil-hayir' }]).then(function (v) {
+          if (v) api('DELETE', '/api/dublaj/hafiza?oyun=1').then(dhYukle).catch(hataGoster);
+        });
+      } }),
+      h('button', { type: 'button', class: 'baglanti', id: 'dh-sil-hepsi', text: t('dh.sil.hepsi'), onclick: function () {
+        pencere(t('dh.sil.hepsi'), t('dh.sil.govde'), [{ ad: t('dh.sil.evet'), deger: true, sinif: 'kirmizi', id: 'dh-sil-evet' }, { ad: t('dh.vazgec'), deger: false, sinif: 'ikincil', id: 'dh-sil-hayir' }]).then(function (v) {
+          if (v) api('DELETE', '/api/dublaj/hafiza?hepsi=1').then(dhYukle).catch(hataGoster);
+        });
+      } })]));
   }
 
   // ---------- çizim ----------

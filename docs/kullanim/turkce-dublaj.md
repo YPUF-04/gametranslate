@@ -119,3 +119,20 @@ Asıl video hiç değişmez. Durdurursan kaldığı yerden sürer.
 
 **Yasal not:** Dublaj kişisel kullanım içindir. Dublajlı videoyu yayınlamak (YouTube vb.) oyunun ve
 seslendirme sanatçılarının haklarına tabidir; izin almak senin sorumluluğundadır.
+
+## Dublaj hafızası: ikinci seferde beklemeden
+
+Panelde **Dublaj hafızası** kartından **"Dublaj hafızasına izin ver"**i açarsan, seslendirilen her satır bu
+bilgisayarda saklanır. Aynı satır bir daha geldiğinde Türkçe ses **beklemeden** çalar. Program oyunun sesinden
+(PS5 bağlantısı ya da oyunun kendi sesi; mikrofon değil) hangi satırda olduğunu tanır ve Türkçe sesi İngilizce
+satırla **aynı anda** başlatır, altyazısı olmayan satırlarda da.
+
+- **İlk oynayış** hafızayı doldurur; bir görevi önce **videodan dublajlarsan** o görev canlıda baştan hazır olur.
+- **Boşta iyileştir**: oyun oynamıyorken satırlar daha iyi çeviriyle ve birkaç denemeyle yeniden seslendirilir;
+  en anlaşılır, karaktere en çok benzeyen ve süreye en iyi uyan sürüm kalır. "Bu sahneyi en iyi kaliteyle hazırla"
+  son dakikaların satırlarını sıranın başına alır.
+- Listeden her satırı **dinleyebilir**, **Türkçesini düzeltebilir** (yeniden seslendirilir) ya da **silebilirsin**.
+- **Yedeği indir / yükle** yalnız kendi bilgisayarların arasında taşımak içindir. Oyun seslerini ve satırlarını
+  başkalarıyla paylaşmak hak sahiplerinin haklarını ihlal edebilir; paylaşma.
+- Dürüstçe: oyunun sesinden tanıma, satırın başından genellikle 0,5–1 sn sonra olur (sabit zamanlı ara sahnelerde
+  bazen satır başlamadan); oyunun müziği satırın üstünde çok yüksekse tanınmayabilir, o zaman altyazı yolu çalışır.

@@ -8,6 +8,7 @@ import logging
 import re
 import socket
 import sys
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -1492,6 +1493,229 @@ async def api_profiller_sil(request: web.Request) -> web.Response:
     return web.json_response({"tamam": True, "silinen": n})
 
 
+# ---------- dublaj hafızası (PROTOKOL 21.8) ----------
+
+def _dhafiza(request: web.Request) -> Any:
+    return request.app[DURUM].dublaj.hafiza()
+
+
+def _dhafiza_id(v: Any) -> int | None:
+    try:
+        k = int(v)
+    except (TypeError, ValueError):
+        return None
+    return k if k > 0 else None
+
+
+async def api_dhafiza_al(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    a = d.ayar["dublaj"]
+    yanit: dict[str, Any] = {"izin": bool(a.get("hafiza_izni")), "kullan": bool(a.get("hafiza_kullan", True)),
+                             "bosta": bool(a.get("bosta_iyilestir")), "sinir_mb": a.get("hafiza_sinir_mb", 1000),
+                             "oyun": d.dublaj.hafiza_oyun(), "istatistik": None, "satirlar": [], "toplam": 0,
+                             "iyilestirme": None}
+    h = _dhafiza(request)
+    if h is None:
+        return web.json_response(yanit)
+    ara = (request.query.get("ara") or "")[:100]
+    try:
+        sayfa = max(0, min(10_000, int(request.query.get("sayfa") or 0)))
+    except ValueError:
+        sayfa = 0
+    yanit["istatistik"] = await asyncio.to_thread(h.istatistik)
+    yanit["satirlar"], yanit["toplam"] = await asyncio.to_thread(h.liste, ara, sayfa)
+    i = d.dublaj.iyilestirici
+    if i is not None:
+        yanit["iyilestirme"] = await asyncio.to_thread(i.bilgi)
+    return web.json_response(yanit)
+
+
+async def api_dhafiza_ses(request: web.Request) -> web.Response:
+    """Panelde ▶: kayıtlı Türkçe ses WAV olarak (yalnız yerel)."""
+    h = _dhafiza(request)
+    k = _dhafiza_id(request.query.get("id"))
+    if h is None or k is None:
+        return hata("bulunamadi", 404, request)
+    r = await asyncio.to_thread(h.ses_al, k, False)
+    if r is None:
+        return hata("bulunamadi", 404, request)
+    veri, bicim, sr = r
+    if bicim != "wav":
+        try:
+            pcm, psr = await request.app[DURUM].dublaj.hafiza_kodlayici().coz(veri, bicim, sr)
+        except DublajHatasi as e:
+            return _dublaj_hata(e, request)
+        from .dublaj import dsp
+        veri = dsp.wav_bayt(dsp.mono_float(pcm), psr)
+    return web.Response(body=veri, content_type="audio/wav", headers={"Cache-Control": "no-store"})
+
+
+async def api_dhafiza_sil(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    q = request.query
+    if q.get("hepsi") == "1":
+        from .dublaj import hafiza as hafiza_mod
+        d.dublaj.hafiza_birak()
+        n = await asyncio.to_thread(hafiza_mod.hepsini_sil)
+        await _tanima_bosalt(d)
+        return web.json_response({"tamam": True, "silinen": n})
+    h = _dhafiza(request)
+    if h is None:
+        return hata("hafiza_izin_yok", 400, request)
+    if q.get("oyun") == "1":
+        d.dublaj.hafiza_birak()
+        await asyncio.to_thread(h.oyunu_sil)
+        await _tanima_bosalt(d)
+        return web.json_response({"tamam": True, "silinen": 1})
+    k = _dhafiza_id(q.get("id"))
+    if k is None:
+        return hata("gecersiz_istek", 400, request)
+    tamam = await asyncio.to_thread(h.sil, k)
+    isl = d.dublaj.isleyici
+    if isl is not None and getattr(isl, "hafiza", None) is not None:
+        isl.hafiza.unut(k)
+        if isl.hafiza.tanima_sil is not None:
+            await isl.hafiza._guvenli(isl.hafiza.tanima_sil([k]))
+    return web.json_response({"tamam": tamam, "silinen": int(tamam)})
+
+
+async def _tanima_bosalt(d: "Durum") -> None:
+    isl = d.dublaj.isleyici
+    if isl is not None and getattr(isl, "hafiza", None) is not None:
+        isl.hafiza = None                        # oturumun hafıza bağlantısı da kapanır
+    if d.dublaj.isci_kullan() and d.dublaj.isci.calisiyor():
+        try:
+            await d.dublaj.isci.iste("tanima_sil", {}, zaman_asimi=5.0)
+        except DublajHatasi:
+            pass
+
+
+async def _dhafiza_yeniden(d: "Durum", h: Any, k: int) -> dict[str, Any]:
+    i = d.dublaj.iyilestirici_al()
+    s = await asyncio.to_thread(h.getir, k)
+    if i is None or s is None:
+        raise DublajHatasi("bulunamadi")
+    if d.dublaj.motor() is None:
+        raise DublajHatasi("dublaj_motor_yok")
+    if not d.dublaj.bosta_mi():
+        raise DublajHatasi("video_canli_acik")
+    r = await i.satir(s, zorla=True)
+    isl = d.dublaj.isleyici
+    if isl is not None and getattr(isl, "hafiza", None) is not None:
+        isl.hafiza.unut(k)
+    return r
+
+
+async def api_dhafiza_yeniden(request: web.Request) -> web.Response:
+    """"Yeniden seslendir": birkaç aday, en iyisi (canlı dublaj kapalıyken)."""
+    d: Durum = request.app[DURUM]
+    h = _dhafiza(request)
+    v = await _json(request)
+    k = _dhafiza_id(v.get("id"))
+    if h is None:
+        return hata("hafiza_izin_yok", 400, request)
+    if k is None:
+        return hata("gecersiz_istek", 400, request)
+    try:
+        return web.json_response({"tamam": True, **(await _dhafiza_yeniden(d, h, k))})
+    except DublajHatasi as e:
+        return hata(e.kod, {"bulunamadi": 404, "video_canli_acik": 409}.get(e.kod, DUBLAJ_DURUMLARI.get(e.kod, 502)), request)
+
+
+async def api_dhafiza_duzelt(request: web.Request) -> web.Response:
+    """"Metni düzelt": Türkçe kullanıcının olur; ses (mümkünse hemen, değilse boşta) yeniden üretilir."""
+    d: Durum = request.app[DURUM]
+    h = _dhafiza(request)
+    v = await _json(request)
+    k, tr = _dhafiza_id(v.get("id")), v.get("tr")
+    if h is None:
+        return hata("hafiza_izin_yok", 400, request)
+    if k is None or not isinstance(tr, str) or not tr.strip() or len(tr) > 500:
+        return hata("gecersiz_istek", 400, request)
+    if not await asyncio.to_thread(h.metin_duzelt, k, tr):
+        return hata("bulunamadi", 404, request)
+    yeniden = None
+    if d.dublaj.motor() is not None and d.dublaj.bosta_mi():
+        try:
+            yeniden = await _dhafiza_yeniden(d, h, k)
+        except DublajHatasi:
+            yeniden = None
+    return web.json_response({"tamam": True, "seslendirildi": bool(yeniden), "puan": (yeniden or {}).get("puan")})
+
+
+async def api_dhafiza_hazirla(request: web.Request) -> web.Response:
+    """"Bu sahneyi en iyi kaliteyle hazırla": son N dakikanın satırları iyileştirme sırasının başına (boşta yapılır)."""
+    d: Durum = request.app[DURUM]
+    h = _dhafiza(request)
+    v = await _json(request)
+    dk = v.get("dakika", 10)
+    if h is None:
+        return hata("hafiza_izin_yok", 400, request)
+    if isinstance(dk, bool) or not isinstance(dk, (int, float)) or not 1 <= dk <= 120:
+        return hata("gecersiz_istek", 400, request)
+    kimlikler = await asyncio.to_thread(h.son_kullanilanlar, float(dk))
+    await asyncio.to_thread(h.oncelik_ver, kimlikler)
+    i = d.dublaj.iyilestirici_al()
+    if i is not None:
+        i.baslat()
+    return web.json_response({"tamam": True, "satir": len(kimlikler)})
+
+
+async def api_dhafiza_iyilestir(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    v = await _json(request)
+    if not isinstance(v.get("acik"), bool):
+        return hata("gecersiz_istek", 400, request)
+    if v["acik"] and not d.ayar["dublaj"].get("hafiza_izni"):
+        return hata("hafiza_izin_yok", 400, request)
+    d.ayar = ayarlar.guncelle(d.ayar, {"dublaj": {**d.ayar["dublaj"], "bosta_iyilestir": v["acik"]}})
+    d.dublaj.iyilestirme_senkron()
+    i = d.dublaj.iyilestirici
+    return web.json_response({"tamam": True, "iyilestirme": await asyncio.to_thread(i.bilgi) if i else None})
+
+
+async def api_dhafiza_disa(request: web.Request) -> web.Response:
+    d: Durum = request.app[DURUM]
+    h = _dhafiza(request)
+    if h is None:
+        return hata("hafiza_izin_yok", 400, request)
+    import tempfile
+    oyun = d.dublaj.hafiza_oyun()
+    gecici = Path(tempfile.mkdtemp(prefix="kopru-hafiza-")) / f"{oyun}.kdh"
+    await asyncio.to_thread(h.disa_aktar, gecici, oyun)
+    veri = await asyncio.to_thread(gecici.read_bytes)
+    shutil.rmtree(gecici.parent, ignore_errors=True)
+    return web.Response(body=veri, content_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="dublaj-hafizasi-{oyun}.kdh"', "Cache-Control": "no-store"})
+
+
+HAFIZA_ICE_SINIR = 4 * 1024 ** 3
+
+
+async def api_dhafiza_ice(request: web.Request) -> web.Response:
+    h = _dhafiza(request)
+    if h is None:
+        return hata("hafiza_izin_yok", 400, request)
+    import tempfile
+    klasor = Path(tempfile.mkdtemp(prefix="kopru-hafiza-"))
+    yol = klasor / "yedek.kdh"
+    try:
+        n = 0
+        with open(yol, "wb") as f:
+            async for parca in request.content.iter_chunked(1 << 20):
+                n += len(parca)
+                if n > HAFIZA_ICE_SINIR:
+                    return hata("gecersiz_istek", 413, request)
+                f.write(parca)
+        try:
+            sonuc = await asyncio.to_thread(h.ice_aktar, yol)
+        except (ValueError, KeyError, OSError, __import__("zipfile").BadZipFile):
+            return hata("hafiza_yedek_gecersiz", 400, request)
+        return web.json_response({"tamam": True, **sonuc})
+    finally:
+        shutil.rmtree(klasor, ignore_errors=True)
+
+
 async def api_dosya_sec(request: web.Request) -> web.Response:
     d: Durum = request.app[DURUM]
     from .dublaj import video as video_mod
@@ -2083,6 +2307,15 @@ def uygulama_olustur(ayar: dict[str, Any] | None = None, guncelleme: Any = None,
     r.add_get("/api/dublaj/girisler", api_dublaj_girisler)
     r.add_get("/api/dublaj/ses-profilleri", api_profiller_al)
     r.add_delete("/api/dublaj/ses-profilleri", api_profiller_sil)
+    r.add_get("/api/dublaj/hafiza", api_dhafiza_al)
+    r.add_delete("/api/dublaj/hafiza", api_dhafiza_sil)
+    r.add_get("/api/dublaj/hafiza/ses", api_dhafiza_ses)
+    r.add_post("/api/dublaj/hafiza/yeniden", api_dhafiza_yeniden)
+    r.add_post("/api/dublaj/hafiza/duzelt", api_dhafiza_duzelt)
+    r.add_post("/api/dublaj/hafiza/hazirla", api_dhafiza_hazirla)
+    r.add_post("/api/dublaj/hafiza/iyilestir", api_dhafiza_iyilestir)
+    r.add_get("/api/dublaj/hafiza/disa", api_dhafiza_disa)
+    r.add_post("/api/dublaj/hafiza/ice", api_dhafiza_ice)
     r.add_post("/api/dublaj/dosya-sec", api_dosya_sec)
     r.add_get("/api/dublaj/video", api_video_al)
     r.add_post("/api/dublaj/video", api_video_baslat)

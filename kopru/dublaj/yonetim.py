@@ -299,6 +299,13 @@ class DublajYonetici:
 
     def iyilestirme_senkron(self) -> None:
         """`bosta_iyilestir` açık + izin varsa arka plan işi çalışır (yalnız boşta iş yapar), değilse durur."""
+        if not self._d().get("hafiza_izni"):       # izin geri alındı: oturumun hafıza bağlantısı hemen kapanır
+            if self.isleyici is not None and getattr(self.isleyici, "hafiza", None) is not None:
+                self.isleyici.hafiza = None
+            if self.iyilestirici is not None:
+                self.iyilestirici.durdur()
+                self.iyilestirici = None
+            self.hafiza_birak()
         istenen = bool(self._d().get("bosta_iyilestir")) and bool(self._d().get("hafiza_izni"))
         if istenen:
             i = self.iyilestirici_al()
@@ -574,9 +581,30 @@ class DublajYonetici:
         if self._gorev is not None and not self._gorev.done():
             raise DublajHatasi("video_canli_acik")     # tek ekran kartı: canlı dublaj açıkken video olmaz
         self.video_isi = VideoIsi(yol, self.isci, cevirmen, self.ayar, is_koku, self.saat,
-                                  lambda b: self.yayin.yayinla("dublaj-video", b))
+                                  lambda b: self.yayin.yayinla("dublaj-video", b),
+                                  self._video_hafizaya if self._d().get("hafiza_izni") else None)
         self.video_isi.baslat()
         return self.video_bilgi()
+
+    async def _video_hafizaya(self, kayitlar: list[dict[str, Any]]) -> int:
+        """PROTOKOL 21.7: video satırları hafızaya (izin iş sonunda yeniden denetlenir)."""
+        depo = self.hafiza()
+        if depo is None:
+            return 0
+        import base64
+
+        def yaz() -> int:
+            n = 0
+            for k in kayitlar:
+                if not k.get("asil") or not k.get("tr"):
+                    continue
+                depo.kaydet(k["asil"], None, k["tr"], "video", base64.b64decode(k["veri"]), k["bicim"], int(k["sr"]),
+                            float(k.get("sure_sn") or 0) or None, k.get("en_sure_sn"), iz=k.get("iz") or None,
+                            duygu=k.get("duygu"))
+                n += 1
+            depo.sinirla(float(self._d().get("hafiza_sinir_mb", 1000)))
+            return n
+        return await asyncio.to_thread(yaz)
 
     async def video_iptal(self) -> None:
         if self.video_isi is not None:

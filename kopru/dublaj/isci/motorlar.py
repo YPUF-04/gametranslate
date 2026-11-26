@@ -838,8 +838,12 @@ class GercekIsleyici:
         """Hafıza sesi: Ogg/Opus (~32 kbit/sn), Opus yoksa FLAC. Diske yazmaz (bellekte)."""
         import base64
         import soundfile as sf
-        pcm = protokol.pcm_coz(v["pcm"])
-        sr = int(v["sr"])
+        if v.get("giris"):                       # video işi: iş klasöründeki seslendirme dosyası
+            ses, sr = _ses_oku(v["giris"])
+            pcm = ses.mean(0)
+        else:
+            pcm = protokol.pcm_coz(v["pcm"])
+            sr = int(v["sr"])
         for bicim, tur, alt in (("ogg", "OGG", "OPUS"), ("flac", "FLAC", "PCM_16")):
             try:
                 if alt not in sf.available_subtypes(tur):
@@ -847,7 +851,8 @@ class GercekIsleyici:
                 t = io.BytesIO()
                 hedef_sr = 24000 if bicim == "ogg" else sr       # Opus 48/24/16/12/8 kHz ister
                 sf.write(t, _yeniden_ornekle(pcm, sr, hedef_sr), hedef_sr, format=tur, subtype=alt)
-                return {"veri": base64.b64encode(t.getvalue()).decode("ascii"), "bicim": bicim, "sr": hedef_sr}
+                return {"veri": base64.b64encode(t.getvalue()).decode("ascii"), "bicim": bicim, "sr": hedef_sr,
+                        "sure_sn": len(pcm) / sr}
             except Exception as e:   # noqa: BLE001
                 log.info("hafıza sesi %s olarak kodlanamadı: %s", bicim, type(e).__name__)
         raise IsciHatasi("dublaj_kodla_hata", "soundfile")

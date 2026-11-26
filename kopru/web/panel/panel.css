@@ -1075,3 +1075,13 @@ html.buyuk-yazi .baglantilar{grid-template-columns:repeat(2,minmax(0,1fr))}
 .tvg-qr{margin:0;text-align:center;flex:0 0 132px}
 .tvg-qr img{display:block;width:116px;height:116px;margin:0 auto 6px;border-radius:8px;background:#fff;padding:4px;box-sizing:content-box}
 .tvg-alt{margin-top:14px;display:grid;gap:8px}
+
+/* Dublaj hafızası (PROTOKOL 21) */
+.dh-istatistik { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.dh-liste { list-style: none; padding: 0; margin: 8px 0 0; max-height: 420px; overflow-y: auto; }
+.dh-liste li { padding: 8px 0; border-top: 1px solid var(--cizgi, rgba(127, 127, 127, .25)); }
+.dh-ust { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.dh-en { font-weight: 600; overflow-wrap: anywhere; }
+.dh-tr { margin: 4px 0; overflow-wrap: anywhere; }
+.dh-dugmeler { gap: 12px; flex-wrap: wrap; }
+#dh-ara { width: 100%; margin-top: 12px; }
