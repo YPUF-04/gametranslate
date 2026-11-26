@@ -1220,8 +1220,9 @@ bilgisayara yazılır. Kapalıyken hafızaya **hiçbir şey yazılmaz** ve okunm
 ### 21.4 Oyun sesinden sahne tanıma (mikrofon YOK)
 Yalnız zaten dinlenen oyun sesi (PS5 gizli bağlantı, süreç/sistem loopback, kullanıcının seçtiği kart girişi).
 - Parmak izi (`kopru/dublaj/tanima.py`, yalnız numpy): 8 kHz, 512 örnek pencere / 128 adım (16 ms), 125–3800 Hz.
-  Log genlikte yerel tepeler (±12 kutu, ±6 kare; çerçeve başına en çok 3; çerçeve ortancasının 10 dB üstü). Her tepe
-  sonraki 1–24 karedeki en çok 5 tepeyle çift olur: `özet = f1<<14 | f2<<6 | dt` (f: 0–255 kutu, dt: 1–63).
+  Log genlikte yerel tepeler (±8 kutu, ±3 kare; çerçeve başına en çok 3; çerçeve ortancasının 10 dB üstü). Her tepe
+  sonraki 1–16 karedeki en çok 5 tepeyle (|Δf| ≤ 64) çift olur: `özet = f1<<14 | f2<<6 | dt` (f: 0–255 kutu).
+  Çift, hedef tepe kesinleşir kesinleşmez verilir (akış gecikmesi ~50 ms + blok); toplu çıkarım akışla birebir aynıdır.
   Ses düzeyinden bağımsızdır (tepeler göreli).
 - İşçi akışta her 250 ms bloğu parmak izine çevirir; her `parca` olayına parçanın başından **1 sn önce**sini de içeren
   izler eklenir: `"iz": [[özet, kare], ...]` (kare: parça başına göre 16 ms birimi, ön pay negatif).
@@ -1230,7 +1231,8 @@ Yalnız zaten dinlenen oyun sesi (PS5 gizli bağlantı, süreç/sistem loopback,
   `{"olay":"tanima","kimlik":int,"ofset_sn":float,"puan":int,"oran":float}`
   `ofset_sn`: satırın başına göre şu an (negatif: satır `-ofset` sn sonra başlayacak).
 - Karar: son 3 sn'deki sorgu izleri dizinde aranır, (kimlik, satır başı karesi) için oy toplanır (±1 kare). Eşleşme:
-  hizalı oy ≥ 9, o kimliğin oylarının ≥ %35'i aynı hizada, ve 6'dan fazla satırda geçen ya da satır içinde 4'ten çok
+  hizalı puan ≥ 9 (satır içi oy 1, ön pay oyu 0,5), bunun en az 3 oyu satırın kendi sesinden **ya da** ön pay oyu ≥ 16
+  (sabit zamanlı ara sahne: satır başlamadan tanınır), o kimliğin oylarının ≥ %35'i aynı hizada; 6'dan fazla satırda geçen ya da satır içinde 4'ten çok
   tekrarlanan özetler yok sayılır (müzik döngüsü). Aynı (kimlik, hiza) için tek olay.
 - Ana program: kayıt sesliyse `ofset_sn ≤ 1,5` iken çalar (negatifse tam başlangıçta, pozitifse başındaki sessizlik
   kırpılıp gerekirse ≤ hız sınırı kadar hızlandırılarak İngilizce satırla aynı anda biter). Aynı satır 4 sn
