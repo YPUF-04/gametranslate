@@ -528,6 +528,12 @@ class Isleyici:
     async def _hafiza_cal(self, s: dict[str, Any], tur: str, yazi_id: str | None = None, tetik_an: float | None = None,
                           gecikme_sn: float = 0.0, ofset_sn: float = 0.0) -> bool:
         kimlik = int(s["id"])
+        onceki = self._hafiza_calinan.get(kimlik)
+        if onceki is not None and abs(self.saat() - onceki) < TEKRAR_SN:
+            # altyazı ile sahne tanıma aynı anda geldi (ikisi de hafızaya bakarken): satır bir kez çalar
+            if yazi_id:
+                self._hafiza_ustlen(yazi_id, kimlik)
+            return False
         self._hafiza_calinan[kimlik] = self.saat()          # aynı anda gelen ikinci tetik beklemesin
         if yazi_id:
             self._hafiza_ustlen(yazi_id, kimlik)
@@ -707,7 +713,17 @@ class Isleyici:
         if motor is None or sure_sn < EN_AZ_PARCA_SN:
             return None
         if d.get("cikis", "bilgisayar") == "bilgisayar" and self._susturulmus(parca.bas, parca.bitis):
-            return None   # kendi çaldığımız dublaj: geri dinleme yok
+            # kendi çaldığımız dublaj: geri dinleme yok. Ama ses yalnız oyundan geliyorsa (PS5 bağlantısı, oyunun
+            # süreci, kart girişi; tüm sistem sesi değil) bu, Türkçe çalarken duyulan İngilizce satırın kendisidir:
+            # hafıza için ses izi yine bağlanır (PROTOKOL 21.4).
+            if self.hafiza is not None and getattr(parca, "kaynak", "sistem") in ("ps5", "surec", "giris"):
+                hk = self._hafiza_kapsiyor(parca.bas, parca.bitis)
+                yakin = None if hk is not None else self._pencere_yazisi(parca.bas, parca.bitis)
+                if hk is not None:
+                    await self._iz_satira(hk, parca)
+                elif yakin is not None:
+                    await self._iz_bagla(yakin[0], parca)
+            return None
         hk = self._hafiza_kapsiyor(parca.bas, parca.bitis)
         if hk is not None:
             # bu konuşma hafızadan çalındı (altyazı ya da sahne tanıma): yalnız ses izi ve karakter örneği için

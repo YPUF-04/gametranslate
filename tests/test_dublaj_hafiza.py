@@ -522,3 +522,28 @@ async def test_api_liste_ara_ses_duzelt_sil_yedek(istemci, tmp_path):
     j = await (await istemci.get("/api/dublaj/hafiza")).json()
     assert j["istatistik"]["satir"] == 0
     assert (await istemci.delete("/api/dublaj/hafiza?hepsi=1")).status == 200
+
+
+async def test_turkce_calarken_gelen_ingilizce_parcanin_izi_baglanir_sistem_sesinde_baglanmaz(tmp_path):
+    """Bilgisayar çıkışında kendi sesimiz susturma aralığındadır; PS5/süreç kaynağında parça yine de oyunun sesidir."""
+    for kaynak, beklenen in (("ps5", True), ("sistem", False)):
+        isl, yayin, motor, y, cikis, saat, eklenen = kur(tmp_path / kaynak)
+        yayin.yayinla("yazi", {"id": "a1", "asil": "Run!", "metin": "Koş!", "konusan": "Joel", "tur": "altyazi"})
+        assert await _bekle(lambda: isl._yazi_satir.get("a1"))
+        isl._erken_calinan.add("a1")
+        isl._susturma.append((saat() - 1.0, saat() + 3.0))            # Türkçe ses bu aralıkta çaldı
+        konusma = T.sentetik_konusma(8, 1.5)
+        p = Parca(konusma, saat() - 0.5, iz=T.iz_cikar(konusma))
+        p.kaynak = kaynak
+        assert await isl.isle(p) is None
+        assert (isl.hafiza.depo.getir(isl._yazi_satir["a1"])["iz_sayisi"] > 0) is beklenen
+
+
+async def test_altyazi_ve_tanima_ayni_anda_gelince_bir_kez_calar(tmp_path):
+    isl, yayin, motor, y, cikis, saat, _ = kur(tmp_path)
+    k = await isl.hafiza.kaydet("Run!", "Joel", "Koş!", np.zeros(24000, np.float32) + 0.1, 24000)
+    isl.tanima_olayi({"kimlik": k, "ofset_sn": 0.4})
+    yayin.yayinla("yazi", {"id": "a1", "asil": "Run!", "metin": "Koş!", "konusan": "Joel", "tur": "altyazi"})
+    await _bekle(lambda: not isl._gorevler)
+    await asyncio.sleep(0.05)
+    assert len(cikis.ani) == 1 and "a1" in isl._yapilan_yazilar and not motor.cagrilar
