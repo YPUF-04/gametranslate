@@ -1,6 +1,8 @@
 # Sürüm notları
 
-## 0.1.6 — LG'de kurulumsuz kullanım, daha iyi çeviri, görünüm ayarları (2026-11-24)
+## 0.1.6 — Dublaj hafızası, LG'de kurulumsuz kullanım, daha iyi çeviri (2026-11-27)
+- **Dublaj hafızası:** her cümlenin Türkçe sesi (iznini verirsen) bilgisayarında saklanır. Aynı cümle ya da sahne yeniden gelince Türkçe **beklemeden** çalar; program sahneyi **oyunun sesinden tanır** (mikrofon yok), altyazı okunmadan bile İngilizce cümlenin başında Türkçeyi başlatır. Sıradaki cümleler önceden hazırlanır.
+- **Boşta iyileştirme:** oynamıyorken her cümle için birkaç Türkçe ses üretilir; en anlaşılır, karaktere en çok benzeyen, süreye en iyi uyan seçilir. Panelde dinle, yeniden seslendir, metni düzelt; "Bu sahneyi en iyi kaliteyle hazırla"; kişisel yedek.
 - **LG'de kurulum yok:** TV'nin kendi internet tarayıcısına bilgisayarın adresini yaz (çoğu zaman yalnızca `http://192.168.1.20`), konsolun HDMI girişini seç; oyun sayfanın içinde açılır, Türkçe üstüne gelir. Geliştirici modu ve LG hesabı gerekmez. Açılmazsa sayfa açıkça söyler ve yazıyı siyah ekranda göstermeye devam eder.
 - **Ana ekranda "TV'de göster":** büyük, kolay yazılan adres ve telefon için QR kodu.
 - **TV ekranı kararmasın (LG):** bir kez TV'de "Kabul et" de; çeviri sürerken ekran koruyucu açılmaz.

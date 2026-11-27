@@ -287,7 +287,9 @@ async def test_on_hazirlik_sonraki_satiri_seslendirip_kaydeder(tmp_path):
     d.gecis_ekle(a, c, 3.0)
     await isl._hafiza_cal(d.getir(a), "isabet", yazi_id="y1", tetik_an=saat())
     assert await _bekle(lambda: d.getir(b)["sesli"])
-    assert motor.cagrilar == ["B satırı"] and isl.hafiza.bellekte(c)
+    # C'nin belleğe alınması da arka planda: yavaş makinede (Windows CI) B'den sonra bitebilir
+    assert await _bekle(lambda: isl.hafiza.bellekte(c))
+    assert motor.cagrilar == ["B satırı"]
 
 
 async def test_izin_yoksa_hafiza_yok_ve_dosya_yazilmaz(tmp_path, monkeypatch):
